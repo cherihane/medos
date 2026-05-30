@@ -548,7 +548,22 @@ const buildAlertes = (etablissementId, medMap) => [
 // ─────────────────────────────────────────────
 // SEED RUNNER
 // ─────────────────────────────────────────────
-async function upsert(table, data, conflictKey) {
+
+/** Supprime tous les enregistrements d'une table (pour re-seed propre). */
+async function truncate(table) {
+  const { error } = await supabase.from(table).delete().neq("id", "00000000-0000-0000-0000-000000000000");
+  if (error) throw new Error(`[truncate ${table}] ${error.message}`);
+}
+
+/** Insert simple + retourne les lignes créées. */
+async function insert(table, data) {
+  const { data: rows, error } = await supabase.from(table).insert(data).select();
+  if (error) throw new Error(`[${table}] ${error.message}`);
+  return rows;
+}
+
+/** Upsert sur contrainte unique existante (ex: medicaments.code). */
+async function upsertOn(table, data, conflictKey) {
   const { data: rows, error } = await supabase
     .from(table)
     .upsert(data, { onConflict: conflictKey, ignoreDuplicates: false })
@@ -560,58 +575,52 @@ async function upsert(table, data, conflictKey) {
 async function seed() {
   console.log("\n🌱  MedOS Seed — démarrage...\n");
 
-  // ── Etablissements
-  process.stdout.write("  Établissements  ");
-  const etabs = await upsert("etablissements", etablissements, "email");
+  // ── Nettoyage dans l'ordre inverse des FK
+  process.stdout.write("  Nettoyage tables  ");
+  for (const t of ["alertes", "patients", "ventes", "ordonnances", "livraisons", "commandes", "lots", "medicaments", "fournisseurs", "etablissements"]) {
+    await truncate(t);
+  }
+  console.log("✓");
+
+  // ── Établissements
+  process.stdout.write("  Établissements    ");
+  const etabs = await insert("etablissements", etablissements);
   console.log(`✓  ${etabs.length} insérés`);
 
-  // Map nom → id
   const etabMap = Object.fromEntries(etabs.map((e) => [e.nom, e.id]));
-  const hopitalId = etabMap["Hôpital Général de Référence de Kinshasa"];
+  const hopitalId   = etabMap["Hôpital Général de Référence de Kinshasa"];
   const pharmacieId = etabMap["Pharmacie Centrale Kinshasa"];
 
   // ── Fournisseurs
-  process.stdout.write("  Fournisseurs    ");
-  const fourns = await upsert("fournisseurs", fournisseurs, "email");
+  process.stdout.write("  Fournisseurs      ");
+  const fourns = await insert("fournisseurs", fournisseurs);
   console.log(`✓  ${fourns.length} insérés`);
 
-  // ── Médicaments
-  process.stdout.write("  Médicaments     ");
-  const meds = await upsert("medicaments", medicaments, "code");
+  // ── Médicaments (code est UNIQUE → upsert sûr)
+  process.stdout.write("  Médicaments       ");
+  const meds = await upsertOn("medicaments", medicaments, "code");
   console.log(`✓  ${meds.length} insérés`);
 
-  // Map code → id
   const medMap = Object.fromEntries(meds.map((m) => [m.code, m.id]));
 
-  // ── Patients (rattachés à l'hôpital principal)
-  process.stdout.write("  Patients        ");
+  // ── Patients (rattachés à l'hôpital)
+  process.stdout.write("  Patients          ");
   const patientsData = buildPatients(hopitalId);
-  const { data: pats, error: patErr } = await supabase
-    .from("patients")
-    .upsert(patientsData, { onConflict: "id", ignoreDuplicates: true })
-    .select();
-  if (patErr) throw new Error(`[patients] ${patErr.message}`);
+  const pats = await insert("patients", patientsData);
   console.log(`✓  ${pats.length} insérés`);
 
-  // ── Alertes (rattachées à la pharmacie principale)
-  process.stdout.write("  Alertes         ");
+  // ── Alertes (rattachées à la pharmacie)
+  process.stdout.write("  Alertes           ");
   const alertesData = buildAlertes(pharmacieId, medMap);
-  const { data: alts, error: altErr } = await supabase
-    .from("alertes")
-    .insert(alertesData)
-    .select();
-  if (altErr) {
-    // Alertes may already exist — skip duplicates gracefully
-    console.log(`⚠  ${altErr.message} (déjà insérées ?)`);
-  } else {
-    console.log(`✓  ${alts.length} insérées`);
-  }
+  const alts = await insert("alertes", alertesData);
+  console.log(`✓  ${alts.length} insérées`);
 
   console.log("\n✅  Seed terminé avec succès !\n");
   console.log("  Établissements :", etabs.length);
   console.log("  Fournisseurs   :", fourns.length);
   console.log("  Médicaments    :", meds.length);
   console.log("  Patients       :", pats.length);
+  console.log("  Alertes        :", alts.length);
   console.log("");
 }
 
