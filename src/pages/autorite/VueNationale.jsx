@@ -1,66 +1,65 @@
 import Layout from "../../components/Layout";
-import KpiCard from "../../components/KpiCard";
-import { kpiAuthority } from "../../data/staticData";
-
-const regions = [
-  { name: "Abidjan", structures: 428, couverture: 89, alertes: 2 },
-  { name: "Yamoussoukro", structures: 87, couverture: 72, alertes: 1 },
-  { name: "Bouaké", structures: 143, couverture: 68, alertes: 3 },
-  { name: "San Pédro", structures: 98, couverture: 61, alertes: 1 },
-  { name: "Daloa", structures: 76, couverture: 55, alertes: 2 },
-  { name: "Korhogo", structures: 54, couverture: 48, alertes: 4 },
-  { name: "Man", structures: 42, couverture: 43, alertes: 2 },
-  { name: "Gagnoa", structures: 38, couverture: 52, alertes: 1 },
-];
+import { useKpiAutorite, useAlertes, useEtablissements } from "../../hooks/useSupabaseData";
 
 export default function VueNationale() {
+  const { data: kpi, loading: loadKpi } = useKpiAutorite();
+  const { data: alertes, loading: loadAlt } = useAlertes(20);
+  const { data: etabs, loading: loadEtabs } = useEtablissements();
+
+  const kpis = [
+    { label: "Structures actives",      value: loadKpi ? "…" : kpi?.structuresActives ?? 0,    color: "#10B981" },
+    { label: "Alertes pharmacovig.",    value: loadKpi ? "…" : kpi?.alertesPharmacovig ?? 0,   color: "#EF4444" },
+    { label: "Médicaments tracés",      value: loadKpi ? "…" : kpi?.medicamentsTraces ?? 0,    color: "#3B82F6" },
+    { label: "Lots enregistrés",        value: loadKpi ? "…" : kpi?.lots ?? 0,                 color: "#8B5CF6" },
+  ];
+
   return (
-    <Layout title="Vue Nationale" subtitle="Tableau de bord national — Ministère de la Santé">
+    <Layout title="Vue Nationale" subtitle="Tableau de bord national — Autorité sanitaire RDC">
+      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
       <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
-        {kpiAuthority.map((k) => <KpiCard key={k.label} {...k} />)}
+        {kpis.map((k) => (
+          <div key={k.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
+            <div style={{ fontSize: 26, fontWeight: 800, color: k.color }}>{k.value}</div>
+            <div style={{ fontSize: 12, color: "#6B7280", marginTop: 4 }}>{k.label}</div>
+          </div>
+        ))}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
         <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Couverture par région</h3>
-          {regions.map((r) => (
-            <div key={r.name} style={{ padding: "10px 14px", backgroundColor: "#F8FAFC", borderRadius: 10, marginBottom: 8 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Établissements enregistrés ({loadEtabs ? "…" : etabs.length})</h3>
+          {loadEtabs && [1,2,3,4].map((i) => (
+            <div key={i} style={{ height: 46, backgroundColor: "#F8FAFC", borderRadius: 10, marginBottom: 8, animation: "pulse 1.5s ease-in-out infinite" }} />
+          ))}
+          {!loadEtabs && etabs.map((e) => (
+            <div key={e.id} style={{ padding: "10px 14px", backgroundColor: "#F8FAFC", borderRadius: 10, marginBottom: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontWeight: 700, fontSize: 13, color: "#0A1628" }}>{r.name}</span>
-                  <span style={{ fontSize: 11, color: "#9CA3AF" }}>{r.structures} structures</span>
+                  <span style={{ fontWeight: 700, fontSize: 13, color: "#0A1628" }}>{e.nom}</span>
+                  <span style={{ fontSize: 11, color: "#9CA3AF" }}>{e.ville}</span>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  {r.alertes > 0 && <span style={{ fontSize: 11, padding: "1px 7px", backgroundColor: "#FEF2F2", color: "#EF4444", borderRadius: 10, fontWeight: 700 }}>{r.alertes}</span>}
-                  <span style={{ fontWeight: 700, fontSize: 13, color: r.couverture >= 70 ? "#10B981" : r.couverture >= 55 ? "#F59E0B" : "#EF4444" }}>{r.couverture}%</span>
-                </div>
-              </div>
-              <div style={{ height: 6, backgroundColor: "#E5E7EB", borderRadius: 4 }}>
-                <div style={{ height: "100%", width: `${r.couverture}%`, borderRadius: 4, backgroundColor: r.couverture >= 70 ? "#10B981" : r.couverture >= 55 ? "#F59E0B" : "#EF4444" }} />
+                <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 10, fontWeight: 700, backgroundColor: "#DCFCE7", color: "#16A34A" }}>{e.type}</span>
               </div>
             </div>
           ))}
-          <div style={{ marginTop: 14, display: "flex", gap: 16, fontSize: 11, color: "#6B7280" }}>
-            <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 10, height: 10, backgroundColor: "#10B981", borderRadius: 2, display: "inline-block" }} /> Bonne couverture</span>
-            <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 10, height: 10, backgroundColor: "#F59E0B", borderRadius: 2, display: "inline-block" }} /> Moyenne</span>
-            <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 10, height: 10, backgroundColor: "#EF4444", borderRadius: 2, display: "inline-block" }} /> Faible</span>
-          </div>
         </div>
 
         <div>
           <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 16 }}>
-            <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Alertes Pharmacovigilance</h3>
-            {[
-              { produit: "Chloroquine 250mg", probleme: "Effets cardiaques signalés", nb: 8, niveau: "critique" },
-              { produit: "Artemether 20mg", probleme: "Réaction allergique sévère", nb: 3, niveau: "alerte" },
-              { produit: "Metronidazole 500mg", probleme: "Résistance suspectée", nb: 12, niveau: "surveillance" },
-            ].map((r) => (
-              <div key={r.produit} style={{ padding: "12px 14px", borderRadius: 10, marginBottom: 8, backgroundColor: r.niveau === "critique" ? "#FEF2F2" : r.niveau === "alerte" ? "#FFFBEB" : "#EFF6FF", borderLeft: `3px solid ${r.niveau === "critique" ? "#EF4444" : r.niveau === "alerte" ? "#F59E0B" : "#3B82F6"}` }}>
+            <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Alertes actives ({loadAlt ? "…" : alertes.length})</h3>
+            {loadAlt && [1,2,3].map((i) => (
+              <div key={i} style={{ height: 52, backgroundColor: "#F8FAFC", borderRadius: 10, marginBottom: 8, animation: "pulse 1.5s ease-in-out infinite" }} />
+            ))}
+            {!loadAlt && alertes.length === 0 && (
+              <div style={{ color: "#9CA3AF", fontSize: 13, textAlign: "center", padding: 16 }}>Aucune alerte</div>
+            )}
+            {!loadAlt && alertes.map((a) => (
+              <div key={a.id} style={{ padding: "12px 14px", borderRadius: 10, marginBottom: 8, backgroundColor: a.severite === "critique" ? "#FEF2F2" : a.severite === "alerte" ? "#FFFBEB" : "#EFF6FF", borderLeft: `3px solid ${a.severite === "critique" ? "#EF4444" : a.severite === "alerte" ? "#F59E0B" : "#3B82F6"}` }}>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ fontWeight: 700, fontSize: 13, color: "#0A1628" }}>{r.produit}</span>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: "#EF4444" }}>{r.nb} signalements</span>
+                  <span style={{ fontWeight: 700, fontSize: 13, color: "#0A1628" }}>{a.titre}</span>
+                  <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 8, fontWeight: 700, backgroundColor: a.severite === "critique" ? "#FEF2F2" : "#FFFBEB", color: a.severite === "critique" ? "#EF4444" : "#D97706" }}>{a.severite}</span>
                 </div>
-                <div style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>{r.probleme}</div>
+                {a.message && <div style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>{a.message}</div>}
               </div>
             ))}
           </div>

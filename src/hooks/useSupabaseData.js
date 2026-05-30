@@ -1,186 +1,234 @@
 /**
  * Hooks Supabase pour MedOS — données temps réel
  * Chaque hook retourne { data, loading, error }
- * et se rabat sur les données statiques en cas d'échec.
  */
 import { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
 
-// ─── médicaments en stock critique ──────────────────────────────────────────
-export function useMedicamentsCritiques(limit = 8) {
+// ─── utilitaire générique ────────────────────────────────────────────────────
+function useQuery(fn, deps = []) {
   const [state, setState] = useState({ data: [], loading: true, error: null });
-
   useEffect(() => {
-    supabase
-      .from("medicaments")
-      .select("id, code, nom, categorie, stock_actuel, stock_minimum, prix_unitaire")
-      .lt("stock_actuel", supabase.raw ? undefined : 9999) // will filter client-side
-      .order("stock_actuel", { ascending: true })
-      .limit(limit)
-      .then(({ data, error }) => {
-        if (error) { setState({ data: [], loading: false, error }); return; }
-        // filter where stock_actuel < stock_minimum
-        const critiques = (data || []).filter(
-          (m) => m.stock_actuel < m.stock_minimum
-        );
-        setState({ data: critiques, loading: false, error: null });
-      });
-  }, [limit]);
-
+    setState((s) => ({ ...s, loading: true }));
+    fn().then(({ data, error }) =>
+      setState({ data: data ?? [], loading: false, error: error ?? null })
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
   return state;
 }
 
-// ─── toutes les alertes (non résolues) ──────────────────────────────────────
-export function useAlertes(limit = 10) {
-  const [state, setState] = useState({ data: [], loading: true, error: null });
+// ─── médicaments ─────────────────────────────────────────────────────────────
+export function useMedicaments() {
+  return useQuery(() =>
+    supabase.from("medicaments").select("*").order("nom", { ascending: true })
+  );
+}
 
-  useEffect(() => {
+export function useMedicamentsCritiques(limit = 8) {
+  const all = useMedicaments();
+  return {
+    ...all,
+    data: all.data
+      .filter((m) => m.stock_actuel < m.stock_minimum)
+      .sort((a, b) => a.stock_actuel - b.stock_actuel)
+      .slice(0, limit),
+  };
+}
+
+// ─── alertes ─────────────────────────────────────────────────────────────────
+export function useAlertes(limit = 20) {
+  return useQuery(() =>
     supabase
       .from("alertes")
-      .select(`
-        id, type, severite, titre, message, lu, resolu, created_at,
-        medicaments ( nom )
-      `)
+      .select("id, type, severite, titre, message, lu, resolu, created_at, medicament_id")
       .eq("resolu", false)
       .order("created_at", { ascending: false })
       .limit(limit)
-      .then(({ data, error }) => {
-        setState({ data: data || [], loading: false, error });
-      });
-  }, [limit]);
-
-  return state;
+  );
 }
 
-// ─── médicaments avec stock (pour inventaire) ────────────────────────────────
-export function useMedicaments() {
-  const [state, setState] = useState({ data: [], loading: true, error: null });
-
-  useEffect(() => {
-    supabase
-      .from("medicaments")
-      .select("*")
-      .order("nom", { ascending: true })
-      .then(({ data, error }) => {
-        setState({ data: data || [], loading: false, error });
-      });
-  }, []);
-
-  return state;
-}
-
-// ─── patients ────────────────────────────────────────────────────────────────
+// ─── patients ─────────────────────────────────────────────────────────────────
 export function usePatients() {
-  const [state, setState] = useState({ data: [], loading: true, error: null });
-
-  useEffect(() => {
-    supabase
-      .from("patients")
-      .select("*")
-      .order("nom", { ascending: true })
-      .then(({ data, error }) => {
-        setState({ data: data || [], loading: false, error });
-      });
-  }, []);
-
-  return state;
+  return useQuery(() =>
+    supabase.from("patients").select("*").order("nom", { ascending: true })
+  );
 }
 
 // ─── établissements ──────────────────────────────────────────────────────────
 export function useEtablissements(type = null) {
-  const [state, setState] = useState({ data: [], loading: true, error: null });
-
-  useEffect(() => {
-    let query = supabase
-      .from("etablissements")
-      .select("*")
-      .eq("actif", true)
-      .order("nom", { ascending: true });
-
-    if (type) query = query.eq("type", type);
-
-    query.then(({ data, error }) => {
-      setState({ data: data || [], loading: false, error });
-    });
-  }, [type]);
-
-  return state;
+  return useQuery(
+    () => {
+      let q = supabase.from("etablissements").select("*").eq("actif", true).order("nom");
+      if (type) q = q.eq("type", type);
+      return q;
+    },
+    [type]
+  );
 }
 
-// ─── fournisseurs ────────────────────────────────────────────────────────────
+// ─── fournisseurs ─────────────────────────────────────────────────────────────
 export function useFournisseurs() {
-  const [state, setState] = useState({ data: [], loading: true, error: null });
-
-  useEffect(() => {
-    supabase
-      .from("fournisseurs")
-      .select("*")
-      .order("nom", { ascending: true })
-      .then(({ data, error }) => {
-        setState({ data: data || [], loading: false, error });
-      });
-  }, []);
-
-  return state;
+  return useQuery(() =>
+    supabase.from("fournisseurs").select("*").order("nom", { ascending: true })
+  );
 }
 
-// ─── KPI agrégés pharmacie ───────────────────────────────────────────────────
+// ─── ordonnances ──────────────────────────────────────────────────────────────
+export function useOrdonnances() {
+  return useQuery(() =>
+    supabase
+      .from("ordonnances")
+      .select(`
+        id, reference, statut, date_emission, date_expiration, medecin_nom, notes,
+        patients ( prenom, nom )
+      `)
+      .order("date_emission", { ascending: false })
+  );
+}
+
+// ─── commandes ────────────────────────────────────────────────────────────────
+export function useCommandes() {
+  return useQuery(() =>
+    supabase
+      .from("commandes")
+      .select(`
+        id, reference, statut, date_commande, date_livraison_prevue, montant_total, notes,
+        etablissements ( nom, ville ),
+        fournisseurs ( nom )
+      `)
+      .order("date_commande", { ascending: false })
+  );
+}
+
+// ─── livraisons ───────────────────────────────────────────────────────────────
+export function useLivraisons() {
+  return useQuery(() =>
+    supabase
+      .from("livraisons")
+      .select(`
+        id, statut, date_depart, date_arrivee_prevue, date_arrivee_reelle,
+        transporteur, numero_suivi, temperature_min, temperature_max, created_at,
+        etablissements ( nom, ville ),
+        fournisseurs ( nom )
+      `)
+      .order("created_at", { ascending: false })
+  );
+}
+
+// ─── lots ─────────────────────────────────────────────────────────────────────
+export function useLots() {
+  return useQuery(() =>
+    supabase
+      .from("lots")
+      .select(`
+        id, numero_lot, fabricant, date_fabrication, date_expiration, quantite_initiale, qr_code,
+        medicaments ( nom, code )
+      `)
+      .order("date_expiration", { ascending: true })
+  );
+}
+
+// ─── KPI pharmacie ────────────────────────────────────────────────────────────
 export function useKpiPharmacie() {
   const [state, setState] = useState({ data: null, loading: true, error: null });
-
   useEffect(() => {
     Promise.all([
       supabase.from("medicaments").select("id, stock_actuel, stock_minimum"),
       supabase.from("patients").select("id", { count: "exact", head: true }),
-      supabase.from("alertes").select("id", { count: "exact" }).eq("resolu", false),
-    ]).then(([meds, pats, alts]) => {
-      if (meds.error || pats.error || alts.error) {
-        setState({ data: null, loading: false, error: meds.error || pats.error || alts.error });
-        return;
-      }
-      const allMeds = meds.data || [];
-      const ruptures = allMeds.filter((m) => m.stock_actuel < m.stock_minimum).length;
+      supabase.from("alertes").select("id").eq("resolu", false),
+      supabase.from("ordonnances").select("id").eq("statut", "en_attente"),
+    ]).then(([meds, pats, alts, ords]) => {
+      const all = meds.data ?? [];
+      const ruptures = all.filter((m) => m.stock_actuel < m.stock_minimum).length;
       setState({
         data: {
-          totalMedicaments: allMeds.length,
+          totalMedicaments: all.length,
           ruptures,
           totalPatients: pats.count ?? 0,
           alertesActives: alts.data?.length ?? 0,
+          ordonnancesEnAttente: ords.data?.length ?? 0,
         },
         loading: false,
-        error: null,
+        error: meds.error ?? pats.error ?? alts.error ?? null,
       });
     });
   }, []);
-
   return state;
 }
 
-// ─── KPI agrégés hôpital ─────────────────────────────────────────────────────
+// ─── KPI hôpital ─────────────────────────────────────────────────────────────
 export function useKpiHopital() {
   const [state, setState] = useState({ data: null, loading: true, error: null });
-
   useEffect(() => {
     Promise.all([
       supabase.from("patients").select("id", { count: "exact", head: true }),
       supabase.from("alertes").select("id, severite").eq("resolu", false),
-      supabase.from("medicaments").select("id, stock_actuel, stock_minimum"),
-    ]).then(([pats, alts, meds]) => {
-      const allMeds = meds.data || [];
-      const dispenses = allMeds.reduce((s, m) => s + (m.stock_actuel || 0), 0);
-      const alertesCritiques = (alts.data || []).filter((a) => a.severite === "critique").length;
+      supabase.from("medicaments").select("id, stock_actuel"),
+      supabase.from("ordonnances").select("id"),
+    ]).then(([pats, alts, meds, ords]) => {
+      const dispenses = (meds.data ?? []).reduce((s, m) => s + (m.stock_actuel ?? 0), 0);
+      const alertesCritiques = (alts.data ?? []).filter((a) => a.severite === "critique").length;
       setState({
         data: {
           patientsHospitalises: pats.count ?? 0,
           alertesCritiques,
           medicamentsDispenses: dispenses,
           totalAlertes: alts.data?.length ?? 0,
+          consultations: ords.data?.length ?? 0,
         },
         loading: false,
         error: null,
       });
     });
   }, []);
+  return state;
+}
 
+// ─── KPI distributeur ─────────────────────────────────────────────────────────
+export function useKpiDistributeur() {
+  const [state, setState] = useState({ data: null, loading: true, error: null });
+  useEffect(() => {
+    Promise.all([
+      supabase.from("commandes").select("id, statut, montant_total"),
+      supabase.from("etablissements").select("id, type").eq("actif", true),
+      supabase.from("livraisons").select("id, statut"),
+    ]).then(([cmds, etabs, livs]) => {
+      const allCmds = cmds.data ?? [];
+      const actives = allCmds.filter((c) => !["livree","annulee"].includes(c.statut)).length;
+      const ca = allCmds.reduce((s, c) => s + (c.montant_total ?? 0), 0);
+      const clients = (etabs.data ?? []).filter((e) => e.type !== "distributeur").length;
+      const enTransit = (livs.data ?? []).filter((l) => l.statut === "en_transit").length;
+      setState({
+        data: { commandesActives: actives, clients, ca, livraisonsEnCours: enTransit },
+        loading: false, error: null,
+      });
+    });
+  }, []);
+  return state;
+}
+
+// ─── KPI autorité ─────────────────────────────────────────────────────────────
+export function useKpiAutorite() {
+  const [state, setState] = useState({ data: null, loading: true, error: null });
+  useEffect(() => {
+    Promise.all([
+      supabase.from("etablissements").select("id, actif").eq("actif", true),
+      supabase.from("alertes").select("id, severite").eq("resolu", false),
+      supabase.from("medicaments").select("id"),
+      supabase.from("lots").select("id"),
+    ]).then(([etabs, alts, meds, lots]) => {
+      const pharmacovig = (alts.data ?? []).filter((a) => a.severite === "critique").length;
+      setState({
+        data: {
+          structuresActives: etabs.data?.length ?? 0,
+          alertesPharmacovig: pharmacovig,
+          medicamentsTraces: meds.data?.length ?? 0,
+          lots: lots.data?.length ?? 0,
+        },
+        loading: false, error: null,
+      });
+    });
+  }, []);
   return state;
 }

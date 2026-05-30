@@ -1,7 +1,5 @@
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import Layout from "../../components/Layout";
 import KpiCard from "../../components/KpiCard";
-import { kpiHospital, salesData } from "../../data/staticData";
 import { useAlertes, useKpiHopital, usePatients } from "../../hooks/useSupabaseData";
 
 const OCCUPATION = [
@@ -29,18 +27,16 @@ function Skeleton({ height = 16, width = "100%", mb = 8 }) {
   );
 }
 
-// ── KPI fusionnés (Supabase + fallback statique) ─────────────────────────────
+// ── KPI depuis Supabase ───────────────────────────────────────────────────────
 function KpiSection() {
   const { data: live, loading } = useKpiHopital();
 
-  const kpis = kpiHospital.map((k) => {
-    if (!live) return k;
-    if (k.label === "Patients hospitalisés")
-      return { ...k, value: String(live.patientsHospitalises || k.value) };
-    if (k.label === "Alertes critiques")
-      return { ...k, value: String(live.alertesCritiques) };
-    return k;
-  });
+  const kpis = [
+    { label: "Patients hospitalisés",    value: live?.patientsHospitalises ?? 0,    color: "#3B82F6" },
+    { label: "Alertes critiques",        value: live?.alertesCritiques ?? 0,        color: "#EF4444" },
+    { label: "Médicaments dispensés",    value: live?.medicamentsDispenses ?? 0,    color: "#10B981" },
+    { label: "Ordonnances",              value: live?.consultations ?? 0,           color: "#8B5CF6" },
+  ];
 
   if (loading) {
     return (
@@ -58,7 +54,12 @@ function KpiSection() {
 
   return (
     <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
-      {kpis.map((k) => <KpiCard key={k.label} {...k} />)}
+      {kpis.map((k) => (
+        <div key={k.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
+          <div style={{ fontSize: 26, fontWeight: 800, color: k.color }}>{k.value}</div>
+          <div style={{ fontSize: 12, color: "#6B7280", marginTop: 4 }}>{k.label}</div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -209,18 +210,9 @@ export default function DashboardHopital() {
         <PatientsPanel />
       </div>
 
-      <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginTop: 20, minWidth: 0 }}>
-        <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Dispensation médicaments — 7 jours</h3>
-        <div style={{ width: "100%", height: 160 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={salesData}>
-              <XAxis dataKey="day" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip />
-              <Line type="monotone" dataKey="ordonnances" stroke="#10B981" strokeWidth={2.5} dot={{ r: 4, fill: "#10B981" }} name="Dispensations" />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+      <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginTop: 20 }}>
+        <h3 style={{ margin: "0 0 8px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Dispensation médicaments</h3>
+        <p style={{ margin: 0, fontSize: 13, color: "#9CA3AF" }}>Données de dispensation disponibles après enregistrement des ventes en caisse.</p>
       </div>
     </Layout>
   );

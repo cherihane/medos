@@ -1,25 +1,33 @@
 import { useState } from "react";
 import Layout from "../../components/Layout";
-import { alerts } from "../../data/staticData";
+import { useAlertes } from "../../hooks/useSupabaseData";
 
 const severityStyle = {
   critique: { bg: "#FEF2F2", border: "#FCA5A5", color: "#EF4444", dot: "#EF4444" },
-  alerte: { bg: "#FFFBEB", border: "#FCD34D", color: "#D97706", dot: "#F59E0B" },
-  info: { bg: "#EFF6FF", border: "#BFDBFE", color: "#2563EB", dot: "#3B82F6" },
+  alerte:   { bg: "#FFFBEB", border: "#FCD34D", color: "#D97706", dot: "#F59E0B" },
+  info:     { bg: "#EFF6FF", border: "#BFDBFE", color: "#2563EB", dot: "#3B82F6" },
 };
 
+function fmt(iso) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
 export default function Alertes() {
-  const [alertList, setAlertList] = useState(alerts);
+  const { data: alertes, loading, error } = useAlertes(100);
+  const [readIds, setReadIds] = useState(new Set());
   const [filter, setFilter] = useState("tous");
 
-  const markRead = (id) => setAlertList((prev) => prev.map((a) => a.id === id ? { ...a, read: true } : a));
-  const markAllRead = () => setAlertList((prev) => prev.map((a) => ({ ...a, read: true })));
+  const markRead = (id) => setReadIds((prev) => new Set([...prev, id]));
+  const markAllRead = () => setReadIds(new Set(alertes.map((a) => a.id)));
 
-  const filtered = alertList.filter((a) => filter === "tous" || a.severity === filter);
-  const unreadCount = alertList.filter((a) => !a.read).length;
+  const filtered = alertes.filter((a) => filter === "tous" || a.severite === filter);
+  const unreadCount = alertes.filter((a) => !readIds.has(a.id)).length;
 
   return (
     <Layout title="Alertes" subtitle="Surveillance et gestion des alertes pharmaceutiques">
+      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
+
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {["tous", "critique", "alerte", "info"].map((f) => (
@@ -43,10 +51,10 @@ export default function Alertes() {
 
       <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
         {[
-          { label: "Critiques", value: alerts.filter(a => a.severity === "critique").length, color: "#EF4444", bg: "#FEF2F2" },
-          { label: "Alertes", value: alerts.filter(a => a.severity === "alerte").length, color: "#F59E0B", bg: "#FFFBEB" },
-          { label: "Informations", value: alerts.filter(a => a.severity === "info").length, color: "#3B82F6", bg: "#EFF6FF" },
-          { label: "Non lues", value: unreadCount, color: "#8B5CF6", bg: "#F5F3FF" },
+          { label: "Critiques",    value: loading ? "…" : alertes.filter(a => a.severite === "critique").length, color: "#EF4444", bg: "#FEF2F2" },
+          { label: "Alertes",      value: loading ? "…" : alertes.filter(a => a.severite === "alerte").length,   color: "#F59E0B", bg: "#FFFBEB" },
+          { label: "Informations", value: loading ? "…" : alertes.filter(a => a.severite === "info").length,     color: "#3B82F6", bg: "#EFF6FF" },
+          { label: "Non lues",     value: loading ? "…" : unreadCount,                                           color: "#8B5CF6", bg: "#F5F3FF" },
         ].map((s) => (
           <div key={s.label} style={{ backgroundColor: s.bg, borderRadius: 12, padding: "14px 20px", flex: 1, borderLeft: `4px solid ${s.color}` }}>
             <div style={{ fontSize: 24, fontWeight: 800, color: s.color }}>{s.value}</div>
@@ -55,31 +63,52 @@ export default function Alertes() {
         ))}
       </div>
 
+      {error && (
+        <div style={{ backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 12, padding: "14px 18px", marginBottom: 16, fontSize: 13, color: "#DC2626" }}>
+          Erreur : {error.message}
+        </div>
+      )}
+
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {filtered.map((alert) => {
-          const s = severityStyle[alert.severity];
+        {loading && [1, 2, 3, 4].map((i) => (
+          <div key={i} style={{ height: 72, backgroundColor: "#F8FAFC", borderRadius: 14, animation: "pulse 1.5s ease-in-out infinite" }} />
+        ))}
+
+        {!loading && filtered.length === 0 && (
+          <div style={{ backgroundColor: "white", borderRadius: 14, padding: 40, textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>
+            Aucune alerte active
+          </div>
+        )}
+
+        {!loading && filtered.map((alert) => {
+          const s = severityStyle[alert.severite] ?? severityStyle.info;
+          const isRead = readIds.has(alert.id);
           return (
             <div key={alert.id} style={{
-              backgroundColor: alert.read ? "white" : s.bg,
-              border: `1px solid ${alert.read ? "#E5E7EB" : s.border}`,
+              backgroundColor: isRead ? "white" : s.bg,
+              border: `1px solid ${isRead ? "#E5E7EB" : s.border}`,
               borderRadius: 14, padding: "16px 20px",
               display: "flex", alignItems: "center", gap: 14,
               boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
-              opacity: alert.read ? 0.7 : 1,
+              opacity: isRead ? 0.7 : 1,
             }}>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: alert.read ? 500 : 700, color: "#0A1628", marginBottom: 4 }}>{alert.message}</div>
+                <div style={{ fontSize: 13, fontWeight: isRead ? 500 : 700, color: "#0A1628", marginBottom: 4 }}>{alert.titre}</div>
+                {alert.message && alert.message !== alert.titre && (
+                  <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>{alert.message}</div>
+                )}
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 10, fontWeight: 700, backgroundColor: s.bg, color: s.color, border: `1px solid ${s.border}` }}>{alert.severity}</span>
-                  <span style={{ fontSize: 12, color: "#9CA3AF" }}>{alert.time}</span>
+                  <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 10, fontWeight: 700, backgroundColor: s.bg, color: s.color, border: `1px solid ${s.border}` }}>{alert.severite}</span>
+                  <span style={{ fontSize: 11, color: "#9CA3AF" }}>{alert.type}</span>
+                  <span style={{ fontSize: 12, color: "#9CA3AF" }}>{fmt(alert.created_at)}</span>
                 </div>
               </div>
-              {!alert.read && (
+              {!isRead && (
                 <button onClick={() => markRead(alert.id)} style={{ padding: "6px 14px", backgroundColor: "white", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 12, color: "#374151", cursor: "pointer" }}>
                   Marquer lu
                 </button>
               )}
-              <div style={{ width: 7, height: 7, borderRadius: "50%", backgroundColor: alert.read ? "#D1D5DB" : s.dot, flexShrink: 0 }} />
+              <div style={{ width: 7, height: 7, borderRadius: "50%", backgroundColor: isRead ? "#D1D5DB" : s.dot, flexShrink: 0 }} />
             </div>
           );
         })}

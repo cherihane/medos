@@ -1,7 +1,4 @@
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line } from "recharts";
 import Layout from "../../components/Layout";
-import KpiCard from "../../components/KpiCard";
-import { kpiPharmacy, salesData } from "../../data/staticData";
 import { useMedicamentsCritiques, useKpiPharmacie } from "../../hooks/useSupabaseData";
 
 // ── Badge de sévérité ────────────────────────────────────────────────────────
@@ -66,18 +63,16 @@ function Skeleton({ height = 16, width = "100%", mb = 8 }) {
   );
 }
 
-// ── KPI fusionnés (Supabase + fallback statique) ─────────────────────────────
+// ── KPI depuis Supabase ───────────────────────────────────────────────────────
 function KpiSection() {
   const { data: live, loading } = useKpiPharmacie();
 
-  const kpis = kpiPharmacy.map((k) => {
-    if (!live) return k;
-    if (k.label === "Produits en rupture")
-      return { ...k, value: String(live.ruptures), change: live.ruptures > 5 ? "-" + live.ruptures : "+" + (5 - live.ruptures) };
-    if (k.label === "Clients du jour")
-      return { ...k, value: String(live.totalPatients) };
-    return k;
-  });
+  const kpis = [
+    { label: "Médicaments référencés",  value: live?.totalMedicaments ?? 0,        color: "#3B82F6" },
+    { label: "Produits en rupture",     value: live?.ruptures ?? 0,                color: "#EF4444" },
+    { label: "Patients enregistrés",   value: live?.totalPatients ?? 0,            color: "#8B5CF6" },
+    { label: "Ordonnances en attente", value: live?.ordonnancesEnAttente ?? 0,     color: "#F59E0B" },
+  ];
 
   if (loading) {
     return (
@@ -95,7 +90,12 @@ function KpiSection() {
 
   return (
     <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
-      {kpis.map((k) => <KpiCard key={k.label} {...k} />)}
+      {kpis.map((k) => (
+        <div key={k.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
+          <div style={{ fontSize: 26, fontWeight: 800, color: k.color }}>{k.value}</div>
+          <div style={{ fontSize: 12, color: "#6B7280", marginTop: 4 }}>{k.label}</div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -157,36 +157,22 @@ export default function DashboardPharmacie() {
 
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20 }}>
         <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", minWidth: 0 }}>
-          <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>
+          <h3 style={{ margin: "0 0 12px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>
             Ventes — 7 derniers jours
           </h3>
-          <div style={{ width: "100%", height: 240 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={salesData}>
-                <XAxis dataKey="day" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => v >= 1000 ? `${v / 1000}k` : v} />
-                <Tooltip formatter={(v) => `${v.toLocaleString()} FCFA`} />
-                <Bar dataKey="ventes" fill="#3B82F6" radius={[6, 6, 0, 0]} name="Ventes" />
-              </BarChart>
-            </ResponsiveContainer>
+          <div style={{ height: 240, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "#F8FAFC", borderRadius: 10 }}>
+            <p style={{ color: "#9CA3AF", fontSize: 13, textAlign: "center", margin: 0 }}>
+              Données de ventes disponibles après enregistrement<br />des transactions en caisse.
+            </p>
           </div>
         </div>
 
         <StockCritiquePanel />
       </div>
 
-      <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginTop: 20, minWidth: 0 }}>
-        <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Tendance ordonnances</h3>
-        <div style={{ width: "100%", height: 160 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={salesData}>
-              <XAxis dataKey="day" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip />
-              <Line type="monotone" dataKey="ordonnances" stroke="#10B981" strokeWidth={2.5} dot={{ fill: "#10B981", r: 4 }} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+      <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginTop: 20 }}>
+        <h3 style={{ margin: "0 0 8px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Tendance ordonnances</h3>
+        <p style={{ margin: 0, fontSize: 13, color: "#9CA3AF" }}>L'historique des ordonnances apparaîtra ici au fil des dispensations enregistrées.</p>
       </div>
     </Layout>
   );
