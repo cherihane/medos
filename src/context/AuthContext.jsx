@@ -1,4 +1,5 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useState, useEffect } from "react";
+import { supabase } from "../supabaseClient";
 
 const AuthContext = createContext(null);
 
@@ -74,16 +75,87 @@ export const roleConfig = {
 
 export function AuthProvider({ children }) {
   const [auth, setAuth] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const login = (role) => {
-    setAuth({ role, ...roleConfig[role] });
+  // Reconstruct auth state from a Supabase user object
+  const buildAuth = (user) => {
+    const role = user?.user_metadata?.role;
+    if (role && roleConfig[role]) {
+      return { role, ...roleConfig[role], user };
+    }
+    return null;
   };
 
-  const logout = () => setAuth(null);
+  useEffect(() => {
+    // Restore session on mount
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) setAuth(buildAuth(session.user));
+      setLoading(false);
+    });
+
+    // React to auth state changes (token refresh, sign-out, etc.)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setAuth(session?.user ? buildAuth(session.user) : null);
+      }
+    );
+
+    return () => subscription.unsubscribe();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /**
+   * login(role, email, password)
+   * - Tries signInWithPassword first.
+   * - If the user doesn't exist yet, signs them up (first-time demo access).
+   * - Always stores the chosen role in user_metadata.
+   */
+  const login = async (role, email, password) => {
+    // Attempt sign-in
+    let { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (error) {
+      if (
+        error.message.toLowerCase().includes("invalid login credentials") ||
+        error.message.toLowerCase().includes("user not found") ||
+        error.message.toLowerCase().includes("email not confirmed")
+      ) {
+        // First-time: create the account then sign in
+        const signUpResult = await supabase.auth.signUp({
+          email,
+          password,
+          options: { data: { role } },
+        });
+        if (signUpResult.error) throw signUpResult.error;
+        data = signUpResult.data;
+
+        // If email confirmation is required, signInWithPassword may still fail.
+        // Try once more (works when email confirmation is disabled).
+        if (!signUpResult.data.session) {
+          const retry = await supabase.auth.signInWithPassword({ email, password });
+          if (retry.error) throw retry.error;
+          data = retry.data;
+        }
+      } else {
+        throw error;
+      }
+    } else {
+      // User exists — update role in metadata in case they switch roles
+      await supabase.auth.updateUser({ data: { role } });
+    }
+
+    const user = data?.user ?? data?.session?.user;
+    setAuth({ role, ...roleConfig[role], user });
+    return data;
+  };
+
+  const logout = async () => {
+    await supabase.auth.signOut();
+    setAuth(null);
+  };
 
   return (
-    <AuthContext.Provider value={{ auth, login, logout }}>
-      {children}
+    <AuthContext.Provider value={{ auth, login, logout, loading }}>
+      {loading ? null : children}
     </AuthContext.Provider>
   );
 }

@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
-import { roleConfig } from "../context/AuthContext";
+import { useAuth, roleConfig } from "../context/AuthContext";
 
 const roles = [
   { value: "pharmacie", label: "Pharmacie" },
@@ -22,19 +21,35 @@ export default function Login() {
   const { login } = useAuth();
   const [form, setForm] = useState({ email: "", password: "", role: "pharmacie" });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setError("");
+
+    if (!form.email || !form.password) {
+      setError("Veuillez renseigner votre email et mot de passe.");
+      return;
+    }
+    if (form.password.length < 6) {
+      setError("Le mot de passe doit contenir au moins 6 caractères.");
+      return;
+    }
+
     setLoading(true);
-    setTimeout(() => {
-      login(form.role);
+    try {
+      await login(form.role, form.email, form.password);
       navigate(roleConfig[form.role].dashboardPath);
-    }, 700);
+    } catch (err) {
+      setError(err.message || "Erreur de connexion. Veuillez réessayer.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
-      {/* Left */}
+      {/* Left panel */}
       <div style={{
         flex: 1,
         backgroundColor: "#0A1628",
@@ -58,7 +73,7 @@ export default function Login() {
           </div>
           <div>
             <div style={{ fontSize: 34, fontWeight: 900, letterSpacing: 1 }}>MedOS</div>
-            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>by Kela Group</div>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>par le groupe Kela</div>
           </div>
         </div>
 
@@ -79,7 +94,7 @@ export default function Login() {
         </div>
       </div>
 
-      {/* Right */}
+      {/* Right panel */}
       <div style={{
         flex: 1,
         backgroundColor: "#F0F4FB",
@@ -127,13 +142,14 @@ export default function Login() {
 
             <div>
               <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
-                Adresse email
+                Adresse e-mail
               </label>
               <input
                 type="email"
                 placeholder="votre@email.com"
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
+                required
                 style={{
                   width: "100%",
                   padding: "11px 14px",
@@ -155,6 +171,7 @@ export default function Login() {
                 placeholder="••••••••"
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
+                required
                 style={{
                   width: "100%",
                   padding: "11px 14px",
@@ -177,6 +194,19 @@ export default function Login() {
               </span>
             </div>
 
+            {error && (
+              <div style={{
+                backgroundColor: "#FEF2F2",
+                border: "1px solid #FECACA",
+                borderRadius: 8,
+                padding: "10px 14px",
+                fontSize: 13,
+                color: "#DC2626",
+              }}>
+                {error}
+              </div>
+            )}
+
             <button
               type="submit"
               disabled={loading}
@@ -193,7 +223,7 @@ export default function Login() {
                 opacity: loading ? 0.8 : 1,
               }}
             >
-              {loading ? "Connexion en cours..." : "Se connecter"}
+              {loading ? "Connexion en cours..." : "Accéder à MedOS"}
             </button>
           </form>
 
