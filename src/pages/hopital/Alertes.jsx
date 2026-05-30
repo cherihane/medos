@@ -1,6 +1,9 @@
 import { useState } from "react";
 import Layout from "../../components/Layout";
+import Toast from "../../components/Toast";
+import { useToast } from "../../hooks/useToast";
 import { useAlertes } from "../../hooks/useSupabaseData";
+import { updateAlerte } from "../../hooks/useMutations";
 
 const severityStyle = {
   critique: { bg: "#FEF2F2", border: "#FCA5A5", color: "#EF4444", dot: "#EF4444" },
@@ -14,12 +17,35 @@ function fmt(iso) {
 }
 
 export default function Alertes() {
-  const { data: alertes, loading, error } = useAlertes(100);
+  const { data: alertes, loading, error, refetch } = useAlertes(100);
+  const { toasts, success, error: toastError } = useToast();
   const [readIds, setReadIds] = useState(new Set());
   const [filter, setFilter] = useState("tous");
+  const [actioning, setActioning] = useState(null);
 
-  const markRead = (id) => setReadIds((prev) => new Set([...prev, id]));
-  const markAllRead = () => setReadIds(new Set(alertes.map((a) => a.id)));
+  const markRead = async (id) => {
+    setActioning(id);
+    try {
+      await updateAlerte(id, { lu: true });
+      setReadIds((prev) => new Set([...prev, id]));
+      success("Alerte marquée comme lue");
+    } catch (e) {
+      toastError("Erreur : " + e.message);
+    } finally {
+      setActioning(null);
+    }
+  };
+
+  const markAllRead = async () => {
+    const unread = alertes.filter((a) => !readIds.has(a.id));
+    try {
+      await Promise.all(unread.map((a) => updateAlerte(a.id, { lu: true })));
+      setReadIds(new Set(alertes.map((a) => a.id)));
+      success(`${unread.length} alertes marquées comme lues`);
+    } catch (e) {
+      toastError("Erreur : " + e.message);
+    }
+  };
 
   const filtered = alertes.filter((a) => filter === "tous" || a.severite === filter);
   const unreadCount = alertes.filter((a) => !readIds.has(a.id)).length;
@@ -27,6 +53,7 @@ export default function Alertes() {
   return (
     <Layout title="Alertes" subtitle="Surveillance et gestion des alertes pharmaceutiques">
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
+      <Toast toasts={toasts} />
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -44,9 +71,11 @@ export default function Alertes() {
             </span>
           )}
         </div>
-        <button onClick={markAllRead} style={{ padding: "8px 16px", backgroundColor: "white", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 13, color: "#374151", cursor: "pointer", fontWeight: 600 }}>
-          Tout marquer comme lu
-        </button>
+        {unreadCount > 0 && (
+          <button onClick={markAllRead} style={{ padding: "8px 16px", backgroundColor: "white", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 13, color: "#374151", cursor: "pointer", fontWeight: 600 }}>
+            Tout marquer comme lu
+          </button>
+        )}
       </div>
 
       <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
@@ -73,16 +102,15 @@ export default function Alertes() {
         {loading && [1, 2, 3, 4].map((i) => (
           <div key={i} style={{ height: 72, backgroundColor: "#F8FAFC", borderRadius: 14, animation: "pulse 1.5s ease-in-out infinite" }} />
         ))}
-
         {!loading && filtered.length === 0 && (
           <div style={{ backgroundColor: "white", borderRadius: 14, padding: 40, textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>
             Aucune alerte active
           </div>
         )}
-
         {!loading && filtered.map((alert) => {
           const s = severityStyle[alert.severite] ?? severityStyle.info;
           const isRead = readIds.has(alert.id);
+          const isActioning = actioning === alert.id;
           return (
             <div key={alert.id} style={{
               backgroundColor: isRead ? "white" : s.bg,
@@ -104,8 +132,11 @@ export default function Alertes() {
                 </div>
               </div>
               {!isRead && (
-                <button onClick={() => markRead(alert.id)} style={{ padding: "6px 14px", backgroundColor: "white", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 12, color: "#374151", cursor: "pointer" }}>
-                  Marquer lu
+                <button
+                  onClick={() => markRead(alert.id)}
+                  disabled={isActioning}
+                  style={{ padding: "6px 14px", backgroundColor: "white", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 12, color: "#374151", cursor: isActioning ? "wait" : "pointer" }}>
+                  {isActioning ? "…" : "Marquer lu"}
                 </button>
               )}
               <div style={{ width: 7, height: 7, borderRadius: "50%", backgroundColor: isRead ? "#D1D5DB" : s.dot, flexShrink: 0 }} />

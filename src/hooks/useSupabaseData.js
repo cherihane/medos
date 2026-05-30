@@ -2,20 +2,24 @@
  * Hooks Supabase pour MedOS — données temps réel
  * Chaque hook retourne { data, loading, error }
  */
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../supabaseClient";
 
 // ─── utilitaire générique ────────────────────────────────────────────────────
 function useQuery(fn, deps = []) {
   const [state, setState] = useState({ data: [], loading: true, error: null });
+  const [tick, setTick] = useState(0);
+  const refetch = useCallback(() => setTick((t) => t + 1), []);
+
   useEffect(() => {
     setState((s) => ({ ...s, loading: true }));
     fn().then(({ data, error }) =>
       setState({ data: data ?? [], loading: false, error: error ?? null })
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
-  return state;
+  }, [...deps, tick]);
+
+  return { ...state, refetch };
 }
 
 // ─── médicaments ─────────────────────────────────────────────────────────────
@@ -231,4 +235,15 @@ export function useKpiAutorite() {
     });
   }, []);
   return state;
+}
+
+// ─── alertes contrefaçons ─────────────────────────────────────────────────────
+export function useContrefacons() {
+  return useQuery(() =>
+    supabase
+      .from("alertes")
+      .select("*")
+      .eq("type", "contrefacon")
+      .order("created_at", { ascending: false })
+  );
 }

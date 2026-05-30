@@ -1,4 +1,8 @@
+import { useState } from "react";
 import Layout from "../../components/Layout";
+import Toast from "../../components/Toast";
+import { useToast } from "../../hooks/useToast";
+import { useKpiAutorite, useMedicaments, useEtablissements, useAlertes } from "../../hooks/useSupabaseData";
 
 const oddData = [
   { goal: "ODD 3.3", label: "Maladies infectieuses", progress: 67, target: 80 },
@@ -8,8 +12,66 @@ const oddData = [
 ];
 
 export default function RapportsODD() {
+  const { data: kpi } = useKpiAutorite();
+  const { data: medicaments } = useMedicaments();
+  const { data: etablissements } = useEtablissements();
+  const { data: alertes } = useAlertes(100);
+  const { toasts, success } = useToast();
+  const [generating, setGenerating] = useState(null);
+
+  const genererPDF = (rapportNom) => {
+    setGenerating(rapportNom);
+    // Build a simple text report and trigger browser print/download
+    const date = new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" });
+    const content = `
+RAPPORT MedOS — ${rapportNom}
+Généré le ${date}
+
+=== DONNÉES EN TEMPS RÉEL ===
+
+Structures actives       : ${kpi?.structuresActives ?? "—"}
+Médicaments tracés       : ${kpi?.medicamentsTraces ?? "—"}
+Lots enregistrés         : ${kpi?.lots ?? "—"}
+Alertes pharmacovig.     : ${kpi?.alertesPharmacovig ?? "—"}
+
+=== MÉDICAMENTS (${medicaments.length}) ===
+${medicaments.slice(0, 20).map((m) => `  - ${m.nom} | Stock: ${m.stock_actuel ?? 0} | Min: ${m.stock_minimum ?? 0}`).join("\n")}
+${medicaments.length > 20 ? `  ... et ${medicaments.length - 20} autres` : ""}
+
+=== ÉTABLISSEMENTS (${etablissements.length}) ===
+${etablissements.slice(0, 10).map((e) => `  - ${e.nom} (${e.type}) — ${e.ville}`).join("\n")}
+${etablissements.length > 10 ? `  ... et ${etablissements.length - 10} autres` : ""}
+
+=== ALERTES ACTIVES (${alertes.length}) ===
+${alertes.slice(0, 10).map((a) => `  [${a.severite.toUpperCase()}] ${a.titre}`).join("\n")}
+${alertes.length > 10 ? `  ... et ${alertes.length - 10} autres` : ""}
+
+=== INDICATEURS ODD ===
+ODD 3.3 Maladies infectieuses         : 67% / cible 80%
+ODD 3.4 Maladies non transmissibles   : 54% / cible 70%
+ODD 3.8 Couverture santé universelle  : 72% / cible 90%
+ODD 3.b Accès médicaments essentiels  : 78% / cible 85%
+
+---
+Rapport généré par MedOS — Système National de Gestion Pharmaceutique
+    `.trim();
+
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `MedOS_${rapportNom.replace(/\s+/g, "_")}_${date.replace(/\s+/g, "_")}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setTimeout(() => {
+      setGenerating(null);
+      success(`Rapport "${rapportNom}" téléchargé`);
+    }, 400);
+  };
+
   return (
     <Layout title="Rapports ODD" subtitle="Suivi des Objectifs de Développement Durable — Santé">
+      <Toast toasts={toasts} />
       <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
         {[
           { label: "Score ODD moyen", value: "68%", color: "#8B5CF6" },
@@ -72,8 +134,11 @@ export default function RapportsODD() {
                   <div style={{ fontSize: 13, fontWeight: 600, color: "#0A1628" }}>{r.name}</div>
                   <div style={{ fontSize: 11, color: "#9CA3AF" }}>{r.date} · {r.pages}</div>
                 </div>
-                <button style={{ padding: "6px 14px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>
-                  Télécharger
+                <button
+                  onClick={() => genererPDF(r.name)}
+                  disabled={generating === r.name}
+                  style={{ padding: "6px 14px", backgroundColor: generating === r.name ? "#E5E7EB" : "#F8FAFC", color: generating === r.name ? "#9CA3AF" : "#374151", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 12, cursor: generating === r.name ? "wait" : "pointer" }}>
+                  {generating === r.name ? "Génération…" : "Télécharger"}
                 </button>
               </div>
             ))}
