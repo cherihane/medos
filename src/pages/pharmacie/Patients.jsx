@@ -1,6 +1,10 @@
 import { useState } from "react";
 import Layout from "../../components/Layout";
+import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
+import Toast from "../../components/Toast";
+import { useToast } from "../../hooks/useToast";
 import { usePatients } from "../../hooks/useSupabaseData";
+import { insertPatient, updatePatient } from "../../hooks/useMutations";
 
 function calcAge(dateNaissance) {
   if (!dateNaissance) return "—";
@@ -25,10 +29,99 @@ function Skeleton() {
   );
 }
 
+// ── Modal Ajouter / Éditer patient ────────────────────────────────────────────
+function PatientModal({ patient, onClose, onSaved }) {
+  const isEdit = !!patient;
+  const [form, setForm] = useState({
+    prenom:        patient?.prenom        ?? "",
+    nom:           patient?.nom           ?? "",
+    date_naissance: patient?.date_naissance ? patient.date_naissance.slice(0, 10) : "",
+    genre:         patient?.genre         ?? "M",
+    telephone:     patient?.telephone     ?? "",
+    email:         patient?.email         ?? "",
+    groupe_sanguin: patient?.groupe_sanguin ?? "",
+    adresse:       patient?.adresse       ?? "",
+  });
+  const [saving, setSaving] = useState(false);
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const handleSave = async () => {
+    if (!form.prenom.trim() || !form.nom.trim()) return alert("Prénom et nom sont obligatoires.");
+    setSaving(true);
+    try {
+      const payload = {
+        prenom:         form.prenom,
+        nom:            form.nom,
+        date_naissance: form.date_naissance || null,
+        genre:          form.genre,
+        telephone:      form.telephone || null,
+        email:          form.email || null,
+        groupe_sanguin: form.groupe_sanguin || null,
+        adresse:        form.adresse || null,
+      };
+      if (isEdit) {
+        await updatePatient(patient.id, payload);
+      } else {
+        await insertPatient(payload);
+      }
+      onSaved();
+      onClose();
+    } catch (e) {
+      alert("Erreur : " + e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title={isEdit ? `Éditer — ${patient.prenom} ${patient.nom}` : "Nouveau patient"} onClose={onClose}>
+      <Row>
+        <Field label="Prénom *">
+          <input style={inputStyle} value={form.prenom} onChange={set("prenom")} />
+        </Field>
+        <Field label="Nom *">
+          <input style={inputStyle} value={form.nom} onChange={set("nom")} />
+        </Field>
+      </Row>
+      <Row>
+        <Field label="Date de naissance">
+          <input style={inputStyle} type="date" value={form.date_naissance} onChange={set("date_naissance")} />
+        </Field>
+        <Field label="Genre">
+          <select style={selectStyle} value={form.genre} onChange={set("genre")}>
+            <option value="M">Masculin</option>
+            <option value="F">Féminin</option>
+          </select>
+        </Field>
+      </Row>
+      <Row>
+        <Field label="Téléphone">
+          <input style={inputStyle} value={form.telephone} onChange={set("telephone")} placeholder="+225 07 00 00 00" />
+        </Field>
+        <Field label="Groupe sanguin">
+          <select style={selectStyle} value={form.groupe_sanguin} onChange={set("groupe_sanguin")}>
+            <option value="">—</option>
+            {["A+","A-","B+","B-","AB+","AB-","O+","O-"].map((g) => <option key={g} value={g}>{g}</option>)}
+          </select>
+        </Field>
+      </Row>
+      <Field label="Email">
+        <input style={inputStyle} type="email" value={form.email} onChange={set("email")} />
+      </Field>
+      <Field label="Adresse">
+        <input style={inputStyle} value={form.adresse} onChange={set("adresse")} />
+      </Field>
+      <ModalFooter onCancel={onClose} onSubmit={handleSave} submitLabel={isEdit ? "Sauvegarder" : "Ajouter le patient"} saving={saving} />
+    </Modal>
+  );
+}
+
 export default function Patients() {
-  const { data: patients, loading, error } = usePatients();
+  const { data: patients, loading, error, refetch } = usePatients();
+  const { toasts, success } = useToast();
   const [selected, setSelected] = useState(null);
   const [search, setSearch] = useState("");
+  const [modal, setModal] = useState(null); // null | "add" | "edit"
 
   const filtered = patients.filter((p) => {
     const fullName = `${p.prenom} ${p.nom}`.toLowerCase();
@@ -38,6 +131,18 @@ export default function Patients() {
   return (
     <Layout title="Patients" subtitle="Dossiers patients et historique médicamenteux">
       <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
+      <Toast toasts={toasts} />
+
+      {(modal === "add" || modal === "edit") && (
+        <PatientModal
+          patient={modal === "edit" ? selected : null}
+          onClose={() => setModal(null)}
+          onSaved={() => {
+            refetch();
+            success(modal === "edit" ? "Dossier patient mis à jour" : "Patient ajouté avec succès");
+          }}
+        />
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 20 }}>
         {/* ── Liste ── */}
@@ -46,22 +151,25 @@ export default function Patients() {
             <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#0A1628" }}>
               Patients ({loading ? "…" : filtered.length})
             </h3>
-            <input
-              placeholder="Rechercher…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={{ padding: "7px 14px", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 13, outline: "none", width: 200 }}
-            />
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                placeholder="Rechercher…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                style={{ padding: "7px 14px", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 13, outline: "none", width: 200 }}
+              />
+              <button
+                onClick={() => setModal("add")}
+                style={{ padding: "7px 14px", backgroundColor: "#3B82F6", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                + Ajouter
+              </button>
+            </div>
           </div>
 
           {loading && [1, 2, 3, 4, 5].map((i) => <Skeleton key={i} />)}
-
           {error && !loading && (
-            <div style={{ padding: "20px", fontSize: 13, color: "#DC2626", textAlign: "center" }}>
-              Erreur : {error.message}
-            </div>
+            <div style={{ padding: "20px", fontSize: 13, color: "#DC2626", textAlign: "center" }}>Erreur : {error.message}</div>
           )}
-
           {!loading && !error && filtered.length === 0 && (
             <div style={{ padding: "40px 20px", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>
               {search ? "Aucun patient trouvé" : "Aucun patient dans la base de données"}
@@ -96,15 +204,6 @@ export default function Patients() {
                   <div style={{ fontSize: 12, color: "#9CA3AF" }}>
                     {age} ans · Gr. {p.groupe_sanguin || "—"} · {p.telephone || "—"}
                   </div>
-                </div>
-                <div style={{ textAlign: "right", flexShrink: 0 }}>
-                  {p.antecedents?.length > 0 && (
-                    <div style={{ fontSize: 11, color: "#F59E0B", fontWeight: 600 }}>
-                      {p.antecedents.slice(0, 2).join(", ")}
-                      {p.antecedents.length > 2 && ` +${p.antecedents.length - 2}`}
-                    </div>
-                  )}
-                  <div style={{ fontSize: 11, color: "#9CA3AF" }}>{formatDate(p.created_at)}</div>
                 </div>
               </div>
             );
@@ -143,12 +242,12 @@ export default function Patients() {
               </div>
 
               {[
-                { label: "Âge",           value: `${calcAge(selected.date_naissance)} ans` },
-                { label: "Genre",         value: selected.genre === "M" ? "Masculin" : selected.genre === "F" ? "Féminin" : "—" },
+                { label: "Âge",            value: `${calcAge(selected.date_naissance)} ans` },
+                { label: "Genre",          value: selected.genre === "M" ? "Masculin" : selected.genre === "F" ? "Féminin" : "—" },
                 { label: "Groupe sanguin", value: selected.groupe_sanguin || "—" },
-                { label: "Téléphone",     value: selected.telephone || "—" },
-                { label: "Email",         value: selected.email || "—" },
-                { label: "Enregistré le", value: formatDate(selected.created_at) },
+                { label: "Téléphone",      value: selected.telephone || "—" },
+                { label: "Email",          value: selected.email || "—" },
+                { label: "Enregistré le",  value: formatDate(selected.created_at) },
               ].map((item) => (
                 <div key={item.label} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #F3F4F6" }}>
                   <span style={{ fontSize: 13, color: "#6B7280" }}>{item.label}</span>
@@ -156,25 +255,22 @@ export default function Patients() {
                 </div>
               ))}
 
-              <div style={{ marginTop: 14 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 8 }}>Antécédents médicaux</div>
-                {!selected.antecedents || selected.antecedents.length === 0 ? (
-                  <span style={{ fontSize: 12, color: "#9CA3AF" }}>Aucun antécédent connu</span>
-                ) : (
+              {selected.antecedents?.length > 0 && (
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 8 }}>Antécédents</div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                     {selected.antecedents.map((m) => (
                       <span key={m} style={{ padding: "4px 12px", backgroundColor: "#FFFBEB", color: "#F59E0B", borderRadius: 10, fontSize: 12, fontWeight: 700 }}>{m}</span>
                     ))}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
 
               <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
-                <button style={{ flex: 1, padding: "10px", backgroundColor: "#3B82F6", color: "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-                  Nouvelle ordonnance
-                </button>
-                <button style={{ flex: 1, padding: "10px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 10, fontSize: 13, cursor: "pointer" }}>
-                  Historique
+                <button
+                  onClick={() => setModal("edit")}
+                  style={{ flex: 1, padding: "10px", backgroundColor: "#3B82F6", color: "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                  Éditer profil
                 </button>
               </div>
             </>

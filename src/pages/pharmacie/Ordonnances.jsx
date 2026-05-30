@@ -1,6 +1,10 @@
 import { useState } from "react";
 import Layout from "../../components/Layout";
-import { useOrdonnances } from "../../hooks/useSupabaseData";
+import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
+import Toast from "../../components/Toast";
+import { useToast } from "../../hooks/useToast";
+import { useOrdonnances, usePatients } from "../../hooks/useSupabaseData";
+import { updateOrdonnance, insertOrdonnance } from "../../hooks/useMutations";
 
 const statusStyle = {
   traitee:    { bg: "#DCFCE7", color: "#16A34A",  label: "Traitée" },
@@ -27,13 +31,111 @@ function SkeletonRow() {
   );
 }
 
+// ── Modal Nouvelle ordonnance ──────────────────────────────────────────────────
+function NouvelleModal({ patients, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    patient_id: "",
+    medecin_nom: "",
+    date_emission: new Date().toISOString().slice(0, 10),
+    date_expiration: "",
+    notes: "",
+    statut: "en_attente",
+  });
+  const [saving, setSaving] = useState(false);
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const handleSave = async () => {
+    if (!form.patient_id) return alert("Veuillez sélectionner un patient.");
+    setSaving(true);
+    try {
+      const ref = "ORD-" + Date.now().toString().slice(-8);
+      await insertOrdonnance({
+        patient_id: form.patient_id,
+        medecin_nom: form.medecin_nom || null,
+        date_emission: form.date_emission,
+        date_expiration: form.date_expiration || null,
+        notes: form.notes || null,
+        statut: form.statut,
+        reference: ref,
+      });
+      onSaved();
+      onClose();
+    } catch (e) {
+      alert("Erreur : " + e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title="Nouvelle ordonnance" onClose={onClose}>
+      <Field label="Patient *">
+        <select style={selectStyle} value={form.patient_id} onChange={set("patient_id")}>
+          <option value="">— Sélectionner un patient —</option>
+          {patients.map((p) => (
+            <option key={p.id} value={p.id}>{p.prenom} {p.nom}</option>
+          ))}
+        </select>
+      </Field>
+      <Field label="Médecin prescripteur">
+        <input style={inputStyle} value={form.medecin_nom} onChange={set("medecin_nom")} placeholder="Dr. Nom Prénom" />
+      </Field>
+      <Row>
+        <Field label="Date d'émission">
+          <input style={inputStyle} type="date" value={form.date_emission} onChange={set("date_emission")} />
+        </Field>
+        <Field label="Date d'expiration">
+          <input style={inputStyle} type="date" value={form.date_expiration} onChange={set("date_expiration")} />
+        </Field>
+      </Row>
+      <Field label="Notes / médicaments prescrits">
+        <textarea
+          style={{ ...inputStyle, height: 80, resize: "vertical" }}
+          value={form.notes}
+          onChange={set("notes")}
+          placeholder="Médicaments, posologie, durée…"
+        />
+      </Field>
+      <ModalFooter onCancel={onClose} onSubmit={handleSave} submitLabel="Créer l'ordonnance" saving={saving} />
+    </Modal>
+  );
+}
+
 export default function Ordonnances() {
-  const { data: ordonnances, loading, error } = useOrdonnances();
+  const { data: ordonnances, loading, error, refetch } = useOrdonnances();
+  const { data: patients } = usePatients();
+  const { toasts, success, error: toastError } = useToast();
   const [selected, setSelected] = useState(null);
+  const [showNouvelle, setShowNouvelle] = useState(false);
+  const [actioning, setActioning] = useState(false);
+
+  const handleAction = async (statut) => {
+    if (!selected) return;
+    setActioning(true);
+    try {
+      await updateOrdonnance(selected.id, { statut });
+      refetch();
+      setSelected((prev) => ({ ...prev, statut }));
+      success(`Ordonnance ${statut === "validee" ? "validée" : "refusée"}`);
+    } catch (e) {
+      toastError("Erreur : " + e.message);
+    } finally {
+      setActioning(false);
+    }
+  };
 
   return (
     <Layout title="Ordonnances" subtitle="Traitement et validation des prescriptions médicales">
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
+      <Toast toasts={toasts} />
+
+      {showNouvelle && (
+        <NouvelleModal
+          patients={patients}
+          onClose={() => setShowNouvelle(false)}
+          onSaved={() => { refetch(); success("Ordonnance créée"); }}
+        />
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: 20 }}>
         {/* ── Liste ── */}
@@ -42,7 +144,7 @@ export default function Ordonnances() {
             <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#0A1628" }}>
               Ordonnances ({loading ? "…" : ordonnances.length})
             </h3>
-            <button style={{ padding: "7px 14px", backgroundColor: "#3B82F6", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+            <button onClick={() => setShowNouvelle(true)} style={{ padding: "7px 14px", backgroundColor: "#3B82F6", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
               + Nouvelle
             </button>
           </div>
@@ -57,19 +159,16 @@ export default function Ordonnances() {
             </thead>
             <tbody>
               {loading && [1,2,3,4,5].map((i) => <SkeletonRow key={i} />)}
-
               {error && !loading && (
                 <tr><td colSpan={5} style={{ padding: 24, textAlign: "center", color: "#DC2626", fontSize: 13 }}>
                   Erreur : {error.message}
                 </td></tr>
               )}
-
               {!loading && !error && ordonnances.length === 0 && (
                 <tr><td colSpan={5} style={{ padding: 40, textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>
                   Aucune ordonnance enregistrée
                 </td></tr>
               )}
-
               {!loading && ordonnances.map((o) => {
                 const s = statusStyle[o.statut] ?? statusStyle.en_attente;
                 const patientNom = o.patients ? `${o.patients.prenom} ${o.patients.nom}` : "—";
@@ -118,10 +217,10 @@ export default function Ordonnances() {
                 </div>
 
                 {[
-                  { label: "Patient",       value: patNom },
-                  { label: "Prescripteur",  value: selected.medecin_nom ?? "—" },
-                  { label: "Émission",      value: fmt(selected.date_emission) },
-                  { label: "Expiration",    value: fmt(selected.date_expiration) },
+                  { label: "Patient",      value: patNom },
+                  { label: "Prescripteur", value: selected.medecin_nom ?? "—" },
+                  { label: "Émission",     value: fmt(selected.date_emission) },
+                  { label: "Expiration",   value: fmt(selected.date_expiration) },
                 ].map((f) => (
                   <div key={f.label} style={{ padding: "12px 14px", backgroundColor: "#F8FAFC", borderRadius: 10, marginBottom: 10 }}>
                     <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 3 }}>{f.label}</div>
@@ -137,11 +236,28 @@ export default function Ordonnances() {
 
                 {selected.statut === "en_attente" && (
                   <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-                    <button style={{ flex: 1, padding: "10px", backgroundColor: "#10B981", color: "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-                      Valider
+                    <button
+                      disabled={actioning}
+                      onClick={() => handleAction("validee")}
+                      style={{ flex: 1, padding: "10px", backgroundColor: actioning ? "#E5E7EB" : "#10B981", color: actioning ? "#9CA3AF" : "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: actioning ? "wait" : "pointer" }}>
+                      {actioning ? "…" : "Valider"}
                     </button>
-                    <button style={{ flex: 1, padding: "10px", backgroundColor: "#FEF2F2", color: "#EF4444", border: "1px solid #FCA5A5", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                    <button
+                      disabled={actioning}
+                      onClick={() => handleAction("refusee")}
+                      style={{ flex: 1, padding: "10px", backgroundColor: "#FEF2F2", color: "#EF4444", border: "1px solid #FCA5A5", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: actioning ? "wait" : "pointer" }}>
                       Refuser
+                    </button>
+                  </div>
+                )}
+
+                {selected.statut === "validee" && (
+                  <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+                    <button
+                      disabled={actioning}
+                      onClick={() => handleAction("traitee")}
+                      style={{ width: "100%", padding: "10px", backgroundColor: "#8B5CF6", color: "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                      Marquer traitée
                     </button>
                   </div>
                 )}

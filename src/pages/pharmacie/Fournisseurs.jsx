@@ -1,5 +1,10 @@
+import { useState } from "react";
 import Layout from "../../components/Layout";
+import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
+import Toast from "../../components/Toast";
+import { useToast } from "../../hooks/useToast";
 import { useFournisseurs } from "../../hooks/useSupabaseData";
+import { insertCommande } from "../../hooks/useMutations";
 
 function Skeleton() {
   return (
@@ -21,20 +26,119 @@ function Skeleton() {
   );
 }
 
+// ── Modal Passer commande ──────────────────────────────────────────────────────
+function CommandeModal({ fournisseur, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    produit: "",
+    quantite: "",
+    date_livraison_prevue: "",
+    montant_total: 0,
+    notes: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const handleSave = async () => {
+    if (!form.produit.trim()) return alert("Veuillez indiquer le produit à commander.");
+    setSaving(true);
+    try {
+      await insertCommande({
+        fournisseur_id: fournisseur.id,
+        statut: "en_attente",
+        date_commande: new Date().toISOString(),
+        date_livraison_prevue: form.date_livraison_prevue || null,
+        montant_total: Number(form.montant_total) || 0,
+        notes: `${form.produit}${form.quantite ? " — Qté: " + form.quantite : ""}${form.notes ? " — " + form.notes : ""}`,
+      });
+      onSaved();
+      onClose();
+    } catch (e) {
+      alert("Erreur : " + e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title={`Commander chez ${fournisseur.nom}`} onClose={onClose}>
+      <Field label="Produit / médicament *">
+        <input style={inputStyle} value={form.produit} onChange={set("produit")} placeholder="Ex: Amoxicilline 500mg" />
+      </Field>
+      <Row>
+        <Field label="Quantité">
+          <input style={inputStyle} type="number" min="1" value={form.quantite} onChange={set("quantite")} placeholder="Ex: 500" />
+        </Field>
+        <Field label="Montant estimé (FCFA)">
+          <input style={inputStyle} type="number" min="0" value={form.montant_total} onChange={set("montant_total")} />
+        </Field>
+      </Row>
+      <Field label="Date de livraison souhaitée">
+        <input style={inputStyle} type="date" value={form.date_livraison_prevue} onChange={set("date_livraison_prevue")} />
+      </Field>
+      <Field label="Notes complémentaires">
+        <input style={inputStyle} value={form.notes} onChange={set("notes")} placeholder="Instructions particulières…" />
+      </Field>
+      <ModalFooter onCancel={onClose} onSubmit={handleSave} submitLabel="Passer la commande" saving={saving} />
+    </Modal>
+  );
+}
+
+// ── Modal Détails fournisseur ─────────────────────────────────────────────────
+function DetailsModal({ fournisseur, onClose }) {
+  return (
+    <Modal title={fournisseur.nom} onClose={onClose} width={480}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        {[
+          { label: "Pays",               value: fournisseur.pays || "—" },
+          { label: "Statut",             value: fournisseur.actif !== false ? "Actif" : "Inactif" },
+          { label: "Contact",            value: fournisseur.contact_nom || "—" },
+          { label: "Téléphone",          value: fournisseur.telephone || "—" },
+          { label: "Email",              value: fournisseur.email || "—" },
+          { label: "Délai livraison",    value: fournisseur.delai_livraison || "—" },
+          { label: "Conditions paiement", value: fournisseur.conditions_paiement || "—" },
+          { label: "Réf",               value: fournisseur.id?.slice(0, 8).toUpperCase() },
+        ].map((item) => (
+          <div key={item.label} style={{ padding: "10px 14px", backgroundColor: "#F8FAFC", borderRadius: 10 }}>
+            <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 3 }}>{item.label}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#0A1628" }}>{item.value}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: 16 }}>
+        <button onClick={onClose} style={{ width: "100%", padding: "10px", backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: 10, fontSize: 13, cursor: "pointer" }}>
+          Fermer
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
 export default function Fournisseurs() {
   const { data: fournisseurs, loading, error } = useFournisseurs();
+  const { toasts, success } = useToast();
+  const [commandModal, setCommandModal] = useState(null);
+  const [detailModal, setDetailModal] = useState(null);
 
   return (
     <Layout title="Fournisseurs" subtitle="Gestion des partenaires et des approvisionnements">
       <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
+      <Toast toasts={toasts} />
+
+      {commandModal && (
+        <CommandeModal
+          fournisseur={commandModal}
+          onClose={() => setCommandModal(null)}
+          onSaved={() => { success(`Commande passée chez ${commandModal.nom}`); }}
+        />
+      )}
+      {detailModal && (
+        <DetailsModal fournisseur={detailModal} onClose={() => setDetailModal(null)} />
+      )}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <div style={{ fontSize: 14, color: "#6B7280" }}>
           {loading ? "Chargement…" : error ? "Erreur de connexion" : `${fournisseurs.length} fournisseur${fournisseurs.length !== 1 ? "s" : ""} enregistré${fournisseurs.length !== 1 ? "s" : ""}`}
         </div>
-        <button style={{ padding: "8px 18px", backgroundColor: "#3B82F6", color: "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-          + Nouveau fournisseur
-        </button>
       </div>
 
       {error && (
@@ -45,7 +149,6 @@ export default function Fournisseurs() {
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
         {loading && [1, 2, 3, 4].map((i) => <Skeleton key={i} />)}
-
         {!loading && !error && fournisseurs.length === 0 && (
           <div style={{ gridColumn: "1/-1", textAlign: "center", padding: "60px 0", color: "#9CA3AF", fontSize: 14 }}>
             Aucun fournisseur trouvé dans la base de données.
@@ -76,10 +179,10 @@ export default function Fournisseurs() {
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
                 {[
-                  { label: "Délai livraison",        value: s.delai_livraison || "—" },
-                  { label: "Conditions paiement",    value: s.conditions_paiement || "—" },
-                  { label: "Contact",                value: s.contact_nom || "—" },
-                  { label: "Référence",              value: s.id?.slice(0, 8).toUpperCase() },
+                  { label: "Délai livraison",     value: s.delai_livraison || "—" },
+                  { label: "Conditions paiement", value: s.conditions_paiement || "—" },
+                  { label: "Contact",             value: s.contact_nom || "—" },
+                  { label: "Référence",           value: s.id?.slice(0, 8).toUpperCase() },
                 ].map((item) => (
                   <div key={item.label} style={{ padding: "10px 12px", backgroundColor: "#F8FAFC", borderRadius: 10 }}>
                     <div style={{ fontSize: 10, color: "#9CA3AF", marginBottom: 2 }}>{item.label}</div>
@@ -95,10 +198,14 @@ export default function Fournisseurs() {
               </div>
 
               <div style={{ display: "flex", gap: 8 }}>
-                <button style={{ flex: 1, padding: "9px", backgroundColor: "#EFF6FF", color: "#2563EB", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                <button
+                  onClick={() => setCommandModal(s)}
+                  style={{ flex: 1, padding: "9px", backgroundColor: "#EFF6FF", color: "#2563EB", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
                   Passer commande
                 </button>
-                <button style={{ flex: 1, padding: "9px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                <button
+                  onClick={() => setDetailModal(s)}
+                  style={{ flex: 1, padding: "9px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
                   Voir détails
                 </button>
               </div>
