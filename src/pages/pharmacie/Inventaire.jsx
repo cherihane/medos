@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Layout from "../../components/Layout";
 import { useMedicaments } from "../../hooks/useSupabaseData";
+import { useTestAlert } from "../../hooks/useStockAlert";
 
 // Calcul du statut à partir du stock réel
 function getStatut(med) {
@@ -26,6 +27,71 @@ function SkeletonRow() {
         </td>
       ))}
     </tr>
+  );
+}
+
+// ── Panneau test alerte email ─────────────────────────────────────────────────
+function AlerteEmailPanel({ medicaments }) {
+  const { sendTestAlert, loading: sending, result, error } = useTestAlert();
+  const [selectedId, setSelectedId] = useState("");
+
+  const critiques = medicaments.filter((m) => getStatut(m) !== "normal");
+  const selected  = medicaments.find((m) => m.id === selectedId) ?? critiques[0];
+
+  return (
+    <div style={{ backgroundColor: "white", borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 20, borderLeft: "4px solid #8B5CF6" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+        <div>
+          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#0A1628" }}>
+            🔔 Test Alertes Email
+          </h3>
+          <p style={{ margin: "4px 0 0", fontSize: 12, color: "#6B7280" }}>
+            Déclencher manuellement l'Edge Function pour tester l'envoi Resend
+          </p>
+        </div>
+        <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 10, backgroundColor: "#F5F3FF", color: "#7C3AED", fontWeight: 700 }}>
+          Edge Function
+        </span>
+      </div>
+
+      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        <select
+          value={selectedId}
+          onChange={(e) => setSelectedId(e.target.value)}
+          style={{ flex: 1, padding: "9px 12px", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 13, color: "#374151", outline: "none", backgroundColor: "white" }}
+        >
+          <option value="">-- Choisir un médicament en rupture --</option>
+          {critiques.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.nom} — stock : {m.stock_actuel ?? 0} / min : {m.stock_minimum ?? 0}
+            </option>
+          ))}
+        </select>
+        <button
+          onClick={() => selected && sendTestAlert(selected)}
+          disabled={sending || (!selectedId && critiques.length === 0)}
+          style={{
+            padding: "9px 18px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: sending ? "wait" : "pointer", border: "none",
+            backgroundColor: sending ? "#E5E7EB" : "#8B5CF6",
+            color: sending ? "#9CA3AF" : "white",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {sending ? "Envoi…" : "📧 Tester l'alerte"}
+        </button>
+      </div>
+
+      {result && (
+        <div style={{ marginTop: 10, padding: "10px 14px", backgroundColor: "#DCFCE7", borderRadius: 8, fontSize: 12, color: "#16A34A", fontWeight: 600 }}>
+          ✅ Alerte envoyée — {result.medicament} (alerte créée : {result.alerte_creee ? "oui" : "non, déjà active"})
+        </div>
+      )}
+      {error && (
+        <div style={{ marginTop: 10, padding: "10px 14px", backgroundColor: "#FEF2F2", borderRadius: 8, fontSize: 12, color: "#DC2626" }}>
+          ❌ Erreur : {error}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -55,6 +121,11 @@ export default function Inventaire() {
   return (
     <Layout title="Inventaire Produits" subtitle="Gestion du stock et des niveaux de réapprovisionnement">
       <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
+
+      {/* ── Panneau test alertes email ── */}
+      {!loading && enriched.some((m) => m.statut !== "normal") && (
+        <AlerteEmailPanel medicaments={enriched} />
+      )}
 
       {/* ── Barre de filtres ── */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
