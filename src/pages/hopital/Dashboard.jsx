@@ -2,54 +2,211 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "rec
 import Layout from "../../components/Layout";
 import KpiCard from "../../components/KpiCard";
 import { kpiHospital, salesData } from "../../data/staticData";
+import { useAlertes, useKpiHopital, usePatients } from "../../hooks/useSupabaseData";
 
+const OCCUPATION = [
+  { service: "Urgences",        pct: 94 },
+  { service: "Médecine interne", pct: 76 },
+  { service: "Pédiatrie",       pct: 58 },
+  { service: "Chirurgie",       pct: 82 },
+  { service: "Maternité",       pct: 67 },
+];
+
+function severiteStyle(severite) {
+  switch (severite) {
+    case "critique": return { bg: "#FEF2F2", border: "#EF4444" };
+    case "alerte":   return { bg: "#FFFBEB", border: "#F59E0B" };
+    default:         return { bg: "#EFF6FF", border: "#3B82F6" };
+  }
+}
+
+function Skeleton({ height = 16, width = "100%", mb = 8 }) {
+  return (
+    <div style={{
+      height, width, backgroundColor: "#F3F4F6", borderRadius: 6, marginBottom: mb,
+      animation: "pulse 1.5s ease-in-out infinite",
+    }} />
+  );
+}
+
+// ── KPI fusionnés (Supabase + fallback statique) ─────────────────────────────
+function KpiSection() {
+  const { data: live, loading } = useKpiHopital();
+
+  const kpis = kpiHospital.map((k) => {
+    if (!live) return k;
+    if (k.label === "Patients hospitalisés")
+      return { ...k, value: String(live.patientsHospitalises || k.value) };
+    if (k.label === "Alertes critiques")
+      return { ...k, value: String(live.alertesCritiques) };
+    return k;
+  });
+
+  if (loading) {
+    return (
+      <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} style={{ flex: 1, backgroundColor: "white", borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+            <Skeleton height={36} width={36} mb={12} />
+            <Skeleton height={28} width="60%" mb={8} />
+            <Skeleton height={14} width="80%" mb={0} />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
+      {kpis.map((k) => <KpiCard key={k.label} {...k} />)}
+    </div>
+  );
+}
+
+// ── Panneau alertes (données Supabase) ────────────────────────────────────────
+function AlertesPanel() {
+  const { data, loading, error } = useAlertes(8);
+
+  const fallback = [
+    { titre: "Chambre froide B : 7.2°C — Seuil dépassé", severite: "critique" },
+    { titre: "Salbutamol : rupture imminente (2 unités)", severite: "critique" },
+    { titre: "3 ordonnances non validées depuis + 24h",   severite: "alerte" },
+    { titre: "Service urgences : capacité à 94%",         severite: "alerte" },
+    { titre: "Mise à jour formulaire disponible",         severite: "info" },
+  ];
+
+  const alertes = (!loading && !error && data.length > 0) ? data : fallback;
+  const isLive  = !loading && !error && data.length > 0;
+
+  return (
+    <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Alertes actives</h3>
+        <span style={{
+          fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10,
+          backgroundColor: isLive ? "#DCFCE7" : "#F3F4F6",
+          color: isLive ? "#16A34A" : "#9CA3AF",
+        }}>
+          {isLive ? "TEMPS RÉEL" : "STATIQUE"}
+        </span>
+      </div>
+
+      {loading && [1,2,3].map((i) => <Skeleton key={i} height={44} mb={8} />)}
+
+      {!loading && alertes.map((a, i) => {
+        const { bg, border } = severiteStyle(a.severite);
+        return (
+          <div key={a.id || i} style={{
+            display: "flex", flexDirection: "column", padding: "11px 14px",
+            borderRadius: 10, marginBottom: 8, backgroundColor: bg,
+            borderLeft: `4px solid ${border}`,
+          }}>
+            <span style={{ fontSize: 13, color: "#374151", fontWeight: 500 }}>{a.titre}</span>
+            {a.message && a.message !== a.titre && (
+              <span style={{ fontSize: 11, color: "#6B7280", marginTop: 2 }}>{a.message}</span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Panneau patients récents ──────────────────────────────────────────────────
+function PatientsPanel() {
+  const { data, loading } = usePatients();
+
+  const recent = data.slice(0, 5);
+
+  return (
+    <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Patients enregistrés</h3>
+        {!loading && (
+          <span style={{ fontSize: 12, color: "#6B7280" }}>{data.length} total</span>
+        )}
+      </div>
+
+      {loading && [1,2,3].map((i) => <Skeleton key={i} height={40} mb={8} />)}
+
+      {!loading && recent.length === 0 && (
+        <div style={{ fontSize: 12, color: "#9CA3AF", textAlign: "center", padding: "20px 0" }}>
+          Aucun patient enregistré
+        </div>
+      )}
+
+      {!loading && recent.length > 0 && (
+        <div>
+          {recent.map((p) => (
+            <div key={p.id} style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              padding: "10px 0", borderBottom: "1px solid #F3F4F6",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{
+                  width: 32, height: 32, borderRadius: "50%",
+                  backgroundColor: "#EFF6FF",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 13, fontWeight: 700, color: "#3B82F6",
+                }}>
+                  {p.prenom?.[0]}{p.nom?.[0]}
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#0A1628" }}>
+                    {p.prenom} {p.nom}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#9CA3AF" }}>
+                    {p.antecedents?.length > 0 ? p.antecedents.join(", ") : "Aucun antécédent"}
+                  </div>
+                </div>
+              </div>
+              <span style={{
+                fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 8,
+                backgroundColor: "#F3F4F6", color: "#6B7280",
+              }}>
+                {p.groupe_sanguin || "—"}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Occupation des services */}
+      <h3 style={{ margin: "20px 0 14px", fontSize: 14, fontWeight: 700, color: "#0A1628" }}>Occupation des services</h3>
+      {OCCUPATION.map((s) => (
+        <div key={s.service} style={{ marginBottom: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
+            <span style={{ color: "#374151", fontWeight: 500 }}>{s.service}</span>
+            <span style={{ fontWeight: 700, color: s.pct > 90 ? "#EF4444" : "#374151" }}>{s.pct}%</span>
+          </div>
+          <div style={{ height: 7, backgroundColor: "#E5E7EB", borderRadius: 4 }}>
+            <div style={{
+              height: "100%", width: `${s.pct}%`, borderRadius: 4,
+              backgroundColor: s.pct > 90 ? "#EF4444" : s.pct > 75 ? "#F59E0B" : "#10B981",
+            }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Dashboard principal ───────────────────────────────────────────────────────
 export default function DashboardHopital() {
   return (
     <Layout title="Dashboard Hôpital" subtitle="Vue d'ensemble — Hôpital Central Abidjan">
-      <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
-        {kpiHospital.map((k) => <KpiCard key={k.label} {...k} />)}
-      </div>
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
+        }
+      `}</style>
+
+      <KpiSection />
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Alertes actives</h3>
-          {[
-            { text: "Chambre froide B : 7.2°C — Seuil dépassé", level: "critique" },
-            { text: "Salbutamol : rupture imminente (2 unités)", level: "critique" },
-            { text: "3 ordonnances non validées depuis + 24h", level: "alerte" },
-            { text: "Service urgences : capacité à 94%", level: "alerte" },
-            { text: "Mise à jour formulaire disponible", level: "info" },
-          ].map((a, i) => (
-            <div key={i} style={{
-              display: "flex", alignItems: "center", gap: 12, padding: "11px 14px", borderRadius: 10, marginBottom: 8,
-              backgroundColor: a.level === "critique" ? "#FEF2F2" : a.level === "alerte" ? "#FFFBEB" : "#EFF6FF",
-              borderLeft: `4px solid ${a.level === "critique" ? "#EF4444" : a.level === "alerte" ? "#F59E0B" : "#3B82F6"}`,
-            }}>
-              <span style={{ fontSize: 13, color: "#374151" }}>{a.text}</span>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Occupation des services</h3>
-          {[
-            { service: "Urgences", pct: 94 },
-            { service: "Médecine interne", pct: 76 },
-            { service: "Pédiatrie", pct: 58 },
-            { service: "Chirurgie", pct: 82 },
-            { service: "Maternité", pct: 67 },
-          ].map((s) => (
-            <div key={s.service} style={{ marginBottom: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 5 }}>
-                <span style={{ color: "#374151", fontWeight: 500 }}>{s.service}</span>
-                <span style={{ fontWeight: 700, color: s.pct > 90 ? "#EF4444" : "#374151" }}>{s.pct}%</span>
-              </div>
-              <div style={{ height: 7, backgroundColor: "#E5E7EB", borderRadius: 4 }}>
-                <div style={{ height: "100%", width: `${s.pct}%`, backgroundColor: s.pct > 90 ? "#EF4444" : s.pct > 75 ? "#F59E0B" : "#10B981", borderRadius: 4 }} />
-              </div>
-            </div>
-          ))}
-        </div>
+        <AlertesPanel />
+        <PatientsPanel />
       </div>
 
       <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginTop: 20, minWidth: 0 }}>

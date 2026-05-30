@@ -29,6 +29,8 @@ create table if not exists public.medicaments (
   prix_unitaire   numeric(12,2),
   unite           text default 'boîte',
   prescription_requise boolean default false,
+  stock_actuel    int default 0,
+  stock_minimum   int default 0,
   created_at      timestamptz default now()
 );
 
@@ -173,7 +175,10 @@ begin
     'patients','ordonnances','ventes','commandes','livraisons','alertes'
   ] loop
     execute format(
-      'create policy if not exists "auth_users_all_%s" on public.%s
+      'drop policy if exists "auth_users_all_%s" on public.%s', t, t
+    );
+    execute format(
+      'create policy "auth_users_all_%s" on public.%s
        for all to authenticated using (true) with check (true)',
       t, t
     );
