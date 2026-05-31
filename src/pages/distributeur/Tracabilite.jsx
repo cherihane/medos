@@ -1,108 +1,258 @@
-import { useState } from "react";
+/**
+ * Traçabilité — version Distributeur
+ * Même moteur de vérification que Scanner pharmacie/hôpital,
+ * adapté au contexte distributeur avec liste des lots MedOS.
+ */
+import { useState, useCallback } from "react";
 import Layout from "../../components/Layout";
+import QrScanner from "../../components/QrScanner";
+import Toast from "../../components/Toast";
+import { useToast } from "../../hooks/useToast";
+import { useVerificationLot } from "../../hooks/useVerificationLot";
+import { useLots } from "../../hooks/useSupabaseData";
 
-const fakeResults = {
-  "3400936543988": { name: "Doliprane 1000mg", labo: "Sanofi", lot: "LOT2024-A12", expiry: "2026-03", origine: "France", statut: "authentique", etapes: [
-    { lieu: "Usine Sanofi — Lyon", date: "2024-01-05", action: "Fabrication" },
-    { lieu: "Entrepôt MedDistrib — Abidjan", date: "2024-01-12", action: "Réception" },
-    { lieu: "Pharmacie Lumière — Abidjan", date: "2024-01-15", action: "Dispensation" },
-  ]},
+const STATUTS = {
+  certifie: { label: "✅ Certifié MedOS",          color: "#16A34A", bg: "#DCFCE7", border: "#86EFAC", icon: "🛡️" },
+  bdpm:     { label: "✅ Authentique BDPM France", color: "#1D4ED8", bg: "#DBEAFE", border: "#93C5FD", icon: "🇫🇷" },
+  suspect:  { label: "⚠️ Lot suspect",             color: "#DC2626", bg: "#FEF2F2", border: "#FCA5A5", icon: "🚨" },
 };
 
-export default function Tracabilite() {
-  const [barcode, setBarcode] = useState("");
-  const [result, setResult] = useState(null);
-  const [scanning, setScanning] = useState(false);
+function fmt(iso) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("fr-FR");
+}
 
-  const handleScan = () => {
-    if (!barcode) return;
-    setScanning(true);
-    setTimeout(() => { setResult(fakeResults[barcode] || { statut: "inconnu" }); setScanning(false); }, 900);
+export default function Tracabilite() {
+  const { loading, result, error, verifier, reset } = useVerificationLot();
+  const { data: lotsDB, loading: lotsLoading } = useLots();
+  const { toasts, success, error: toastError } = useToast();
+
+  const [nomMedicament, setNomMedicament] = useState("");
+  const [numerolot, setNumerolot] = useState("");
+  const [showCamera, setShowCamera] = useState(false);
+  const [historique, setHistorique] = useState([]);
+
+  const handleVerifier = useCallback(async () => {
+    if (!nomMedicament.trim() && !numerolot.trim()) {
+      toastError("Saisissez un nom de médicament ou un numéro de lot");
+      return;
+    }
+    await verifier({
+      nomMedicament: nomMedicament.trim(),
+      numerolot: numerolot.trim(),
+      scannePar: "Traçabilité — Distributeur",
+    });
+  }, [nomMedicament, numerolot, verifier, toastError]);
+
+  const prevResultRef = useState(null);
+  if (result && result !== prevResultRef[0]) {
+    prevResultRef[0] = result;
+    setTimeout(() => {
+      setHistorique((prev) => [
+        { id: Date.now(), nom: nomMedicament, lot: numerolot, result, ts: Date.now() },
+        ...prev.slice(0, 9),
+      ]);
+      if (result.statut === "suspect") {
+        toastError("⚠️ Lot suspect — alerte envoyée !");
+      } else {
+        success(result.statut === "certifie" ? "✅ Certifié MedOS" : "✅ Référencé BDPM France");
+      }
+    }, 0);
+  }
+
+  const handleQrScan = (text) => {
+    setShowCamera(false);
+    try {
+      const obj = JSON.parse(text);
+      if (obj.lot) setNumerolot(obj.lot);
+      if (obj.nom) setNomMedicament(obj.nom);
+    } catch {
+      if (/^[A-Z0-9\-]+$/i.test(text.trim()) && text.length < 30) {
+        setNumerolot(text.trim());
+      } else {
+        setNomMedicament(text.trim());
+      }
+    }
+    success("Code scanné !");
   };
 
   return (
-    <Layout title="Traçabilité" subtitle="Suivi de bout en bout de la chaîne pharmaceutique">
+    <Layout title="Traçabilité" subtitle="Suivi de bout en bout — Vérification lots + chaîne pharmaceutique">
+      <style>{`
+        @keyframes spin   { to { transform: rotate(360deg) } }
+        @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes pulse  { 0%,100%{opacity:1} 50%{opacity:.4} }
+      `}</style>
+      <Toast toasts={toasts} />
+      {showCamera && <QrScanner onScan={handleQrScan} onClose={() => setShowCamera(false)} />}
+
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-        <div style={{ backgroundColor: "white", borderRadius: 16, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Scanner un produit</h3>
 
-          <div style={{ width: "100%", height: 180, backgroundColor: "#0A1628", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
-            <div style={{ textAlign: "center", color: "rgba(255,255,255,0.4)", fontSize: 13 }}>
-              Zone de scan — Caméra active
+        {/* ── Gauche : scanner ── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ backgroundColor: "white", borderRadius: 16, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Scanner un produit</h3>
+              <button
+                onClick={() => setShowCamera(true)}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", backgroundColor: "#FFFBEB", color: "#D97706", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                  <circle cx="12" cy="13" r="4"/>
+                </svg>
+                Caméra
+              </button>
             </div>
-          </div>
 
-          <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
-            <input value={barcode} onChange={(e) => setBarcode(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleScan()}
-              placeholder="Code-barre / QR code / Lot..."
-              style={{ flex: 1, padding: "10px 14px", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 13, outline: "none" }} />
-            <button onClick={handleScan} style={{ padding: "10px 20px", backgroundColor: "#F59E0B", color: "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-              {scanning ? "..." : "Tracer"}
-            </button>
-          </div>
-
-          <div>
-            <h4 style={{ fontSize: 13, fontWeight: 700, color: "#0A1628", margin: "0 0 10px" }}>Codes de test</h4>
-            <button onClick={() => { setBarcode("3400936543988"); handleScan(); }}
-              style={{ width: "100%", padding: "10px 14px", backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: 10, cursor: "pointer", textAlign: "left", fontSize: 12 }}>
-              <strong>Doliprane 1000mg</strong>
-              <span style={{ color: "#9CA3AF", marginLeft: 8, fontFamily: "monospace" }}>3400936543988</span>
-            </button>
-          </div>
-
-          <div style={{ marginTop: 20 }}>
-            <h4 style={{ fontSize: 13, fontWeight: 700, color: "#0A1628", margin: "0 0 12px" }}>Statistiques traçabilité</h4>
-            {[
-              { label: "Produits tracés (mois)", value: "4 521", color: "#F59E0B" },
-              { label: "Lots authentifiés", value: "98.7%", color: "#10B981" },
-              { label: "Alertes détectées", value: "3", color: "#EF4444" },
-            ].map((s) => (
-              <div key={s.label} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #F3F4F6" }}>
-                <span style={{ fontSize: 13, color: "#6B7280" }}>{s.label}</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: s.color }}>{s.value}</span>
+            {/* Zone caméra OFF */}
+            <div
+              onClick={() => setShowCamera(true)}
+              style={{ width: "100%", height: 160, backgroundColor: "#0A1628", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16, cursor: "pointer", position: "relative", overflow: "hidden" }}>
+              <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse at center, rgba(245,158,11,0.15) 0%, transparent 70%)" }} />
+              <div style={{ textAlign: "center", position: "relative" }}>
+                <div style={{ fontSize: 32, marginBottom: 8 }}>📷</div>
+                <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12 }}>Cliquer pour activer la caméra</div>
+                <div style={{ color: "rgba(255,255,255,0.35)", fontSize: 11, marginTop: 2 }}>QR code / Code-barres</div>
               </div>
-            ))}
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <input
+                value={nomMedicament}
+                onChange={(e) => { setNomMedicament(e.target.value); reset(); }}
+                onKeyDown={(e) => e.key === "Enter" && handleVerifier()}
+                placeholder="Nom du médicament…"
+                style={{ padding: "10px 14px", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 13, outline: "none", color: "#0A1628" }}
+              />
+              <input
+                value={numerolot}
+                onChange={(e) => { setNumerolot(e.target.value); reset(); }}
+                onKeyDown={(e) => e.key === "Enter" && handleVerifier()}
+                placeholder="Numéro de lot (optionnel)…"
+                style={{ padding: "10px 14px", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 13, outline: "none", color: "#0A1628", fontFamily: "monospace" }}
+              />
+              <button
+                onClick={handleVerifier}
+                disabled={loading || (!nomMedicament.trim() && !numerolot.trim())}
+                style={{
+                  padding: "11px", borderRadius: 10, fontSize: 13, fontWeight: 700,
+                  cursor: loading || (!nomMedicament.trim() && !numerolot.trim()) ? (loading ? "wait" : "not-allowed") : "pointer",
+                  border: "none",
+                  backgroundColor: loading || (!nomMedicament.trim() && !numerolot.trim()) ? "#E5E7EB" : "#F59E0B",
+                  color: loading || (!nomMedicament.trim() && !numerolot.trim()) ? "#9CA3AF" : "white",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                }}>
+                {loading
+                  ? <><div style={{ width: 14, height: 14, border: "2px solid #9CA3AF", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />Vérification…</>
+                  : "🔍 Vérifier l'authenticité"}
+              </button>
+            </div>
+            {error && <div style={{ marginTop: 10, padding: "8px 12px", backgroundColor: "#FEF2F2", borderRadius: 8, fontSize: 12, color: "#DC2626" }}>Erreur : {error}</div>}
           </div>
+
+          {/* Historique session */}
+          {historique.length > 0 && (
+            <div style={{ backgroundColor: "white", borderRadius: 14, padding: "20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+                <h4 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#0A1628" }}>Historique ({historique.length})</h4>
+                <button onClick={() => setHistorique([])} style={{ fontSize: 11, color: "#9CA3AF", background: "none", border: "none", cursor: "pointer" }}>Effacer</button>
+              </div>
+              {historique.map((item) => {
+                const s = STATUTS[item.result.statut];
+                return (
+                  <div key={item.id}
+                    onClick={() => { setNumerolot(item.lot || ""); setNomMedicament(item.nom || ""); reset(); }}
+                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", backgroundColor: "#F8FAFC", borderRadius: 8, marginBottom: 6, border: `1px solid ${s.border}`, cursor: "pointer" }}>
+                    <span>{s.icon}</span>
+                    <div style={{ flex: 1, fontSize: 12, fontWeight: 600, color: "#0A1628", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {item.nom || item.lot || "—"}
+                    </div>
+                    <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 6, backgroundColor: s.bg, color: s.color, fontWeight: 700 }}>
+                      {item.result.statut === "certifie" ? "MedOS" : item.result.statut === "bdpm" ? "BDPM" : "Suspect"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        <div style={{ backgroundColor: "white", borderRadius: 16, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Historique du produit</h3>
-          {!result && !scanning && (
-            <div style={{ textAlign: "center", color: "#9CA3AF", paddingTop: 60, fontSize: 13 }}>Scannez un produit pour voir sa traçabilité complète</div>
-          )}
-          {scanning && <div style={{ textAlign: "center", color: "#F59E0B", paddingTop: 60, fontSize: 14, fontWeight: 600 }}>Traçage en cours...</div>}
-          {result && !scanning && result.statut !== "inconnu" && (
-            <>
-              <div style={{ padding: "14px", backgroundColor: "#DCFCE7", borderRadius: 10, marginBottom: 20, border: "1px solid #86EFAC" }}>
-                <div style={{ fontWeight: 800, fontSize: 15, color: "#16A34A", marginBottom: 2 }}>Produit authentifié</div>
-                <div style={{ fontSize: 13, color: "#374151" }}>{result.name} · {result.labo}</div>
-                <div style={{ fontSize: 12, color: "#6B7280" }}>Lot : {result.lot} · Expire : {result.expiry} · Origine : {result.origine}</div>
-              </div>
+        {/* ── Droite : résultat + lots récents ── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
-              <h4 style={{ fontSize: 13, fontWeight: 700, color: "#0A1628", margin: "0 0 16px" }}>Chaine de traçabilité</h4>
-              <div style={{ position: "relative" }}>
-                {result.etapes.map((e, i) => (
-                  <div key={i} style={{ display: "flex", gap: 16, marginBottom: 20 }}>
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-                      <div style={{ width: 12, height: 12, borderRadius: "50%", backgroundColor: "#F59E0B", flexShrink: 0 }} />
-                      {i < result.etapes.length - 1 && <div style={{ width: 2, flex: 1, backgroundColor: "#E5E7EB", marginTop: 4 }} />}
+          {/* Résultat */}
+          <div style={{ backgroundColor: "white", borderRadius: 16, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+            <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Résultat</h3>
+            {!result && !loading && (
+              <div style={{ textAlign: "center", color: "#9CA3AF", padding: "30px 0" }}>
+                <div style={{ fontSize: 32, marginBottom: 8 }}>🔍</div>
+                <div style={{ fontSize: 13 }}>En attente de scan…</div>
+              </div>
+            )}
+            {loading && (
+              <div style={{ textAlign: "center", padding: "30px 0" }}>
+                <div style={{ width: 32, height: 32, border: "3px solid #E5E7EB", borderTopColor: "#F59E0B", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 12px" }} />
+                <div style={{ fontSize: 13, color: "#6B7280" }}>Consultation MedOS → BDPM France…</div>
+              </div>
+            )}
+            {result && !loading && (() => {
+              const s = STATUTS[result.statut];
+              return (
+                <div style={{ animation: "fadeIn 0.25s ease" }}>
+                  <div style={{ padding: "14px 16px", backgroundColor: s.bg, borderRadius: 12, border: `1px solid ${s.border}`, marginBottom: 16, textAlign: "center" }}>
+                    <div style={{ fontSize: 22, marginBottom: 4 }}>{s.icon}</div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: s.color }}>{s.label}</div>
+                  </div>
+                  {Object.entries(result.details).map(([k, v]) => (
+                    <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "9px 0", borderBottom: "1px solid #F3F4F6" }}>
+                      <span style={{ fontSize: 12, color: "#6B7280" }}>{k}</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: "#0A1628", textAlign: "right", maxWidth: "55%" }}>{v}</span>
                     </div>
-                    <div style={{ flex: 1, paddingBottom: 8 }}>
-                      <div style={{ fontWeight: 700, fontSize: 13, color: "#0A1628" }}>{e.action}</div>
-                      <div style={{ fontSize: 12, color: "#6B7280" }}>{e.lieu}</div>
-                      <div style={{ fontSize: 11, color: "#9CA3AF" }}>{e.date}</div>
+                  ))}
+                  <div style={{ marginTop: 10, fontSize: 10, color: "#9CA3AF", textAlign: "right" }}>
+                    Source : {result.source === "supabase" ? "Base MedOS" : result.source === "bdpm" ? "BDPM France" : "Introuvable"}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Lots MedOS enregistrés */}
+          <div style={{ backgroundColor: "white", borderRadius: 14, padding: "20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+            <h4 style={{ margin: "0 0 14px", fontSize: 13, fontWeight: 700, color: "#0A1628" }}>
+              Lots enregistrés MedOS ({lotsLoading ? "…" : lotsDB.length})
+            </h4>
+            <div style={{ maxHeight: 260, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
+              {lotsLoading && [1,2,3].map((i) => (
+                <div key={i} style={{ height: 44, backgroundColor: "#F8FAFC", borderRadius: 8, animation: "pulse 1.5s ease-in-out infinite" }} />
+              ))}
+              {!lotsLoading && lotsDB.length === 0 && (
+                <div style={{ padding: "20px", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>
+                  Aucun lot enregistré dans MedOS
+                </div>
+              )}
+              {!lotsLoading && lotsDB.slice(0, 15).map((lot) => {
+                const expired = lot.date_expiration && new Date(lot.date_expiration) < new Date();
+                return (
+                  <div key={lot.id}
+                    onClick={() => { setNumerolot(lot.numero_lot); setNomMedicament(lot.medicaments?.nom || ""); reset(); }}
+                    style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", backgroundColor: "#F8FAFC", borderRadius: 8, cursor: "pointer", borderLeft: `3px solid ${expired ? "#EF4444" : "#10B981"}` }}>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#0A1628" }}>{lot.medicaments?.nom || "—"}</div>
+                      <div style={{ fontSize: 11, color: "#9CA3AF", fontFamily: "monospace" }}>{lot.numero_lot}</div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: 11, color: expired ? "#EF4444" : "#10B981", fontWeight: 600 }}>
+                        {expired ? "Expiré" : fmt(lot.date_expiration)}
+                      </div>
+                      <div style={{ fontSize: 10, color: "#9CA3AF" }}>{lot.fabricant || "—"}</div>
                     </div>
                   </div>
-                ))}
-              </div>
-            </>
-          )}
-          {result && !scanning && result.statut === "inconnu" && (
-            <div style={{ padding: "16px", backgroundColor: "#FEF2F2", borderRadius: 10, border: "1px solid #FCA5A5", textAlign: "center" }}>
-              <div style={{ fontWeight: 700, color: "#EF4444", fontSize: 15 }}>Produit non reconnu</div>
-              <div style={{ color: "#6B7280", fontSize: 13, marginTop: 4 }}>Ce produit n'est pas dans la base de traçabilité</div>
+                );
+              })}
             </div>
-          )}
+            <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 8 }}>Cliquez sur un lot pour le vérifier</div>
+          </div>
         </div>
       </div>
     </Layout>
