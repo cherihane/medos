@@ -1,10 +1,11 @@
 import Layout from "../../components/Layout";
-import { useKpiAutorite, useAlertes, useEtablissements } from "../../hooks/useSupabaseData";
+import { useKpiAutorite, useAlertes, useEtablissements, useMedicaments } from "../../hooks/useSupabaseData";
 
 export default function VueNationale() {
   const { data: kpi, loading: loadKpi } = useKpiAutorite();
   const { data: alertes, loading: loadAlt } = useAlertes(20);
   const { data: etabs, loading: loadEtabs } = useEtablissements();
+  const { data: medicaments, loading: loadMed } = useMedicaments();
 
   const kpis = [
     { label: "Structures actives",      value: loadKpi ? "…" : kpi?.structuresActives ?? 0,    color: "#10B981" },
@@ -66,20 +67,45 @@ export default function VueNationale() {
 
           <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
             <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Indicateurs nationaux</h3>
-            {[
-              { label: "Taux de couverture vaccinale", value: "73%", trend: "+4.2%" },
-              { label: "Mortalité infantile (pour 1000)", value: "42", trend: "-12%" },
-              { label: "Structures fonctionnelles", value: "1 248", trend: "+34" },
-              { label: "Médicaments essentiels disponibles", value: "87%", trend: "+2%" },
-            ].map((ind) => (
-              <div key={ind.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid #F3F4F6" }}>
-                <span style={{ fontSize: 13, color: "#6B7280" }}>{ind.label}</span>
-                <div style={{ textAlign: "right" }}>
-                  <span style={{ fontSize: 14, fontWeight: 800, color: "#0A1628" }}>{ind.value}</span>
-                  <div style={{ fontSize: 11, color: ind.trend.startsWith("+") ? "#10B981" : "#EF4444", fontWeight: 600 }}>{ind.trend}</div>
+            {(() => {
+              const totalMeds = medicaments.length;
+              const medsEnStock = medicaments.filter((m) => m.stock_actuel > 0).length;
+              const pctDispo = totalMeds > 0 ? Math.round((medsEnStock / totalMeds) * 100) : 0;
+              const structuresActives = kpi?.structuresActives ?? 0;
+              const alertesCritiques = kpi?.alertesPharmacovig ?? 0;
+
+              const indicateurs = [
+                {
+                  label: "Structures actives enregistrées",
+                  value: loadKpi ? "…" : structuresActives,
+                  trend: null,
+                },
+                {
+                  label: "Alertes pharmacovigilance critiques",
+                  value: loadKpi ? "…" : alertesCritiques,
+                  trend: null,
+                },
+                {
+                  label: "Médicaments tracés",
+                  value: loadKpi ? "…" : kpi?.medicamentsTraces ?? 0,
+                  trend: null,
+                },
+                {
+                  label: "Médicaments avec stock disponible",
+                  value: loadMed ? "…" : `${pctDispo}%`,
+                  trend: null,
+                },
+              ];
+
+              return indicateurs.map((ind) => (
+                <div key={ind.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid #F3F4F6" }}>
+                  <span style={{ fontSize: 13, color: "#6B7280" }}>{ind.label}</span>
+                  <div style={{ textAlign: "right" }}>
+                    <span style={{ fontSize: 14, fontWeight: 800, color: "#0A1628" }}>{ind.value}</span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ));
+            })()}
           </div>
         </div>
       </div>

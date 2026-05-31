@@ -1,6 +1,7 @@
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
 import Layout from "../../components/Layout";
 import PredictionsIA from "../../components/PredictionsIA";
+import { useKpiDistributeur } from "../../hooks/useSupabaseData";
 
 const forecastData = [
   { mois: "Jan", reel: 22400000, prevision: 23000000 },
@@ -20,15 +21,19 @@ const prodData = [
 ];
 
 export default function Previsions() {
+  const { data: kpi, loading: loadKpi } = useKpiDistributeur();
+
+  const kpiCards = [
+    { label: "Chiffre d'affaires total", value: loadKpi ? "…" : `${((kpi?.ca ?? 0) / 1000000).toFixed(1)}M FCFA`, color: "#F59E0B" },
+    { label: "Commandes actives",         value: loadKpi ? "…" : kpi?.commandesActives ?? 0,                        color: "#10B981" },
+    { label: "Clients actifs",            value: loadKpi ? "…" : kpi?.clients ?? 0,                                 color: "#3B82F6" },
+    { label: "Livraisons en cours",       value: loadKpi ? "…" : kpi?.livraisonsEnCours ?? 0,                       color: "#8B5CF6" },
+  ];
+
   return (
     <Layout title="Prévisions" subtitle="Anticipation de la demande et planification des approvisionnements">
       <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
-        {[
-          { label: "CA prévu (Fév)", value: "25M FCFA", color: "#F59E0B" },
-          { label: "Croissance estimée", value: "+11.6%", color: "#10B981" },
-          { label: "Commandes prévisionnelles", value: "184", color: "#3B82F6" },
-          { label: "Couverture stock", value: "18 jours", color: "#8B5CF6" },
-        ].map((k) => (
+        {kpiCards.map((k) => (
           <div key={k.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "18px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
             <div style={{ fontSize: 22, fontWeight: 800, color: k.color }}>{k.value}</div>
             <div style={{ fontSize: 12, color: "#6B7280" }}>{k.label}</div>
