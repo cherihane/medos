@@ -79,52 +79,53 @@ export function AuthProvider({ children }) {
   const [auth, setAuth] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Reconstruct auth state from a Supabase user object (async — fetches etablissement_id)
-  const buildAuth = async (user) => {
+  // Étape 1 — auth de base depuis user_metadata (synchrone, pas de réseau)
+  const buildAuthBase = (user) => {
     const role = user?.user_metadata?.role;
     if (!role || !roleConfig[role]) return null;
-    let etablissement_id = null;
+    return { role, ...roleConfig[role], user, etablissement_id: null };
+  };
+
+  // Étape 2 — enrichissement en arrière-plan avec etablissement_id
+  const enrichWithEtablissement = async (user, mounted) => {
     try {
       const { data } = await supabase
         .from("etablissements")
         .select("id")
         .eq("email", user.email)
         .maybeSingle();
-      etablissement_id = data?.id ?? null;
-    } catch { /* network error — proceed without etablissement_id */ }
-    return { role, ...roleConfig[role], user, etablissement_id };
+      if (mounted?.current && data?.id) {
+        setAuth((prev) => prev ? { ...prev, etablissement_id: data.id } : prev);
+      }
+    } catch {
+      // réseau indisponible — on continue sans etablissement_id
+    }
   };
 
   useEffect(() => {
-    let mounted = true;
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!mounted) return;
-      try {
-        if (session?.user) setAuth(await buildAuth(session.user));
-      } catch (e) {
-        console.error("buildAuth error:", e);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    }).catch((e) => {
-      console.error("getSession error:", e);
-      if (mounted) setLoading(false);
+    const mountedRef = { current: true };
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mountedRef.current) return;
+      const base = session?.user ? buildAuthBase(session.user) : null;
+      setAuth(base);
+      setLoading(false); // ← immédiat, l'app s'affiche tout de suite
+      if (base) enrichWithEtablissement(session.user, mountedRef);
+    }).catch(() => {
+      if (mountedRef.current) setLoading(false);
     });
 
     // React to auth state changes (token refresh, sign-out, etc.)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        if (!mounted) return;
-        try {
-          setAuth(session?.user ? await buildAuth(session.user) : null);
-        } catch (e) {
-          console.error("buildAuth (onAuthStateChange) error:", e);
-          setAuth(null);
-        }
+      (_event, session) => {
+        if (!mountedRef.current) return;
+        const base = session?.user ? buildAuthBase(session.user) : null;
+        setAuth(base);
+        if (base) enrichWithEtablissement(session.user, mountedRef);
       }
     );
 
-    return () => { mounted = false; subscription.unsubscribe(); };
+    return () => { mountedRef.current = false; subscription.unsubscribe(); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
@@ -168,7 +169,9 @@ export function AuthProvider({ children }) {
     }
 
     const user = data?.user ?? data?.session?.user;
-    setAuth(await buildAuth(user));
+    const base = buildAuthBase(user);
+    setAuth(base);
+    if (base) enrichWithEtablissement(user, { current: true });
     return data;
   };
 
