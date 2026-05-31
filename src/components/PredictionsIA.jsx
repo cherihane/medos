@@ -214,7 +214,7 @@ export default function PredictionsIA() {
           <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>
             Prédictions IA
           </h3>
-          <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>Powered by Claude claude-opus-4-7</div>
+          <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>Powered by Groq · llama-3.3-70b-versatile</div>
         </div>
         {predictions && (
           <button
