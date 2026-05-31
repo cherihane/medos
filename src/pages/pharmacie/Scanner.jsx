@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import Layout from "../../components/Layout";
 import QrScanner from "../../components/QrScanner";
 import Toast from "../../components/Toast";
@@ -8,22 +8,19 @@ import { useVerificationLot } from "../../hooks/useVerificationLot";
 // ── Styles statuts ────────────────────────────────────────────────────────────
 const STATUTS = {
   certifie: {
-    label: "✅ Certifié MedOS",
+    label: "Certifié MedOS",
     sublabel: "Lot enregistré par un distributeur certifié",
     bg: "#DCFCE7", color: "#16A34A", border: "#86EFAC",
-    icon: "🛡️",
   },
   bdpm: {
-    label: "✅ Authentique — Base officielle française",
+    label: "Authentique — Base officielle française",
     sublabel: "Médicament référencé dans la BDPM (Ministère de la Santé, France)",
     bg: "#DBEAFE", color: "#1D4ED8", border: "#93C5FD",
-    icon: "🇫🇷",
   },
   suspect: {
-    label: "⚠️ Lot suspect — Non identifié",
+    label: "Lot suspect — Non identifié",
     sublabel: "Introuvable dans MedOS et dans la BDPM. Alerte créée, email envoyé aux autorités.",
     bg: "#FEF2F2", color: "#DC2626", border: "#FCA5A5",
-    icon: "🚨",
   },
 };
 
@@ -38,7 +35,6 @@ function HistoriqueItem({ item, onRescan }) {
     }}
       onClick={() => onRescan(item)}
     >
-      <span style={{ fontSize: 20 }}>{s.icon}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: "#0A1628", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {item.nom || item.lot || "Scan sans libellé"}
@@ -62,7 +58,6 @@ function ResultPanel({ result }) {
     <div style={{ animation: "fadeIn 0.25s ease" }}>
       {/* Badge statut */}
       <div style={{ padding: "18px 20px", backgroundColor: s.bg, borderRadius: 14, border: `1px solid ${s.border}`, marginBottom: 20, textAlign: "center" }}>
-        <div style={{ fontSize: 28, marginBottom: 6 }}>{s.icon}</div>
         <div style={{ fontSize: 15, fontWeight: 800, color: s.color }}>{s.label}</div>
         <div style={{ fontSize: 12, color: s.color, marginTop: 4, opacity: 0.8 }}>{s.sublabel}</div>
       </div>
@@ -101,10 +96,14 @@ export default function Scanner({ profile = "pharmacie" }) {
   const [showCamera, setShowCamera] = useState(false);
   const [historique, setHistorique] = useState([]);
 
+  // Refs pour éviter la boucle infinie et capturer le contexte au moment du scan
+  const lastHandledResult = useRef(null);
+  const scanContextRef = useRef({ nom: "", lot: "" });
+
   const profileLabels = {
-    pharmacie:   { color: "#3B82F6", bg: "#EFF6FF" },
-    hopital:     { color: "#10B981", bg: "#DCFCE7" },
-    distributeur:{ color: "#F59E0B", bg: "#FFFBEB" },
+    pharmacie:    { color: "#3B82F6", bg: "#EFF6FF" },
+    hopital:      { color: "#10B981", bg: "#DCFCE7" },
+    distributeur: { color: "#F59E0B", bg: "#FFFBEB" },
   };
   const pStyle = profileLabels[profile] || profileLabels.pharmacie;
 
@@ -113,6 +112,8 @@ export default function Scanner({ profile = "pharmacie" }) {
       toastError("Saisissez un nom de médicament ou un numéro de lot");
       return;
     }
+    // Capturer le contexte avant l'appel (les champs peuvent changer entre-temps)
+    scanContextRef.current = { nom: nomMedicament.trim(), lot: numerolot.trim() };
     await verifier({
       nomMedicament: nomMedicament.trim(),
       numerolot: numerolot.trim(),
@@ -120,37 +121,31 @@ export default function Scanner({ profile = "pharmacie" }) {
     });
   }, [nomMedicament, numerolot, verifier, profile, toastError]);
 
-  // Quand le résultat arrive, l'ajouter à l'historique
-  const handleResult = useCallback((newResult) => {
-    if (!newResult) return;
+  // Ajouter à l'historique une seule fois quand result change
+  useEffect(() => {
+    if (!result) return;
+    if (result === lastHandledResult.current) return;
+    lastHandledResult.current = result;
+
+    const { nom, lot } = scanContextRef.current;
     setHistorique((prev) => [
-      { id: Date.now(), nom: nomMedicament, lot: numerolot, result: newResult, ts: Date.now() },
+      { id: Date.now(), nom, lot, result, ts: Date.now() },
       ...prev.slice(0, 19),
     ]);
-    if (newResult.statut === "suspect") {
-      toastError("⚠️ Lot suspect — alerte envoyée aux autorités !");
+    if (result.statut === "suspect") {
+      toastError("Lot suspect — alerte envoyée aux autorités");
     } else {
-      success(newResult.statut === "certifie" ? "✅ Certifié MedOS" : "✅ Référencé BDPM France");
+      success(result.statut === "certifie" ? "Certifié MedOS" : "Référencé BDPM France");
     }
-  }, [nomMedicament, numerolot, toastError, success]);
-
-  // Déclencher handleResult dès que result change (et n'est pas null)
-  const prevResultRef = useState(null);
-  if (result && result !== prevResultRef[0]) {
-    prevResultRef[0] = result;
-    // defer légèrement pour ne pas appeler setState pendant un render
-    setTimeout(() => handleResult(result), 0);
-  }
+  }, [result, toastError, success]);
 
   const handleQrScan = (text) => {
     setShowCamera(false);
-    // Tenter de parser JSON (QR structuré : {"lot":"...","nom":"..."})
     try {
       const obj = JSON.parse(text);
-      if (obj.lot)  setNumerolot(obj.lot);
-      if (obj.nom)  setNomMedicament(obj.nom);
+      if (obj.lot) setNumerolot(obj.lot);
+      if (obj.nom) setNomMedicament(obj.nom);
     } catch {
-      // Texte brut : c'est soit un numéro de lot soit un nom
       if (/^[A-Z0-9\-]+$/i.test(text.trim()) && text.length < 30) {
         setNumerolot(text.trim());
       } else {
@@ -219,7 +214,7 @@ export default function Scanner({ profile = "pharmacie" }) {
                   value={nomMedicament}
                   onChange={(e) => { setNomMedicament(e.target.value); reset(); }}
                   onKeyDown={(e) => e.key === "Enter" && handleVerifier()}
-                  placeholder="Ex: Amoxicilline 500mg, Doliprane, Artémisinine…"
+                  placeholder="Ex: Amoxicilline 500mg, Doliprane, Artemisinine…"
                   style={{ width: "100%", padding: "11px 14px", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 14, outline: "none", boxSizing: "border-box", color: "#0A1628" }}
                 />
               </div>
@@ -231,7 +226,7 @@ export default function Scanner({ profile = "pharmacie" }) {
                   value={numerolot}
                   onChange={(e) => { setNumerolot(e.target.value); reset(); }}
                   onKeyDown={(e) => e.key === "Enter" && handleVerifier()}
-                  placeholder="Ex: LOT2024-A12, 3400936543988…"
+                  placeholder="Ex: LOT2024-A12, MED-003…"
                   style={{ width: "100%", padding: "11px 14px", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 14, outline: "none", boxSizing: "border-box", color: "#0A1628", fontFamily: "monospace" }}
                 />
               </div>
@@ -252,7 +247,7 @@ export default function Scanner({ profile = "pharmacie" }) {
                     <div style={{ width: 16, height: 16, border: "2px solid #9CA3AF", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
                     Vérification en cours…
                   </>
-                ) : "🔍 Vérifier l'authenticité"}
+                ) : "Vérifier l'authenticité"}
               </button>
               {(nomMedicament || numerolot || result) && (
                 <button onClick={handleReset} style={{ padding: "12px 16px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 10, fontSize: 13, cursor: "pointer" }}>
@@ -266,29 +261,6 @@ export default function Scanner({ profile = "pharmacie" }) {
                 Erreur : {error}
               </div>
             )}
-          </div>
-
-          {/* Sources de vérification */}
-          <div style={{ backgroundColor: "white", borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-            <h4 style={{ margin: "0 0 14px", fontSize: 13, fontWeight: 700, color: "#0A1628" }}>Sources de vérification</h4>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {[
-                { icon: "🛡️", label: "Base MedOS (Supabase)", desc: "Lots enregistrés par distributeurs certifiés MedOS", color: "#10B981", bg: "#DCFCE7", priority: "1" },
-                { icon: "🇫🇷", label: "BDPM — Médicaments France", desc: "Base officielle du Ministère de la Santé français", color: "#2563EB", bg: "#DBEAFE", priority: "2" },
-                { icon: "🚨", label: "Alerte Supabase + Email", desc: "Si introuvable : alerte créée + email envoyé aux autorités", color: "#EF4444", bg: "#FEF2F2", priority: "3" },
-              ].map((src) => (
-                <div key={src.label} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", backgroundColor: "#F8FAFC", borderRadius: 10 }}>
-                  <div style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: src.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>{src.icon}</div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#0A1628" }}>
-                      <span style={{ fontSize: 10, fontWeight: 800, color: src.color, marginRight: 6, padding: "1px 5px", backgroundColor: src.bg, borderRadius: 4 }}>#{src.priority}</span>
-                      {src.label}
-                    </div>
-                    <div style={{ fontSize: 11, color: "#6B7280", marginTop: 1 }}>{src.desc}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
 
           {/* Historique */}
@@ -333,9 +305,8 @@ export default function Scanner({ profile = "pharmacie" }) {
             <div style={{ textAlign: "center", padding: "40px 0" }}>
               <div style={{ width: 40, height: 40, border: "3px solid #E5E7EB", borderTopColor: pStyle.color, borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 16px" }} />
               <div style={{ fontSize: 14, fontWeight: 600, color: "#374151", marginBottom: 4 }}>Vérification en cours…</div>
-              <div style={{ fontSize: 12, color: "#9CA3AF" }}>Consultation MedOS → BDPM France</div>
+              <div style={{ fontSize: 12, color: "#9CA3AF" }}>Consultation MedOS puis BDPM France</div>
 
-              {/* Étapes visuelles */}
               <div style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 8 }}>
                 {[
                   { label: "Recherche dans MedOS (Supabase)", color: "#10B981" },

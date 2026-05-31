@@ -3,7 +3,7 @@
  * Même moteur de vérification que Scanner pharmacie/hôpital,
  * adapté au contexte distributeur avec liste des lots MedOS.
  */
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import Layout from "../../components/Layout";
 import QrScanner from "../../components/QrScanner";
 import Toast from "../../components/Toast";
@@ -12,9 +12,9 @@ import { useVerificationLot } from "../../hooks/useVerificationLot";
 import { useLots } from "../../hooks/useSupabaseData";
 
 const STATUTS = {
-  certifie: { label: "✅ Certifié MedOS",          color: "#16A34A", bg: "#DCFCE7", border: "#86EFAC", icon: "🛡️" },
-  bdpm:     { label: "✅ Authentique BDPM France", color: "#1D4ED8", bg: "#DBEAFE", border: "#93C5FD", icon: "🇫🇷" },
-  suspect:  { label: "⚠️ Lot suspect",             color: "#DC2626", bg: "#FEF2F2", border: "#FCA5A5", icon: "🚨" },
+  certifie: { label: "Certifié MedOS",          color: "#16A34A", bg: "#DCFCE7", border: "#86EFAC" },
+  bdpm:     { label: "Authentique BDPM France", color: "#1D4ED8", bg: "#DBEAFE", border: "#93C5FD" },
+  suspect:  { label: "Lot suspect",             color: "#DC2626", bg: "#FEF2F2", border: "#FCA5A5" },
 };
 
 function fmt(iso) {
@@ -32,11 +32,15 @@ export default function Tracabilite() {
   const [showCamera, setShowCamera] = useState(false);
   const [historique, setHistorique] = useState([]);
 
+  const lastHandledResult = useRef(null);
+  const scanContextRef = useRef({ nom: "", lot: "" });
+
   const handleVerifier = useCallback(async () => {
     if (!nomMedicament.trim() && !numerolot.trim()) {
       toastError("Saisissez un nom de médicament ou un numéro de lot");
       return;
     }
+    scanContextRef.current = { nom: nomMedicament.trim(), lot: numerolot.trim() };
     await verifier({
       nomMedicament: nomMedicament.trim(),
       numerolot: numerolot.trim(),
@@ -44,21 +48,21 @@ export default function Tracabilite() {
     });
   }, [nomMedicament, numerolot, verifier, toastError]);
 
-  const prevResultRef = useState(null);
-  if (result && result !== prevResultRef[0]) {
-    prevResultRef[0] = result;
-    setTimeout(() => {
-      setHistorique((prev) => [
-        { id: Date.now(), nom: nomMedicament, lot: numerolot, result, ts: Date.now() },
-        ...prev.slice(0, 9),
-      ]);
-      if (result.statut === "suspect") {
-        toastError("⚠️ Lot suspect — alerte envoyée !");
-      } else {
-        success(result.statut === "certifie" ? "✅ Certifié MedOS" : "✅ Référencé BDPM France");
-      }
-    }, 0);
-  }
+  useEffect(() => {
+    if (!result) return;
+    if (result === lastHandledResult.current) return;
+    lastHandledResult.current = result;
+    const { nom, lot } = scanContextRef.current;
+    setHistorique((prev) => [
+      { id: Date.now(), nom, lot, result, ts: Date.now() },
+      ...prev.slice(0, 9),
+    ]);
+    if (result.statut === "suspect") {
+      toastError("Lot suspect — alerte envoyée aux autorités");
+    } else {
+      success(result.statut === "certifie" ? "Certifié MedOS" : "Référencé BDPM France");
+    }
+  }, [result, toastError, success]);
 
   const handleQrScan = (text) => {
     setShowCamera(false);
@@ -163,7 +167,6 @@ export default function Tracabilite() {
                   <div key={item.id}
                     onClick={() => { setNumerolot(item.lot || ""); setNomMedicament(item.nom || ""); reset(); }}
                     style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", backgroundColor: "#F8FAFC", borderRadius: 8, marginBottom: 6, border: `1px solid ${s.border}`, cursor: "pointer" }}>
-                    <span>{s.icon}</span>
                     <div style={{ flex: 1, fontSize: 12, fontWeight: 600, color: "#0A1628", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {item.nom || item.lot || "—"}
                     </div>
@@ -200,7 +203,6 @@ export default function Tracabilite() {
               return (
                 <div style={{ animation: "fadeIn 0.25s ease" }}>
                   <div style={{ padding: "14px 16px", backgroundColor: s.bg, borderRadius: 12, border: `1px solid ${s.border}`, marginBottom: 16, textAlign: "center" }}>
-                    <div style={{ fontSize: 22, marginBottom: 4 }}>{s.icon}</div>
                     <div style={{ fontSize: 14, fontWeight: 800, color: s.color }}>{s.label}</div>
                   </div>
                   {Object.entries(result.details).map(([k, v]) => (
