@@ -92,17 +92,20 @@ export function useOrdonnances() {
 }
 
 // ─── commandes ────────────────────────────────────────────────────────────────
-export function useCommandes() {
-  return useQuery(() =>
-    supabase
+// etablissement_id = null → voit tout (distributeur), sinon filtre par établissement
+export function useCommandes(etablissement_id = null) {
+  return useQuery(() => {
+    let q = supabase
       .from("commandes")
       .select(`
         id, reference, statut, date_commande, date_livraison_prevue, montant_total, notes,
         etablissements ( nom, ville ),
         fournisseurs ( nom )
       `)
-      .order("date_commande", { ascending: false })
-  );
+      .order("date_commande", { ascending: false });
+    if (etablissement_id) q = q.eq("etablissement_id", etablissement_id);
+    return q;
+  }, [etablissement_id]);
 }
 
 // ─── livraisons ───────────────────────────────────────────────────────────────
@@ -255,21 +258,24 @@ const COMMANDES_SELECT = `
   fournisseurs ( nom )
 `.trim();
 
-export function useCommandesRealtime() {
+// etablissement_id = null → distributeur (voit tout), sinon filtre par établissement
+export function useCommandesRealtime(etablissement_id = null) {
   const [state, setState] = useState({ data: [], loading: true, error: null });
   const channelRef = useRef(null);
+  const etabRef = useRef(etablissement_id);
+  useEffect(() => { etabRef.current = etablissement_id; }, [etablissement_id]);
 
   useEffect(() => {
     // Chargement initial
-    supabase
+    let q = supabase
       .from("commandes")
       .select(COMMANDES_SELECT)
-      .order("date_commande", { ascending: false })
-      .then(({ data, error }) =>
-        setState({ data: data ?? [], loading: false, error: error ?? null })
-      );
+      .order("date_commande", { ascending: false });
+    if (etablissement_id) q = q.eq("etablissement_id", etablissement_id);
+    q.then(({ data, error }) =>
+      setState({ data: data ?? [], loading: false, error: error ?? null })
+    );
 
-    // Fetch d'une ligne complète (avec jointures) à partir de son id
     async function fetchOne(id) {
       const { data } = await supabase
         .from("commandes")
@@ -279,20 +285,22 @@ export function useCommandesRealtime() {
       return data;
     }
 
+    const channelName = etablissement_id
+      ? `commandes:realtime:${etablissement_id}`
+      : "commandes:realtime:full";
+
     const ch = supabase
-      .channel("commandes:realtime:full")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "commandes" },
+      .channel(channelName)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "commandes" },
         async (p) => {
+          if (etabRef.current && p.new.etablissement_id !== etabRef.current) return;
           const row = await fetchOne(p.new.id);
           if (row) setState((prev) => ({ ...prev, data: [row, ...prev.data] }));
         }
       )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "commandes" },
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "commandes" },
         async (p) => {
+          if (etabRef.current && p.new.etablissement_id !== etabRef.current) return;
           const row = await fetchOne(p.new.id);
           if (row)
             setState((prev) => ({
@@ -307,7 +315,7 @@ export function useCommandesRealtime() {
     return () => {
       if (channelRef.current) supabase.removeChannel(channelRef.current);
     };
-  }, []);
+  }, [etablissement_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return state;
 }

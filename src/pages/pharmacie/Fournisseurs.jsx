@@ -5,6 +5,7 @@ import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useFournisseurs, useCommandesRealtime, useMedicaments } from "../../hooks/useSupabaseData";
 import { insertCommande, insertFournisseur, updateFournisseur } from "../../hooks/useMutations";
+import { useAuth } from "../../context/AuthContext";
 
 // ── Statuts commandes ─────────────────────────────────────────────────────────
 const STATUT_STYLE = {
@@ -17,8 +18,8 @@ const STATUT_STYLE = {
 };
 
 // ── Panneau commandes temps réel ──────────────────────────────────────────────
-function MesCommandesPanel() {
-  const { data: commandes, loading } = useCommandesRealtime();
+function MesCommandesPanel({ etablissement_id }) {
+  const { data: commandes, loading } = useCommandesRealtime(etablissement_id);
   if (loading || commandes.length === 0) return null;
   return (
     <div style={{ backgroundColor: "white", borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 20 }}>
@@ -155,7 +156,7 @@ function FournisseurModal({ initial, onClose, onSaved }) {
 }
 
 // ── Modal Passer commande ─────────────────────────────────────────────────────
-function CommandeModal({ fournisseur, onClose, onSaved }) {
+function CommandeModal({ fournisseur, etablissement_id, onClose, onSaved }) {
   const { data: medicaments, loading: loadingMeds } = useMedicaments();
   const [medicamentId, setMedicamentId]   = useState("");
   const [quantite, setQuantite]           = useState("");
@@ -181,6 +182,7 @@ function CommandeModal({ fournisseur, onClose, onSaved }) {
         date_livraison_prevue: dateLivraison || null,
         montant_total:         montantTotal,
         notes: `${selectedMed.nom} — Qté : ${qty}${notes ? " — " + notes : ""}`,
+        ...(etablissement_id ? { etablissement_id } : {}),
       });
       onSaved();
       onClose();
@@ -288,6 +290,8 @@ function CommandeModal({ fournisseur, onClose, onSaved }) {
 
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function Fournisseurs() {
+  const { auth } = useAuth();
+  const etablissement_id = auth?.etablissement_id ?? null;
   const { data: fournisseurs, loading, error, refetch } = useFournisseurs();
   const { toasts, success, error: toastError } = useToast();
 
@@ -348,13 +352,14 @@ export default function Fournisseurs() {
       {commandModal && (
         <CommandeModal
           fournisseur={commandModal}
+          etablissement_id={etablissement_id}
           onClose={() => setCommandModal(null)}
           onSaved={() => success(`Commande envoyée chez ${commandModal.nom}`)}
         />
       )}
 
       {/* Commandes temps réel */}
-      <MesCommandesPanel />
+      <MesCommandesPanel etablissement_id={etablissement_id} />
 
       {/* Barre d'actions */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
