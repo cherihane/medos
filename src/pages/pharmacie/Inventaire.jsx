@@ -116,7 +116,7 @@ function CommanderModal({ med, fournisseurs, onClose, onSaved }) {
     try {
       await insertCommande({
         fournisseur_id:        form.fournisseur_id,
-        statut:                "en_attente",
+        statut:                "envoyee",
         date_commande:         new Date().toISOString(),
         date_livraison_prevue: form.date_livraison_prevue || null,
         notes:                 `${med.nom} — Qté : ${form.quantite}${form.notes ? " — " + form.notes : ""}`,

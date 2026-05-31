@@ -22,11 +22,13 @@ const NotificationsContext = createContext({
   dismissLast: () => {},
 });
 
+// Valeurs exactes du check constraint SQL :
+// brouillon | envoyee | confirmee | en_transit | livree | annulee
 const STATUT_LABELS = {
-  validee:      "Commande validée par le distributeur",
-  en_livraison: "Commande en cours de livraison",
-  livree:       "Commande livrée",
-  annulee:      "Commande annulée / refusée",
+  confirmee:  "Commande validée par le distributeur",
+  en_transit: "Commande en cours de livraison",
+  livree:     "Commande livrée",
+  annulee:    "Commande annulée / refusée",
 };
 
 export function NotificationsProvider({ children }) {

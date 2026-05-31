@@ -8,12 +8,15 @@ function fmt(iso) {
   return new Date(iso).toLocaleDateString("fr-FR");
 }
 
+// Valeurs exactes du check constraint SQL :
+// brouillon | envoyee | confirmee | en_transit | livree | annulee
 const STATUT_STYLE = {
-  en_attente:   { bg: "#FEF9C3", color: "#A16207",  label: "En attente" },
-  validee:      { bg: "#DBEAFE", color: "#2563EB",  label: "Validée" },
-  en_livraison: { bg: "#E0E7FF", color: "#4F46E5",  label: "En livraison" },
-  livree:       { bg: "#DCFCE7", color: "#16A34A",  label: "Livrée" },
-  annulee:      { bg: "#FEF2F2", color: "#DC2626",  label: "Annulée" },
+  brouillon:  { bg: "#F3F4F6", color: "#6B7280",  label: "Brouillon" },
+  envoyee:    { bg: "#FEF9C3", color: "#A16207",  label: "Envoyée" },
+  confirmee:  { bg: "#DBEAFE", color: "#2563EB",  label: "Confirmée" },
+  en_transit: { bg: "#E0E7FF", color: "#4F46E5",  label: "En transit" },
+  livree:     { bg: "#DCFCE7", color: "#16A34A",  label: "Livrée" },
+  annulee:    { bg: "#FEF2F2", color: "#DC2626",  label: "Annulée" },
 };
 
 function StatutBadge({ statut }) {
@@ -105,10 +108,10 @@ function CommandesPanel() {
                   {(c.montant_total ?? 0).toLocaleString()} FCFA
                 </div>
 
-                {c.statut === "en_attente" && (
+                {(c.statut === "envoyee" || c.statut === "brouillon") && (
                   <div style={{ display: "flex", gap: 6 }}>
                     <button
-                      onClick={() => handleAction(c.id, "validee")}
+                      onClick={() => handleAction(c.id, "confirmee")}
                       disabled={updating === c.id}
                       style={{ padding: "5px 12px", backgroundColor: "#DCFCE7", color: "#16A34A", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: updating === c.id ? "wait" : "pointer" }}
                     >
@@ -123,16 +126,16 @@ function CommandesPanel() {
                     </button>
                   </div>
                 )}
-                {c.statut === "validee" && (
+                {c.statut === "confirmee" && (
                   <button
-                    onClick={() => handleAction(c.id, "en_livraison")}
+                    onClick={() => handleAction(c.id, "en_transit")}
                     disabled={updating === c.id}
                     style={{ padding: "5px 12px", backgroundColor: "#DBEAFE", color: "#2563EB", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: updating === c.id ? "wait" : "pointer" }}
                   >
                     {updating === c.id ? "…" : "Expédier"}
                   </button>
                 )}
-                {c.statut === "en_livraison" && (
+                {c.statut === "en_transit" && (
                   <button
                     onClick={() => handleAction(c.id, "livree")}
                     disabled={updating === c.id}
