@@ -90,3 +90,12 @@ export async function incrementStock(medicamentId, quantite) {
   const newStock = (med.stock_actuel ?? 0) + quantite;
   return run(supabase.from("medicaments").update({ stock_actuel: newStock }).eq("id", medicamentId));
 }
+
+// ─── Fournisseurs ─────────────────────────────────────────────────────────────
+export async function insertFournisseur(fields) {
+  return run(supabase.from("fournisseurs").insert(fields).select().single());
+}
+
+export async function updateFournisseur(id, fields) {
+  return run(supabase.from("fournisseurs").update(fields).eq("id", id).select().single());
+}

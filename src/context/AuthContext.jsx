@@ -31,6 +31,7 @@ export const roleConfig = {
     nav: [
       { path: "/hopital/dashboard", label: "Dashboard", icon: "dashboard" },
       { path: "/hopital/stock", label: "Stock", icon: "inventaire" },
+      { path: "/hopital/fournisseurs", label: "Fournisseurs", icon: "fournisseurs" },
       { path: "/hopital/predictions", label: "Prédictions IA", icon: "predictions" },
       { path: "/hopital/scanner", label: "Scanner", icon: "scanner" },
       { path: "/hopital/assistant", label: "Assistant IA", icon: "assistant" },

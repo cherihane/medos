@@ -19,6 +19,7 @@ import PhScanner from "./pages/pharmacie/Scanner";
 // Hôpital
 import HoDashboard from "./pages/hopital/Dashboard";
 import HoStock from "./pages/hopital/Stock";
+import HoFournisseurs from "./pages/hopital/Fournisseurs";
 import HoPredictions from "./pages/hopital/Predictions";
 import HoScanner from "./pages/pharmacie/Scanner";
 import HoAssistant from "./pages/hopital/AssistantIA";
@@ -73,6 +74,7 @@ function AppRoutes() {
       {/* Hôpital */}
       <Route path="/hopital/dashboard" element={<ProtectedRoute requiredRole="hopital"><HoDashboard /></ProtectedRoute>} />
       <Route path="/hopital/stock" element={<ProtectedRoute requiredRole="hopital"><HoStock /></ProtectedRoute>} />
+      <Route path="/hopital/fournisseurs" element={<ProtectedRoute requiredRole="hopital"><HoFournisseurs /></ProtectedRoute>} />
       <Route path="/hopital/predictions" element={<ProtectedRoute requiredRole="hopital"><HoPredictions /></ProtectedRoute>} />
       <Route path="/hopital/scanner" element={<ProtectedRoute requiredRole="hopital"><HoScanner /></ProtectedRoute>} />
       <Route path="/hopital/assistant" element={<ProtectedRoute requiredRole="hopital"><HoAssistant /></ProtectedRoute>} />
