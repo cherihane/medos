@@ -316,6 +316,9 @@ export function useCommandesRealtime() {
 export function useAlertesRealtime(limit = 20) {
   const [state, setState] = useState({ data: [], loading: true, error: null });
   const channelRef = useRef(null);
+  // Capture limit dans un ref pour que le callback Realtime ne stale pas
+  const limitRef = useRef(limit);
+  useEffect(() => { limitRef.current = limit; }, [limit]);
 
   useEffect(() => {
     supabase
@@ -336,7 +339,7 @@ export function useAlertesRealtime(limit = 20) {
         (p) => {
           setState((prev) => ({
             ...prev,
-            data: [p.new, ...prev.data].slice(0, limit),
+            data: [p.new, ...prev.data].slice(0, limitRef.current),
           }));
         }
       )

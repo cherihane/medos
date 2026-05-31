@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import Layout from "../../components/Layout";
 import { useKpiDistributeur, useEtablissements, useCommandesRealtime } from "../../hooks/useSupabaseData";
 import { updateCommande } from "../../hooks/useMutations";
@@ -34,13 +34,34 @@ function CommandesPanel() {
   const [updating, setUpdating] = useState(null);
   const [newIds, setNewIds] = useState(new Set());
 
-  // Marque les IDs nouvellement arrivés pour l'animation
-  const prevLen = useState(commandes.length)[0];
-  if (commandes.length > prevLen && !loading) {
-    const added = commandes.slice(0, commandes.length - prevLen).map((c) => c.id);
-    setNewIds((prev) => new Set([...prev, ...added]));
-    setTimeout(() => setNewIds(new Set()), 3000);
-  }
+  // Détecte les nouvelles lignes arrivées via Realtime (hors chargement initial).
+  // On utilise un ref pour mémoriser les IDs déjà vus sans provoquer de re-render.
+  // null = chargement initial pas encore terminé.
+  const seenIdsRef = useRef(null);
+
+  useEffect(() => {
+    if (loading) return;
+
+    if (seenIdsRef.current === null) {
+      // Premier chargement : marquer tous les IDs comme vus sans animation
+      seenIdsRef.current = new Set(commandes.map((c) => c.id));
+      return;
+    }
+
+    // Nouvelles lignes = IDs pas encore dans seenIds
+    const freshIds = commandes
+      .filter((c) => !seenIdsRef.current.has(c.id))
+      .map((c) => c.id);
+
+    // Mettre à jour le registre
+    commandes.forEach((c) => seenIdsRef.current.add(c.id));
+
+    if (freshIds.length === 0) return;
+
+    setNewIds(new Set(freshIds));
+    const timer = setTimeout(() => setNewIds(new Set()), 3000);
+    return () => clearTimeout(timer);
+  }, [commandes, loading]);
 
   const handleAction = async (id, statut) => {
     setUpdating(id);
