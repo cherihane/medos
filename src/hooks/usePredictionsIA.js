@@ -1,13 +1,13 @@
 /**
- * usePredictionsIA — Analyse les données Supabase et appelle Claude API
+ * usePredictionsIA — Analyse les données Supabase et appelle Groq API
  * pour générer des prédictions intelligentes de rupture, saisonnières
  * et des suggestions de commande automatique.
  */
 import { useState, useCallback } from "react";
 import { supabase } from "../supabaseClient";
 
-const CLAUDE_MODEL = "claude-opus-4-7";
-const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
+const GROQ_MODEL = "llama-3.3-70b-versatile";
+const GROQ_API = "https://api.groq.com/openai/v1/chat/completions";
 
 async function fetchStockData() {
   const { data, error } = await supabase
@@ -28,45 +28,48 @@ async function fetchAlertesData() {
   return data || [];
 }
 
-async function callClaude(prompt) {
-  const apiKey = process.env.REACT_APP_ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("Clé API Anthropic manquante (REACT_APP_ANTHROPIC_API_KEY)");
+async function callGroq(prompt) {
+  const apiKey = process.env.REACT_APP_GROQ_API_KEY;
+  if (!apiKey) throw new Error("Clé API Groq manquante (REACT_APP_GROQ_API_KEY)");
 
-  const response = await fetch(ANTHROPIC_API, {
+  const response = await fetch(GROQ_API, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
+      "authorization": `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: CLAUDE_MODEL,
+      model: GROQ_MODEL,
       max_tokens: 2048,
-      thinking: { type: "adaptive" },
-      system: `Tu es un expert en gestion de stocks pharmaceutiques pour l'Afrique centrale (Cameroun).
+      temperature: 0.2,
+      messages: [
+        {
+          role: "system",
+          content: `Tu es un expert en gestion de stocks pharmaceutiques pour l'Afrique centrale (Cameroun).
 Tu analyses les données de stock réelles et génères des prédictions précises.
 Réponds UNIQUEMENT en JSON valide, sans texte avant ni après, sans balises markdown.
 La date actuelle est ${new Date().toLocaleDateString("fr-FR")}.`,
-      messages: [{ role: "user", content: prompt }],
+        },
+        { role: "user", content: prompt },
+      ],
     }),
   });
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error(err?.error?.message || `Erreur API ${response.status}`);
+    throw new Error(err?.error?.message || `Erreur API Groq ${response.status}`);
   }
 
   const body = await response.json();
-  // Extract text content (skip thinking blocks)
-  const textBlock = body.content?.find((b) => b.type === "text");
-  if (!textBlock) throw new Error("Réponse Claude vide");
+  const text = body.choices?.[0]?.message?.content;
+  if (!text) throw new Error("Réponse Groq vide");
 
   try {
     // Strip possible markdown code fences
-    const clean = textBlock.text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
+    const clean = text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
     return JSON.parse(clean);
   } catch {
-    throw new Error("Réponse Claude non-JSON : " + textBlock.text.slice(0, 200));
+    throw new Error("Réponse Groq non-JSON : " + text.slice(0, 200));
   }
 }
 
@@ -169,7 +172,7 @@ export function usePredictionsIA() {
       }
 
       const prompt = buildPrompt(medicaments, alertes);
-      const result = await callClaude(prompt);
+      const result = await callGroq(prompt);
       setPredictions(result);
     } catch (err) {
       setError(err.message);
