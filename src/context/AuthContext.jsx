@@ -79,30 +79,52 @@ export function AuthProvider({ children }) {
   const [auth, setAuth] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Reconstruct auth state from a Supabase user object
-  const buildAuth = (user) => {
+  // Reconstruct auth state from a Supabase user object (async — fetches etablissement_id)
+  const buildAuth = async (user) => {
     const role = user?.user_metadata?.role;
-    if (role && roleConfig[role]) {
-      return { role, ...roleConfig[role], user };
-    }
-    return null;
+    if (!role || !roleConfig[role]) return null;
+    let etablissement_id = null;
+    try {
+      const { data } = await supabase
+        .from("etablissements")
+        .select("id")
+        .eq("email", user.email)
+        .maybeSingle();
+      etablissement_id = data?.id ?? null;
+    } catch { /* network error — proceed without etablissement_id */ }
+    return { role, ...roleConfig[role], user, etablissement_id };
   };
 
   useEffect(() => {
-    // Restore session on mount
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) setAuth(buildAuth(session.user));
-      setLoading(false);
+    let mounted = true;
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!mounted) return;
+      try {
+        if (session?.user) setAuth(await buildAuth(session.user));
+      } catch (e) {
+        console.error("buildAuth error:", e);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }).catch((e) => {
+      console.error("getSession error:", e);
+      if (mounted) setLoading(false);
     });
 
     // React to auth state changes (token refresh, sign-out, etc.)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setAuth(session?.user ? buildAuth(session.user) : null);
+      async (_event, session) => {
+        if (!mounted) return;
+        try {
+          setAuth(session?.user ? await buildAuth(session.user) : null);
+        } catch (e) {
+          console.error("buildAuth (onAuthStateChange) error:", e);
+          setAuth(null);
+        }
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => { mounted = false; subscription.unsubscribe(); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
@@ -146,7 +168,7 @@ export function AuthProvider({ children }) {
     }
 
     const user = data?.user ?? data?.session?.user;
-    setAuth({ role, ...roleConfig[role], user });
+    setAuth(await buildAuth(user));
     return data;
   };
 

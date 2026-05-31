@@ -33,6 +33,38 @@ export async function insertVentes(rows) {
   return run(supabase.from("ventes").insert(rows).select());
 }
 
+// ─── Journal de caisse ────────────────────────────────────────────────────────
+// Colonnes : id, etablissement_id, caissier_id, caissier_email,
+//            montant_total, montant_recu, monnaie_rendue,
+//            mode_paiement, nb_articles, detail (jsonb), created_at
+export async function insertJournalCaisse(entry) {
+  const payload = Object.fromEntries(
+    Object.entries(entry).filter(([, v]) => v !== undefined && v !== null)
+  );
+  const { data, error } = await supabase
+    .from("journal_caisse")
+    .insert(payload)
+    .select()
+    .single();
+  if (error) throw new Error(`journal_caisse: ${error.message}`);
+  return data;
+}
+
+export async function fetchJournalJour(etablissement_id, dateISO) {
+  const debut = `${dateISO}T00:00:00+00:00`;
+  const fin   = `${dateISO}T23:59:59+00:00`;
+  let q = supabase
+    .from("journal_caisse")
+    .select("id, etablissement_id, caissier_email, montant_total, montant_recu, monnaie_rendue, mode_paiement, nb_articles, detail, created_at")
+    .gte("created_at", debut)
+    .lte("created_at", fin)
+    .order("created_at", { ascending: false });
+  if (etablissement_id) q = q.eq("etablissement_id", etablissement_id);
+  const { data, error } = await q;
+  if (error) throw new Error(`journal_caisse select: ${error.message}`);
+  return data ?? [];
+}
+
 // ─── Commandes ────────────────────────────────────────────────────────────────
 export async function insertCommande(fields) {
   return run(supabase.from("commandes").insert(fields).select().single());
