@@ -66,14 +66,6 @@ function RiskBar({ pct }) {
 function Placeholder({ onAnalyser, loading }) {
   return (
     <div style={{ textAlign: "center", padding: "32px 24px" }}>
-      <div style={{ fontSize: 40, marginBottom: 12 }}>🤖</div>
-      <div style={{ fontSize: 14, fontWeight: 600, color: "#0A1628", marginBottom: 6 }}>
-        Prédictions IA non calculées
-      </div>
-      <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 20 }}>
-        Analysez vos stocks avec Claude pour obtenir des prédictions de rupture,<br />
-        des alertes saisonnières et des suggestions de commande.
-      </div>
       <button
         onClick={onAnalyser}
         disabled={loading}
@@ -214,7 +206,6 @@ export default function PredictionsIA() {
           <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>
             Prédictions IA
           </h3>
-          <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>Powered by Groq · llama-3.3-70b-versatile</div>
         </div>
         {predictions && (
           <button
