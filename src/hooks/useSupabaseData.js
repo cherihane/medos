@@ -2,7 +2,7 @@
  * Hooks Supabase pour MedOS — données temps réel
  * Chaque hook retourne { data, loading, error }
  */
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "../supabaseClient";
 
 // ─── utilitaire générique ────────────────────────────────────────────────────
@@ -246,4 +246,107 @@ export function useContrefacons() {
       .eq("type", "contrefacon")
       .order("created_at", { ascending: false })
   );
+}
+
+// ─── commandes en temps réel (INSERT + UPDATE) ────────────────────────────────
+const COMMANDES_SELECT = `
+  id, reference, statut, date_commande, date_livraison_prevue, montant_total, notes,
+  etablissements ( nom, ville ),
+  fournisseurs ( nom )
+`.trim();
+
+export function useCommandesRealtime() {
+  const [state, setState] = useState({ data: [], loading: true, error: null });
+  const channelRef = useRef(null);
+
+  useEffect(() => {
+    // Chargement initial
+    supabase
+      .from("commandes")
+      .select(COMMANDES_SELECT)
+      .order("date_commande", { ascending: false })
+      .then(({ data, error }) =>
+        setState({ data: data ?? [], loading: false, error: error ?? null })
+      );
+
+    // Fetch d'une ligne complète (avec jointures) à partir de son id
+    async function fetchOne(id) {
+      const { data } = await supabase
+        .from("commandes")
+        .select(COMMANDES_SELECT)
+        .eq("id", id)
+        .single();
+      return data;
+    }
+
+    const ch = supabase
+      .channel("commandes:realtime:full")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "commandes" },
+        async (p) => {
+          const row = await fetchOne(p.new.id);
+          if (row) setState((prev) => ({ ...prev, data: [row, ...prev.data] }));
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "commandes" },
+        async (p) => {
+          const row = await fetchOne(p.new.id);
+          if (row)
+            setState((prev) => ({
+              ...prev,
+              data: prev.data.map((c) => (c.id === row.id ? row : c)),
+            }));
+        }
+      )
+      .subscribe();
+
+    channelRef.current = ch;
+    return () => {
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
+    };
+  }, []);
+
+  return state;
+}
+
+// ─── alertes en temps réel (INSERT) ──────────────────────────────────────────
+export function useAlertesRealtime(limit = 20) {
+  const [state, setState] = useState({ data: [], loading: true, error: null });
+  const channelRef = useRef(null);
+
+  useEffect(() => {
+    supabase
+      .from("alertes")
+      .select("id, type, severite, titre, message, lu, resolu, created_at, medicament_id")
+      .eq("resolu", false)
+      .order("created_at", { ascending: false })
+      .limit(limit)
+      .then(({ data, error }) =>
+        setState({ data: data ?? [], loading: false, error: error ?? null })
+      );
+
+    const ch = supabase
+      .channel("alertes:realtime:full")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "alertes" },
+        (p) => {
+          setState((prev) => ({
+            ...prev,
+            data: [p.new, ...prev.data].slice(0, limit),
+          }));
+        }
+      )
+      .subscribe();
+
+    channelRef.current = ch;
+    return () => {
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
+    };
+  }, [limit]);
+
+  return state;
 }
