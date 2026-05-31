@@ -1,4 +1,5 @@
 import Layout from "../../components/Layout";
+import PredictionsIA from "../../components/PredictionsIA";
 import { useMedicamentsCritiques, useKpiPharmacie } from "../../hooks/useSupabaseData";
 
 // ── Badge de sévérité ────────────────────────────────────────────────────────
@@ -170,9 +171,12 @@ export default function DashboardPharmacie() {
         <StockCritiquePanel />
       </div>
 
-      <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginTop: 20 }}>
-        <h3 style={{ margin: "0 0 8px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Tendance ordonnances</h3>
-        <p style={{ margin: 0, fontSize: 13, color: "#9CA3AF" }}>L'historique des ordonnances apparaîtra ici au fil des dispensations enregistrées.</p>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginTop: 20 }}>
+        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <h3 style={{ margin: "0 0 8px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Tendance ordonnances</h3>
+          <p style={{ margin: 0, fontSize: 13, color: "#9CA3AF" }}>L'historique des ordonnances apparaîtra ici au fil des dispensations enregistrées.</p>
+        </div>
+        <PredictionsIA />
       </div>
     </Layout>
   );

@@ -1,5 +1,6 @@
 import Layout from "../../components/Layout";
 import KpiCard from "../../components/KpiCard";
+import PredictionsIA from "../../components/PredictionsIA";
 import { useAlertes, useKpiHopital, usePatients } from "../../hooks/useSupabaseData";
 
 const OCCUPATION = [
@@ -210,9 +211,12 @@ export default function DashboardHopital() {
         <PatientsPanel />
       </div>
 
-      <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginTop: 20 }}>
-        <h3 style={{ margin: "0 0 8px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Dispensation médicaments</h3>
-        <p style={{ margin: 0, fontSize: 13, color: "#9CA3AF" }}>Données de dispensation disponibles après enregistrement des ventes en caisse.</p>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginTop: 20 }}>
+        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <h3 style={{ margin: "0 0 8px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Dispensation médicaments</h3>
+          <p style={{ margin: 0, fontSize: 13, color: "#9CA3AF" }}>Données de dispensation disponibles après enregistrement des ventes en caisse.</p>
+        </div>
+        <PredictionsIA />
       </div>
     </Layout>
   );
