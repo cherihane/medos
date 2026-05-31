@@ -77,3 +77,16 @@ export async function insertLivraison(fields) {
 export async function updateLivraison(id, fields) {
   return run(supabase.from("livraisons").update(fields).eq("id", id).select().single());
 }
+
+// ─── Lots (entrepôt distributeur) ─────────────────────────────────────────────
+export async function insertLot(fields) {
+  return run(supabase.from("lots").insert(fields).select().single());
+}
+
+export async function incrementStock(medicamentId, quantite) {
+  const { data: med, error } = await supabase
+    .from("medicaments").select("stock_actuel").eq("id", medicamentId).single();
+  if (error) throw new Error(error.message);
+  const newStock = (med.stock_actuel ?? 0) + quantite;
+  return run(supabase.from("medicaments").update({ stock_actuel: newStock }).eq("id", medicamentId));
+}

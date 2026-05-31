@@ -51,6 +51,7 @@ export const roleConfig = {
       { path: "/distributeur/previsions", label: "Prévisions", icon: "previsions" },
       { path: "/distributeur/livraisons", label: "Livraisons", icon: "livraisons" },
       { path: "/distributeur/tracabilite", label: "Traçabilité", icon: "scanner" },
+      { path: "/distributeur/entrepot", label: "Entrepôt", icon: "entrepot" },
       { path: "/distributeur/clients", label: "Clients", icon: "patients" },
       { path: "/distributeur/alertes", label: "Alertes", icon: "alertes" },
     ],
