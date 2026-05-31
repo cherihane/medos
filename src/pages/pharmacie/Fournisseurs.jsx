@@ -7,12 +7,15 @@ import { useFournisseurs, useCommandesRealtime } from "../../hooks/useSupabaseDa
 import { insertCommande } from "../../hooks/useMutations";
 
 // ── Statuts commandes ─────────────────────────────────────────────────────────
+// Valeurs exactes du check constraint SQL :
+// brouillon | envoyee | confirmee | en_transit | livree | annulee
 const STATUT_STYLE = {
-  en_attente:   { bg: "#FEF9C3", color: "#A16207",  label: "En attente",        icon: "⏳" },
-  validee:      { bg: "#DBEAFE", color: "#2563EB",  label: "Validée",            icon: "✓" },
-  en_livraison: { bg: "#E0E7FF", color: "#4F46E5",  label: "En livraison",       icon: "🚚" },
-  livree:       { bg: "#DCFCE7", color: "#16A34A",  label: "Livrée",             icon: "✓✓" },
-  annulee:      { bg: "#FEF2F2", color: "#DC2626",  label: "Annulée / refusée",  icon: "✕" },
+  brouillon:  { bg: "#F3F4F6", color: "#6B7280",  label: "Brouillon" },
+  envoyee:    { bg: "#FEF9C3", color: "#A16207",  label: "Envoyée" },
+  confirmee:  { bg: "#DBEAFE", color: "#2563EB",  label: "Confirmée" },
+  en_transit: { bg: "#E0E7FF", color: "#4F46E5",  label: "En transit" },
+  livree:     { bg: "#DCFCE7", color: "#16A34A",  label: "Livrée" },
+  annulee:    { bg: "#FEF2F2", color: "#DC2626",  label: "Annulée / refusée" },
 };
 
 function MesCommandesPanel() {
@@ -107,7 +110,7 @@ function CommandeModal({ fournisseur, onClose, onSaved }) {
     try {
       await insertCommande({
         fournisseur_id: fournisseur.id,
-        statut: "en_attente",
+        statut: "envoyee",
         date_commande: new Date().toISOString(),
         date_livraison_prevue: form.date_livraison_prevue || null,
         montant_total: Number(form.montant_total) || 0,

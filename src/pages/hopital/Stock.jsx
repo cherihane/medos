@@ -59,7 +59,7 @@ function CommanderModal({ med, fournisseurs, onClose, onSaved }) {
     if (!form.fournisseur_id) return alert("Sélectionnez un fournisseur.");
     setSaving(true);
     try {
-      await insertCommande({ fournisseur_id: form.fournisseur_id, statut: "en_attente", date_commande: new Date().toISOString(), date_livraison_prevue: form.date_livraison_prevue || null, montant_total: 0, notes: `${med.nom} — Qté : ${form.quantite}` });
+      await insertCommande({ fournisseur_id: form.fournisseur_id, statut: "envoyee", date_commande: new Date().toISOString(), date_livraison_prevue: form.date_livraison_prevue || null, montant_total: 0, notes: `${med.nom} — Qté : ${form.quantite}` });
       onSaved(); onClose();
     } catch (e) { alert("Erreur : " + e.message); } finally { setSaving(false); }
   };

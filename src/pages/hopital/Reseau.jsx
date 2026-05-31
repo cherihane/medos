@@ -44,7 +44,7 @@ function RedistribModal({ etab, medicaments, onClose, onSaved }) {
     setSaving(true);
     try {
       await insertCommande({
-        statut: "en_attente",
+        statut: "envoyee",
         date_commande: new Date().toISOString(),
         montant_total: 0,
         notes: `Redistribution → ${etab.nom} : ${selectedMed?.nom} — Qté: ${form.quantite}${form.notes ? " — " + form.notes : ""}`,
