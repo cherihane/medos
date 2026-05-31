@@ -1,6 +1,8 @@
 import { NavLink } from "react-router-dom";
+import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNotifications } from "../context/NotificationsContext";
+import { supabase } from "../supabaseClient";
 import NavIcon from "./NavIcon";
 
 const roleColors = {
@@ -61,9 +63,36 @@ function NotifToast({ notif, onDismiss, accentColor }) {
   );
 }
 
+// Hook : cherche l'établissement dont l'email correspond à l'utilisateur connecté
+function useEtablissementInfo(auth) {
+  const [info, setInfo] = useState(null);
+
+  useEffect(() => {
+    if (!auth?.user?.email) return;
+
+    supabase
+      .from("etablissements")
+      .select("nom, ville, email")
+      .eq("email", auth.user.email)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setInfo({ nom: data.nom, sub: data.ville || "" });
+        } else {
+          // Aucun établissement trouvé → afficher l'email
+          setInfo({ nom: auth.user.email, sub: auth.label || "" });
+        }
+      });
+  }, [auth?.user?.email, auth?.label]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Valeur par défaut pendant le chargement : données statiques du roleConfig
+  return info || { nom: auth?.structure || "", sub: auth?.location || "" };
+}
+
 export default function Sidebar() {
   const { auth, logout } = useAuth();
   const { unreadCount, unreadByType, lastNotif, markAllRead, dismissLast } = useNotifications();
+  const etablissement = useEtablissementInfo(auth);
   if (!auth) return null;
 
   const accentColor = roleColors[auth.role] || "#3B82F6";
@@ -212,9 +241,11 @@ export default function Sidebar() {
           </div>
           <div style={{ minWidth: 0 }}>
             <div style={{ color: "white", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {auth.structure}
+              {etablissement.nom}
             </div>
-            <div style={{ color: "rgba(255,255,255,0.35)", fontSize: 10 }}>{auth.location}</div>
+            <div style={{ color: "rgba(255,255,255,0.35)", fontSize: 10, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {etablissement.sub}
+            </div>
           </div>
         </div>
         <button
