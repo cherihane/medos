@@ -1,5 +1,6 @@
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
 import Layout from "../../components/Layout";
+import PredictionsIA from "../../components/PredictionsIA";
 
 const forecastData = [
   { mois: "Jan", reel: 22400000, prevision: 23000000 },
@@ -48,6 +49,10 @@ export default function Previsions() {
             </LineChart>
           </ResponsiveContainer>
         </div>
+      </div>
+
+      <div style={{ marginBottom: 20 }}>
+        <PredictionsIA />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
