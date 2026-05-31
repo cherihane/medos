@@ -3,7 +3,7 @@ import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle } from "../../components/Modal";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
-import { useFournisseurs, useCommandesRealtime } from "../../hooks/useSupabaseData";
+import { useFournisseurs, useCommandesRealtime, useMedicaments } from "../../hooks/useSupabaseData";
 import { insertCommande, insertFournisseur, updateFournisseur } from "../../hooks/useMutations";
 
 // ── Statuts commandes ─────────────────────────────────────────────────────────
@@ -156,21 +156,31 @@ function FournisseurModal({ initial, onClose, onSaved }) {
 
 // ── Modal Passer commande ─────────────────────────────────────────────────────
 function CommandeModal({ fournisseur, onClose, onSaved }) {
-  const [form, setForm] = useState({ produit: "", quantite: "", date_livraison_prevue: "", montant_total: 0, notes: "" });
-  const [saving, setSaving] = useState(false);
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const { data: medicaments, loading: loadingMeds } = useMedicaments();
+  const [medicamentId, setMedicamentId]   = useState("");
+  const [quantite, setQuantite]           = useState("");
+  const [dateLivraison, setDateLivraison] = useState("");
+  const [notes, setNotes]                 = useState("");
+  const [saving, setSaving]               = useState(false);
+
+  // Médicament sélectionné et calcul automatique du montant
+  const selectedMed  = medicaments.find((m) => m.id === medicamentId) || null;
+  const prixUnitaire = selectedMed?.prix_unitaire ?? 0;
+  const qty          = parseInt(quantite, 10) || 0;
+  const montantTotal = qty * prixUnitaire;
 
   const handleSave = async () => {
-    if (!form.produit.trim()) return alert("Veuillez indiquer le produit à commander.");
+    if (!medicamentId) return alert("Veuillez sélectionner un médicament.");
+    if (qty <= 0)      return alert("Veuillez saisir une quantité valide.");
     setSaving(true);
     try {
       await insertCommande({
-        fournisseur_id: fournisseur.id,
-        statut: "envoyee",
-        date_commande: new Date().toISOString(),
-        date_livraison_prevue: form.date_livraison_prevue || null,
-        montant_total: Number(form.montant_total) || 0,
-        notes: `${form.produit}${form.quantite ? " — Qté: " + form.quantite : ""}${form.notes ? " — " + form.notes : ""}`,
+        fournisseur_id:        fournisseur.id,
+        statut:                "envoyee",
+        date_commande:         new Date().toISOString(),
+        date_livraison_prevue: dateLivraison || null,
+        montant_total:         montantTotal,
+        notes: `${selectedMed.nom} — Qté : ${qty}${notes ? " — " + notes : ""}`,
       });
       onSaved();
       onClose();
@@ -181,25 +191,96 @@ function CommandeModal({ fournisseur, onClose, onSaved }) {
     }
   };
 
+  const selectStyle = {
+    ...inputStyle,
+    backgroundColor: "white",
+    cursor: loadingMeds ? "wait" : "pointer",
+  };
+
+  const readonlyStyle = {
+    ...inputStyle,
+    backgroundColor: "#F8FAFC",
+    color: montantTotal > 0 ? "#0A1628" : "#9CA3AF",
+    fontWeight: montantTotal > 0 ? 700 : 400,
+    cursor: "default",
+  };
+
   return (
     <Modal title={`Commander chez ${fournisseur.nom}`} onClose={onClose}>
-      <Field label="Produit / médicament *">
-        <input style={inputStyle} value={form.produit} onChange={set("produit")} placeholder="Ex: Amoxicilline 500mg" autoFocus />
+      {/* Sélection médicament */}
+      <Field label="Médicament *">
+        <select
+          style={selectStyle}
+          value={medicamentId}
+          onChange={(e) => setMedicamentId(e.target.value)}
+          autoFocus
+        >
+          <option value="">{loadingMeds ? "Chargement…" : "— Sélectionner un médicament —"}</option>
+          {medicaments.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.nom}{m.dosage ? ` ${m.dosage}` : ""}{m.forme ? ` (${m.forme})` : ""}
+            </option>
+          ))}
+        </select>
       </Field>
+
+      {/* Prix unitaire affiché si médicament sélectionné */}
+      {selectedMed && (
+        <div style={{ fontSize: 12, color: "#6B7280", marginTop: -8, marginBottom: 12, paddingLeft: 2 }}>
+          Prix unitaire : <strong style={{ color: "#0A1628" }}>
+            {prixUnitaire > 0 ? `${prixUnitaire.toLocaleString("fr-FR")} FCFA / ${selectedMed.unite || "unité"}` : "non renseigné"}
+          </strong>
+        </div>
+      )}
+
       <Row>
-        <Field label="Quantité">
-          <input style={inputStyle} type="number" min="1" value={form.quantite} onChange={set("quantite")} placeholder="Ex: 500" />
+        {/* Quantité */}
+        <Field label="Quantité *">
+          <input
+            style={inputStyle}
+            type="number"
+            min="1"
+            value={quantite}
+            onChange={(e) => setQuantite(e.target.value)}
+            placeholder="Ex : 500"
+          />
         </Field>
-        <Field label="Montant estimé (FCFA)">
-          <input style={inputStyle} type="number" min="0" value={form.montant_total} onChange={set("montant_total")} />
+
+        {/* Montant calculé automatiquement — lecture seule */}
+        <Field label="Montant total (FCFA)">
+          <input
+            style={readonlyStyle}
+            readOnly
+            tabIndex={-1}
+            value={
+              montantTotal > 0
+                ? montantTotal.toLocaleString("fr-FR")
+                : qty > 0 && prixUnitaire === 0
+                  ? "Prix non renseigné"
+                  : "—"
+            }
+          />
         </Field>
       </Row>
+
       <Field label="Date de livraison souhaitée">
-        <input style={inputStyle} type="date" value={form.date_livraison_prevue} onChange={set("date_livraison_prevue")} />
+        <input
+          style={inputStyle}
+          type="date"
+          value={dateLivraison}
+          onChange={(e) => setDateLivraison(e.target.value)}
+        />
       </Field>
+
       <Field label="Notes complémentaires">
-        <input style={inputStyle} value={form.notes} onChange={set("notes")} placeholder="Instructions particulières…" />
+        <input
+          style={inputStyle}
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Instructions particulières…"
+        />
       </Field>
+
       <ModalFooter onCancel={onClose} onSubmit={handleSave} submitLabel="Passer la commande" saving={saving} />
     </Modal>
   );
