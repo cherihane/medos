@@ -31,6 +31,7 @@ import DiReseauClients from "./pages/distributeur/ReseauClients";
 import DiPrevisions from "./pages/distributeur/Previsions";
 import DiLivraisons from "./pages/distributeur/Livraisons";
 import DiTracabilite from "./pages/distributeur/Tracabilite";
+import DiEntrepot from "./pages/distributeur/Entrepot";
 import DiClients from "./pages/distributeur/Clients";
 import DiAlertes from "./pages/distributeur/Alertes";
 
@@ -84,6 +85,7 @@ function AppRoutes() {
       <Route path="/distributeur/previsions" element={<ProtectedRoute requiredRole="distributeur"><DiPrevisions /></ProtectedRoute>} />
       <Route path="/distributeur/livraisons" element={<ProtectedRoute requiredRole="distributeur"><DiLivraisons /></ProtectedRoute>} />
       <Route path="/distributeur/tracabilite" element={<ProtectedRoute requiredRole="distributeur"><DiTracabilite /></ProtectedRoute>} />
+      <Route path="/distributeur/entrepot" element={<ProtectedRoute requiredRole="distributeur"><DiEntrepot /></ProtectedRoute>} />
       <Route path="/distributeur/clients" element={<ProtectedRoute requiredRole="distributeur"><DiClients /></ProtectedRoute>} />
       <Route path="/distributeur/alertes" element={<ProtectedRoute requiredRole="distributeur"><DiAlertes /></ProtectedRoute>} />
 
