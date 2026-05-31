@@ -49,7 +49,7 @@ function LivraisonModal({ client, onClose, onSaved }) {
     try {
       await insertLivraison({
         etablissement_id: client.id,
-        statut: "preparation",
+        statut: "planifiee",
         transporteur: form.transporteur || null,
         numero_suivi: form.numero_suivi || "LIV-" + Date.now().toString().slice(-8),
         date_depart: form.date_depart || null,

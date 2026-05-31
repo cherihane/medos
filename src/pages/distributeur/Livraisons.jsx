@@ -7,10 +7,10 @@ import { useLivraisons, useEtablissements } from "../../hooks/useSupabaseData";
 import { insertLivraison, updateLivraison } from "../../hooks/useMutations";
 
 const statusStyle = {
-  preparation: { bg: "#F3F4F6",  color: "#6B7280",  label: "Préparation" },
+  planifiee:   { bg: "#F3F4F6",  color: "#6B7280",  label: "Planifiée" },
   en_transit:  { bg: "#DBEAFE",  color: "#2563EB",  label: "En transit" },
   livree:      { bg: "#DCFCE7",  color: "#16A34A",  label: "Livrée" },
-  annulee:     { bg: "#FEF2F2",  color: "#EF4444",  label: "Annulée" },
+  incident:    { bg: "#FEF2F2",  color: "#EF4444",  label: "Incident" },
 };
 
 function fmt(iso) {
@@ -33,7 +33,7 @@ function NouvelleModal({ etablissements, onClose, onSaved }) {
     try {
       await insertLivraison({
         etablissement_id: form.etablissement_id,
-        statut: "preparation",
+        statut: "planifiee",
         transporteur: form.transporteur || null,
         numero_suivi: "LIV-" + Date.now().toString().slice(-8),
         date_depart: form.date_depart || null,
@@ -144,8 +144,8 @@ export default function Livraisons() {
           {[
             { label: "En transit",  value: loading ? "…" : livraisons.filter(l => l.statut === "en_transit").length,  color: "#3B82F6" },
             { label: "Livrées",     value: loading ? "…" : livraisons.filter(l => l.statut === "livree").length,       color: "#10B981" },
-            { label: "Préparation", value: loading ? "…" : livraisons.filter(l => l.statut === "preparation").length,  color: "#F59E0B" },
-            { label: "Annulées",    value: loading ? "…" : livraisons.filter(l => l.statut === "annulee").length,      color: "#EF4444" },
+            { label: "Planifiées",  value: loading ? "…" : livraisons.filter(l => l.statut === "planifiee").length,    color: "#F59E0B" },
+            { label: "Incidents",   value: loading ? "…" : livraisons.filter(l => l.statut === "incident").length,     color: "#EF4444" },
           ].map((k) => (
             <div key={k.label} style={{ backgroundColor: "white", padding: "14px 18px", borderRadius: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", borderLeft: `4px solid ${k.color}` }}>
               <div style={{ fontSize: 20, fontWeight: 800, color: k.color }}>{k.value}</div>
@@ -216,7 +216,7 @@ export default function Livraisons() {
                     <span style={{ padding: "3px 10px", backgroundColor: s.bg, color: s.color, borderRadius: 10, fontSize: 11, fontWeight: 700 }}>{s.label}</span>
                   </td>
                   <td style={{ padding: "14px 16px" }}>
-                    {l.statut !== "livree" && l.statut !== "annulee" && (
+                    {l.statut !== "livree" && l.statut !== "incident" && (
                       <button
                         onClick={() => setStatutModal(l)}
                         style={{ padding: "4px 12px", backgroundColor: "#EFF6FF", color: "#2563EB", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>
