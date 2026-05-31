@@ -3,8 +3,71 @@ import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
-import { useFournisseurs } from "../../hooks/useSupabaseData";
+import { useFournisseurs, useCommandesRealtime } from "../../hooks/useSupabaseData";
 import { insertCommande } from "../../hooks/useMutations";
+
+// ── Statuts commandes ─────────────────────────────────────────────────────────
+const STATUT_STYLE = {
+  en_attente:   { bg: "#FEF9C3", color: "#A16207",  label: "En attente",        icon: "⏳" },
+  validee:      { bg: "#DBEAFE", color: "#2563EB",  label: "Validée",            icon: "✓" },
+  en_livraison: { bg: "#E0E7FF", color: "#4F46E5",  label: "En livraison",       icon: "🚚" },
+  livree:       { bg: "#DCFCE7", color: "#16A34A",  label: "Livrée",             icon: "✓✓" },
+  annulee:      { bg: "#FEF2F2", color: "#DC2626",  label: "Annulée / refusée",  icon: "✕" },
+};
+
+function MesCommandesPanel() {
+  const { data: commandes, loading } = useCommandesRealtime();
+
+  if (loading) return null;
+  if (commandes.length === 0) return null;
+
+  return (
+    <div style={{ backgroundColor: "white", borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>
+          Mes commandes en cours
+        </h3>
+        <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10, fontWeight: 700, backgroundColor: "#DCFCE7", color: "#16A34A", padding: "3px 8px", borderRadius: 10 }}>
+          <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "#16A34A", display: "inline-block", animation: "livePulse 1.5s ease-in-out infinite" }} />
+          TEMPS RÉEL
+        </span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {commandes.slice(0, 8).map((c) => {
+          const s = STATUT_STYLE[c.statut] || { bg: "#F3F4F6", color: "#6B7280", label: c.statut, icon: "?" };
+          return (
+            <div key={c.id} style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              padding: "10px 14px",
+              backgroundColor: s.bg,
+              borderRadius: 10,
+              borderLeft: `3px solid ${s.color}`,
+              animation: "fadeIn 0.3s ease",
+            }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#0A1628" }}>
+                  {c.fournisseurs?.nom ?? "—"}
+                </div>
+                <div style={{ fontSize: 11, color: "#6B7280", marginTop: 2 }}>
+                  {c.reference ?? c.id.slice(0, 8).toUpperCase()} · {new Date(c.date_commande).toLocaleDateString("fr-FR")}
+                  {c.notes && ` · ${c.notes.slice(0, 50)}${c.notes.length > 50 ? "…" : ""}`}
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0, marginLeft: 12 }}>
+                <span style={{ fontSize: 13, fontWeight: 800, color: "#374151" }}>
+                  {(c.montant_total ?? 0).toLocaleString()} FCFA
+                </span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: s.color, padding: "2px 8px", backgroundColor: "white", borderRadius: 8, whiteSpace: "nowrap" }}>
+                  {s.label}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function Skeleton() {
   return (
@@ -121,7 +184,11 @@ export default function Fournisseurs() {
 
   return (
     <Layout title="Fournisseurs" subtitle="Gestion des partenaires et des approvisionnements">
-      <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
+      <style>{`
+        @keyframes pulse    { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        @keyframes livePulse{ 0%,100%{opacity:1} 50%{opacity:0.3} }
+        @keyframes fadeIn   { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
+      `}</style>
       <Toast toasts={toasts} />
 
       {commandModal && (
@@ -134,6 +201,8 @@ export default function Fournisseurs() {
       {detailModal && (
         <DetailsModal fournisseur={detailModal} onClose={() => setDetailModal(null)} />
       )}
+
+      <MesCommandesPanel />
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <div style={{ fontSize: 14, color: "#6B7280" }}>
