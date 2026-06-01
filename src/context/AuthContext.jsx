@@ -20,6 +20,7 @@ export const roleConfig = {
       { path: "/pharmacie/credits", label: "Crédits", icon: "credits" },
       { path: "/pharmacie/rapports", label: "Rapports", icon: "rapports" },
       { path: "/pharmacie/scanner", label: "Scanner", icon: "scanner" },
+      { path: "/parametres", label: "Paramètres", icon: "parametres" },
     ],
   },
   hopital: {
@@ -38,6 +39,7 @@ export const roleConfig = {
       { path: "/hopital/reseau", label: "Réseau", icon: "reseau" },
       { path: "/hopital/alertes", label: "Alertes", icon: "alertes" },
       { path: "/hopital/rapports", label: "Rapports", icon: "rapports" },
+      { path: "/parametres", label: "Paramètres", icon: "parametres" },
     ],
   },
   distributeur: {
@@ -55,6 +57,7 @@ export const roleConfig = {
       { path: "/distributeur/entrepot", label: "Entrepôt", icon: "entrepot" },
       { path: "/distributeur/clients", label: "Clients", icon: "patients" },
       { path: "/distributeur/alertes", label: "Alertes", icon: "alertes" },
+      { path: "/parametres", label: "Paramètres", icon: "parametres" },
     ],
   },
   autorite: {
@@ -71,6 +74,7 @@ export const roleConfig = {
       { path: "/autorite/acteurs", label: "Acteurs", icon: "reseau" },
       { path: "/autorite/rapports-odd", label: "Rapports ODD", icon: "rapports" },
       { path: "/autorite/api", label: "API", icon: "api" },
+      { path: "/parametres", label: "Paramètres", icon: "parametres" },
     ],
   },
 };
