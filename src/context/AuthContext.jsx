@@ -131,19 +131,29 @@ export function AuthProvider({ children }) {
     return { role, role_interne, ...config, nav, dashboardPath, user, etablissement_id: null };
   };
 
-  // Étape 2 — enrichissement en arrière-plan avec etablissement_id
+  // Étape 2 — enrichissement en arrière-plan avec etablissement_id + permissions custom
   const enrichWithEtablissement = async (user, mounted) => {
     try {
-      const { data } = await supabase
-        .from("etablissements")
-        .select("id")
-        .eq("email", user.email)
-        .maybeSingle();
-      if (mounted?.current && data?.id) {
-        setAuth((prev) => prev ? { ...prev, etablissement_id: data.id } : prev);
-      }
+      const [etabRes, membreRes] = await Promise.all([
+        supabase.from("etablissements").select("id").eq("email", user.email).maybeSingle(),
+        supabase.from("membres_personnel").select("permissions_nav, actif").eq("email", user.email).eq("actif", true).maybeSingle(),
+      ]);
+      if (!mounted?.current) return;
+      setAuth((prev) => {
+        if (!prev) return prev;
+        const patch = {};
+        if (etabRes.data?.id) patch.etablissement_id = etabRes.data.id;
+        // Si le membre a des permissions custom, on filtre le nav selon celles-ci
+        const perms = membreRes.data?.permissions_nav;
+        if (Array.isArray(perms) && perms.length > 0) {
+          patch.nav = prev.nav.filter((item) => perms.includes(item.path));
+          const firstNav = patch.nav.find((item) => item.path !== "/parametres");
+          if (firstNav) patch.dashboardPath = firstNav.path;
+        }
+        return { ...prev, ...patch };
+      });
     } catch {
-      // réseau indisponible — on continue sans etablissement_id
+      // réseau indisponible — on continue sans enrichissement
     }
   };
 

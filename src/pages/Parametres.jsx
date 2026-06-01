@@ -5,12 +5,82 @@ import { useToast } from "../hooks/useToast";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../supabaseClient";
 
-// ─── Rôles internes par type d'établissement ──────────────────────────────────
+// ─── Pages disponibles par rôle ──────────────────────────────────────────────
+// Ces chemins correspondent exactement aux nav dans AuthContext.roleConfig.
+const PAGES_PAR_ROLE = {
+  pharmacie: [
+    { path: "/pharmacie/dashboard",   label: "Dashboard" },
+    { path: "/pharmacie/caisse",      label: "Caisse" },
+    { path: "/pharmacie/inventaire",  label: "Inventaire" },
+    { path: "/pharmacie/ordonnances", label: "Ordonnances" },
+    { path: "/pharmacie/patients",    label: "Patients" },
+    { path: "/pharmacie/fournisseurs",label: "Fournisseurs" },
+    { path: "/pharmacie/credits",     label: "Crédits" },
+    { path: "/pharmacie/rapports",    label: "Rapports" },
+    { path: "/pharmacie/scanner",     label: "Scanner" },
+  ],
+  hopital: [
+    { path: "/hopital/dashboard",    label: "Dashboard" },
+    { path: "/hopital/stock",        label: "Stock" },
+    { path: "/hopital/fournisseurs", label: "Fournisseurs" },
+    { path: "/hopital/predictions",  label: "Prédictions IA" },
+    { path: "/hopital/scanner",      label: "Scanner" },
+    { path: "/hopital/assistant",    label: "Assistant IA" },
+    { path: "/hopital/reseau",       label: "Réseau" },
+    { path: "/hopital/alertes",      label: "Alertes" },
+    { path: "/hopital/rapports",     label: "Rapports" },
+  ],
+  distributeur: [
+    { path: "/distributeur/dashboard",      label: "Dashboard" },
+    { path: "/distributeur/reseau-clients", label: "Réseau clients" },
+    { path: "/distributeur/previsions",     label: "Prévisions" },
+    { path: "/distributeur/livraisons",     label: "Livraisons" },
+    { path: "/distributeur/tracabilite",    label: "Traçabilité" },
+    { path: "/distributeur/entrepot",       label: "Entrepôt" },
+    { path: "/distributeur/clients",        label: "Clients" },
+    { path: "/distributeur/alertes",        label: "Alertes" },
+  ],
+  autorite: [
+    { path: "/autorite/vue-nationale",  label: "Vue nationale" },
+    { path: "/autorite/cartographie",   label: "Cartographie" },
+    { path: "/autorite/contrefacons",   label: "Contrefaçons" },
+    { path: "/autorite/epidemiologie",  label: "Épidémiologie" },
+    { path: "/autorite/acteurs",        label: "Acteurs" },
+    { path: "/autorite/rapports-odd",   label: "Rapports ODD" },
+    { path: "/autorite/api",            label: "API" },
+  ],
+};
+
+// Permissions suggérées par défaut selon le role_interne
+const PERMISSIONS_DEFAUT = {
+  pharmacie: {
+    Gérant:       null, // accès complet = laisser vide → on utilisera toutes les pages
+    Pharmacien:   ["/pharmacie/dashboard", "/pharmacie/inventaire", "/pharmacie/ordonnances", "/pharmacie/patients", "/pharmacie/scanner"],
+    Caissier:     ["/pharmacie/caisse", "/pharmacie/scanner"],
+  },
+  hopital: {
+    Directeur:               null,
+    Médecin:                 ["/hopital/dashboard", "/hopital/assistant", "/hopital/alertes"],
+    Infirmière:              ["/hopital/dashboard", "/hopital/alertes"],
+    "Pharmacien hospitalier":["/hopital/stock", "/hopital/scanner", "/hopital/alertes"],
+  },
+  distributeur: {
+    Directeur:  null,
+    Commercial: ["/distributeur/dashboard", "/distributeur/reseau-clients", "/distributeur/clients", "/distributeur/previsions"],
+    Logistique: ["/distributeur/entrepot", "/distributeur/livraisons", "/distributeur/tracabilite"],
+  },
+  autorite: {
+    Ministre:   null,
+    Inspecteur: null,
+    Analyste:   null,
+  },
+};
+
 const ROLES_INTERNES = {
-  pharmacie:   ["Gérant", "Pharmacien", "Caissier"],
-  hopital:     ["Directeur", "Médecin", "Infirmière", "Pharmacien hospitalier"],
-  distributeur:["Directeur", "Commercial", "Logistique"],
-  autorite:    ["Ministre", "Inspecteur", "Analyste"],
+  pharmacie:    ["Gérant", "Pharmacien", "Caissier"],
+  hopital:      ["Directeur", "Médecin", "Infirmière", "Pharmacien hospitalier"],
+  distributeur: ["Directeur", "Commercial", "Logistique"],
+  autorite:     ["Ministre", "Inspecteur", "Analyste"],
 };
 
 // ─── styles ───────────────────────────────────────────────────────────────────
@@ -58,6 +128,73 @@ function Field({ label, required, children }) {
 
 function Row({ children }) {
   return <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>{children}</div>;
+}
+
+// ─── Composant checkboxes de permissions ─────────────────────────────────────
+function PermissionsCheckboxes({ role, selected, onChange }) {
+  const pages = PAGES_PAR_ROLE[role] ?? [];
+  const allPaths = pages.map((p) => p.path);
+  const allChecked = allPaths.every((p) => selected.includes(p));
+
+  const toggle = (path) => {
+    onChange(selected.includes(path)
+      ? selected.filter((p) => p !== path)
+      : [...selected, path]
+    );
+  };
+
+  const toggleAll = () => {
+    onChange(allChecked ? [] : allPaths);
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#374151" }}>
+          <input
+            type="checkbox"
+            checked={allChecked}
+            onChange={toggleAll}
+            style={{ width: 14, height: 14, cursor: "pointer" }}
+          />
+          Tout sélectionner
+        </label>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+        {pages.map((page) => (
+          <label
+            key={page.path}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 7,
+              padding: "7px 10px",
+              borderRadius: 7,
+              border: `1.5px solid ${selected.includes(page.path) ? "#BFDBFE" : "#E5E7EB"}`,
+              backgroundColor: selected.includes(page.path) ? "#EFF6FF" : "#F8FAFC",
+              cursor: "pointer",
+              fontSize: 12,
+              fontWeight: selected.includes(page.path) ? 600 : 400,
+              color: selected.includes(page.path) ? "#1D4ED8" : "#374151",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={selected.includes(page.path)}
+              onChange={() => toggle(page.path)}
+              style={{ width: 13, height: 13, cursor: "pointer" }}
+            />
+            {page.label}
+          </label>
+        ))}
+      </div>
+      {selected.length === 0 && (
+        <div style={{ fontSize: 11, color: "#EF4444", marginTop: 6 }}>
+          Aucune page sélectionnée — le membre ne pourra accéder à aucune section.
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── Section Informations établissement ──────────────────────────────────────
@@ -179,19 +316,28 @@ function SectionPersonnel({ etablissement_id, role }) {
   const [membres, setMembres] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showInvite, setShowInvite] = useState(false);
+
+  // État formulaire invitation
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("");
-  const [inviting, setSaving] = useState(false);
+  const [invitePerms, setInvitePerms] = useState([]);
+  const [inviting, setInviting] = useState(false);
+
+  // Édition permissions d'un membre existant
+  const [editPermsId, setEditPermsId] = useState(null); // id du membre en cours d'édition
+  const [editPermsValues, setEditPermsValues] = useState([]);
+  const [savingPermsId, setSavingPermsId] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
 
   const rolesDisponibles = ROLES_INTERNES[role] ?? [];
+  const pagesDisponibles = PAGES_PAR_ROLE[role] ?? [];
 
   const loadMembres = useCallback(async () => {
     if (!etablissement_id) return;
     setLoading(true);
     const { data } = await supabase
       .from("membres_personnel")
-      .select("id, email, role_interne, actif, created_at, invitation_acceptee")
+      .select("id, email, role_interne, actif, created_at, invitation_acceptee, permissions_nav")
       .eq("etablissement_id", etablissement_id)
       .order("created_at", { ascending: false });
     setMembres(data ?? []);
@@ -200,16 +346,28 @@ function SectionPersonnel({ etablissement_id, role }) {
 
   useEffect(() => { loadMembres(); }, [loadMembres]);
 
+  // Quand le role d'invitation change, pré-cocher les permissions suggérées
+  const handleInviteRoleChange = (r) => {
+    setInviteRole(r);
+    const defaut = PERMISSIONS_DEFAUT[role]?.[r];
+    // null = accès complet → cocher toutes les pages
+    setInvitePerms(defaut === null || defaut === undefined
+      ? pagesDisponibles.map((p) => p.path)
+      : defaut
+    );
+  };
+
   const handleInviter = async () => {
     if (!inviteEmail.trim()) return toastError("L'email est obligatoire.");
     if (!inviteRole) return toastError("Veuillez sélectionner un rôle.");
-    setSaving(true);
+    if (invitePerms.length === 0) return toastError("Veuillez sélectionner au moins une page.");
+    setInviting(true);
     try {
-      // Insérer l'invitation en base
       const { error } = await supabase.from("membres_personnel").insert({
         etablissement_id,
         email: inviteEmail.trim().toLowerCase(),
         role_interne: inviteRole,
+        permissions_nav: invitePerms,
         actif: true,
         invitation_acceptee: false,
       });
@@ -217,12 +375,13 @@ function SectionPersonnel({ etablissement_id, role }) {
       success(`Invitation envoyée à ${inviteEmail.trim()}`);
       setInviteEmail("");
       setInviteRole("");
+      setInvitePerms([]);
       setShowInvite(false);
       loadMembres();
     } catch (e) {
       toastError("Erreur : " + e.message);
     } finally {
-      setSaving(false);
+      setInviting(false);
     }
   };
 
@@ -260,6 +419,45 @@ function SectionPersonnel({ etablissement_id, role }) {
     }
   };
 
+  const openEditPerms = (membre) => {
+    setEditPermsId(membre.id);
+    setEditPermsValues(
+      Array.isArray(membre.permissions_nav) && membre.permissions_nav.length > 0
+        ? membre.permissions_nav
+        : pagesDisponibles.map((p) => p.path)
+    );
+  };
+
+  const handleSavePerms = async (membre) => {
+    if (editPermsValues.length === 0) return toastError("Sélectionnez au moins une page.");
+    setSavingPermsId(membre.id);
+    try {
+      const { error } = await supabase
+        .from("membres_personnel")
+        .update({ permissions_nav: editPermsValues })
+        .eq("id", membre.id);
+      if (error) throw error;
+      setMembres((prev) => prev.map((m) => m.id === membre.id ? { ...m, permissions_nav: editPermsValues } : m));
+      setEditPermsId(null);
+      success(`Permissions de ${membre.email} mises à jour.`);
+    } catch (e) {
+      toastError("Erreur : " + e.message);
+    } finally {
+      setSavingPermsId(null);
+    }
+  };
+
+  // Résumé lisible des permissions d'un membre
+  const permsSummary = (membre) => {
+    const perms = membre.permissions_nav;
+    if (!Array.isArray(perms) || perms.length === 0) return "Permissions non définies";
+    if (perms.length === pagesDisponibles.length) return "Toutes les pages";
+    return pagesDisponibles
+      .filter((p) => perms.includes(p.path))
+      .map((p) => p.label)
+      .join(", ");
+  };
+
   return (
     <>
       <Toast toasts={toasts} />
@@ -267,17 +465,18 @@ function SectionPersonnel({ etablissement_id, role }) {
         title={`Personnel — ${membres.length} membre${membres.length !== 1 ? "s" : ""}`}
         action={
           <button
-            onClick={() => setShowInvite((v) => !v)}
+            onClick={() => { setShowInvite((v) => !v); if (showInvite) { setInviteEmail(""); setInviteRole(""); setInvitePerms([]); } }}
             style={{ padding: "7px 16px", backgroundColor: "#EFF6FF", color: "#2563EB", border: "1px solid #BFDBFE", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
           >
             {showInvite ? "Annuler" : "Inviter un membre"}
           </button>
         }
       >
-        {/* Formulaire d'invitation */}
+        {/* ── Formulaire d'invitation ── */}
         {showInvite && (
-          <div style={{ backgroundColor: "#F8FAFC", borderRadius: 10, padding: "16px", marginBottom: 18, border: "1px solid #E5E7EB" }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#0A1628", marginBottom: 12 }}>Nouvelle invitation</div>
+          <div style={{ backgroundColor: "#F8FAFC", borderRadius: 10, padding: "18px", marginBottom: 20, border: "1px solid #E5E7EB" }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#0A1628", marginBottom: 14 }}>Nouvelle invitation</div>
+
             <Row>
               <Field label="Email professionnel" required>
                 <input
@@ -288,22 +487,50 @@ function SectionPersonnel({ etablissement_id, role }) {
                   placeholder="membre@etablissement.com"
                 />
               </Field>
-              <Field label="Rôle" required>
+              <Field label="Rôle interne" required>
                 <select
                   style={{ ...inputStyle, cursor: "pointer" }}
                   value={inviteRole}
-                  onChange={(e) => setInviteRole(e.target.value)}
+                  onChange={(e) => handleInviteRoleChange(e.target.value)}
                 >
                   <option value="">— Sélectionner un rôle —</option>
                   {rolesDisponibles.map((r) => <option key={r} value={r}>{r}</option>)}
                 </select>
               </Field>
             </Row>
+
+            {/* Permissions */}
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 8 }}>
+                Pages accessibles <span style={{ color: "#EF4444" }}>*</span>
+                {inviteRole && (
+                  <span style={{ marginLeft: 8, fontSize: 11, color: "#6B7280", fontWeight: 400 }}>
+                    — pré-remplies selon le rôle, modifiables
+                  </span>
+                )}
+              </label>
+              {pagesDisponibles.length > 0 ? (
+                <PermissionsCheckboxes
+                  role={role}
+                  selected={invitePerms}
+                  onChange={setInvitePerms}
+                />
+              ) : (
+                <div style={{ fontSize: 12, color: "#9CA3AF" }}>Sélectionnez d'abord un rôle.</div>
+              )}
+            </div>
+
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
               <button
                 onClick={handleInviter}
                 disabled={inviting}
-                style={{ padding: "8px 20px", backgroundColor: inviting ? "#E5E7EB" : "#3B82F6", color: inviting ? "#9CA3AF" : "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: inviting ? "not-allowed" : "pointer" }}
+                style={{
+                  padding: "8px 20px",
+                  backgroundColor: inviting ? "#E5E7EB" : "#3B82F6",
+                  color: inviting ? "#9CA3AF" : "white",
+                  border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600,
+                  cursor: inviting ? "not-allowed" : "pointer",
+                }}
               >
                 {inviting ? "Envoi…" : "Envoyer l'invitation"}
               </button>
@@ -311,7 +538,7 @@ function SectionPersonnel({ etablissement_id, role }) {
           </div>
         )}
 
-        {/* Liste des membres */}
+        {/* ── Liste des membres ── */}
         {loading && <div style={{ color: "#9CA3AF", fontSize: 13 }}>Chargement…</div>}
         {!loading && membres.length === 0 && (
           <div style={{ textAlign: "center", color: "#9CA3AF", fontSize: 13, padding: "24px 0" }}>
@@ -319,85 +546,87 @@ function SectionPersonnel({ etablissement_id, role }) {
           </div>
         )}
         {!loading && membres.length > 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {/* En-tête */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 180px 100px 100px", gap: 12, padding: "0 12px", fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              <span>Email</span>
-              <span>Rôle</span>
-              <span>Statut</span>
-              <span></span>
-            </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {membres.map((m) => (
-              <div
-                key={m.id}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 180px 100px 100px",
-                  gap: 12,
-                  alignItems: "center",
-                  padding: "10px 12px",
-                  backgroundColor: m.actif ? "#F8FAFC" : "#F9FAFB",
-                  borderRadius: 10,
-                  opacity: m.actif ? 1 : 0.6,
-                }}
-              >
-                {/* Email + invitation */}
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "#0A1628" }}>{m.email}</div>
-                  <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 1 }}>
-                    {m.invitation_acceptee ? "Compte actif" : "Invitation en attente"}
+              <div key={m.id} style={{ border: "1.5px solid #E5E7EB", borderRadius: 10, overflow: "hidden", opacity: m.actif ? 1 : 0.65 }}>
+                {/* Ligne principale */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 160px auto auto auto", gap: 12, alignItems: "center", padding: "10px 14px", backgroundColor: m.actif ? "#F8FAFC" : "#F3F4F6" }}>
+                  {/* Email */}
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#0A1628" }}>{m.email}</div>
+                    <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 1 }}>
+                      {m.invitation_acceptee ? "Compte actif" : "Invitation en attente"}
+                    </div>
                   </div>
+
+                  {/* Rôle — modifiable */}
+                  <select
+                    value={m.role_interne || ""}
+                    disabled={!m.actif || updatingId === m.id}
+                    onChange={(e) => handleChangeRole(m, e.target.value)}
+                    style={{ padding: "5px 8px", border: "1.5px solid #E5E7EB", borderRadius: 6, fontSize: 12, color: "#374151", cursor: m.actif ? "pointer" : "default", backgroundColor: "white" }}
+                  >
+                    {rolesDisponibles.map((r) => <option key={r} value={r}>{r}</option>)}
+                  </select>
+
+                  {/* Badge statut */}
+                  <span style={{ padding: "3px 10px", borderRadius: 10, fontSize: 11, fontWeight: 700, backgroundColor: m.actif ? "#DCFCE7" : "#F3F4F6", color: m.actif ? "#16A34A" : "#6B7280", whiteSpace: "nowrap" }}>
+                    {m.actif ? "Actif" : "Inactif"}
+                  </span>
+
+                  {/* Modifier permissions */}
+                  <button
+                    onClick={() => editPermsId === m.id ? setEditPermsId(null) : openEditPerms(m)}
+                    style={{ padding: "5px 10px", borderRadius: 7, border: "1.5px solid #BFDBFE", fontSize: 11, fontWeight: 600, cursor: "pointer", backgroundColor: editPermsId === m.id ? "#EFF6FF" : "white", color: "#2563EB", whiteSpace: "nowrap" }}
+                  >
+                    {editPermsId === m.id ? "Fermer" : "Permissions"}
+                  </button>
+
+                  {/* Désactiver / Réactiver */}
+                  <button
+                    disabled={updatingId === m.id}
+                    onClick={() => handleToggleActif(m)}
+                    style={{ padding: "5px 10px", borderRadius: 7, border: "1.5px solid", fontSize: 11, fontWeight: 600, cursor: updatingId === m.id ? "not-allowed" : "pointer", backgroundColor: "white", borderColor: m.actif ? "#FECACA" : "#D1FAE5", color: m.actif ? "#DC2626" : "#16A34A", whiteSpace: "nowrap" }}
+                  >
+                    {updatingId === m.id ? "…" : m.actif ? "Désactiver" : "Réactiver"}
+                  </button>
                 </div>
 
-                {/* Rôle — modifiable */}
-                <select
-                  value={m.role_interne || ""}
-                  disabled={!m.actif || updatingId === m.id}
-                  onChange={(e) => handleChangeRole(m, e.target.value)}
-                  style={{
-                    padding: "5px 8px",
-                    border: "1.5px solid #E5E7EB",
-                    borderRadius: 6,
-                    fontSize: 12,
-                    color: "#374151",
-                    cursor: m.actif ? "pointer" : "default",
-                    backgroundColor: "white",
-                  }}
-                >
-                  {rolesDisponibles.map((r) => <option key={r} value={r}>{r}</option>)}
-                </select>
+                {/* Résumé permissions (toujours visible) */}
+                {editPermsId !== m.id && (
+                  <div style={{ padding: "6px 14px 8px", backgroundColor: "white", borderTop: "1px solid #F3F4F6", fontSize: 11, color: "#6B7280" }}>
+                    <span style={{ fontWeight: 600 }}>Accès : </span>{permsSummary(m)}
+                  </div>
+                )}
 
-                {/* Badge statut */}
-                <span style={{
-                  display: "inline-block",
-                  padding: "3px 10px",
-                  borderRadius: 10,
-                  fontSize: 11,
-                  fontWeight: 700,
-                  backgroundColor: m.actif ? "#DCFCE7" : "#F3F4F6",
-                  color: m.actif ? "#16A34A" : "#6B7280",
-                }}>
-                  {m.actif ? "Actif" : "Inactif"}
-                </span>
-
-                {/* Action désactiver / réactiver */}
-                <button
-                  disabled={updatingId === m.id}
-                  onClick={() => handleToggleActif(m)}
-                  style={{
-                    padding: "5px 10px",
-                    borderRadius: 7,
-                    border: "1.5px solid",
-                    fontSize: 11,
-                    fontWeight: 600,
-                    cursor: updatingId === m.id ? "not-allowed" : "pointer",
-                    backgroundColor: "white",
-                    borderColor: m.actif ? "#FECACA" : "#D1FAE5",
-                    color: m.actif ? "#DC2626" : "#16A34A",
-                  }}
-                >
-                  {updatingId === m.id ? "…" : m.actif ? "Désactiver" : "Réactiver"}
-                </button>
+                {/* Panel édition permissions inline */}
+                {editPermsId === m.id && (
+                  <div style={{ padding: "14px 16px", backgroundColor: "white", borderTop: "1.5px solid #BFDBFE" }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#1D4ED8", marginBottom: 10 }}>
+                      Modifier les permissions de {m.email}
+                    </div>
+                    <PermissionsCheckboxes
+                      role={role}
+                      selected={editPermsValues}
+                      onChange={setEditPermsValues}
+                    />
+                    <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>
+                      <button
+                        onClick={() => setEditPermsId(null)}
+                        style={{ padding: "7px 16px", backgroundColor: "white", border: "1.5px solid #E5E7EB", borderRadius: 7, fontSize: 12, color: "#6B7280", cursor: "pointer" }}
+                      >
+                        Annuler
+                      </button>
+                      <button
+                        onClick={() => handleSavePerms(m)}
+                        disabled={savingPermsId === m.id}
+                        style={{ padding: "7px 16px", backgroundColor: savingPermsId === m.id ? "#E5E7EB" : "#10B981", color: savingPermsId === m.id ? "#9CA3AF" : "white", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: savingPermsId === m.id ? "not-allowed" : "pointer" }}
+                      >
+                        {savingPermsId === m.id ? "Enregistrement…" : "Enregistrer"}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -405,11 +634,11 @@ function SectionPersonnel({ etablissement_id, role }) {
 
         {/* Note explicative */}
         <div style={{ marginTop: 18, padding: "12px 14px", backgroundColor: "#F0F4FB", borderRadius: 10, border: "1px solid #DBEAFE" }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#1D4ED8", marginBottom: 3 }}>Fonctionnement des invitations</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#1D4ED8", marginBottom: 3 }}>Fonctionnement des permissions</div>
           <div style={{ fontSize: 12, color: "#374151", lineHeight: 1.6 }}>
-            Le membre invité reçoit un email avec un lien pour créer son mot de passe.
-            Une fois son compte activé, il accède à MedOS avec les droits correspondant à son rôle interne uniquement.
-            Vous pouvez modifier son rôle ou désactiver son accès à tout moment.
+            Les permissions définissent exactement les pages visibles dans le menu de chaque membre.
+            Elles sont appliquées dès la prochaine connexion du membre.
+            Le rôle interne sert uniquement de catégorie — ce sont les cases cochées qui déterminent l'accès réel.
           </div>
         </div>
       </Card>
