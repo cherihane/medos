@@ -32,28 +32,38 @@ const inputStyle = {
 // ─── Modal Agir ───────────────────────────────────────────────────────────────
 function AgirModal({ action, onClose, onSaved, fournisseurs, etablissement_id }) {
   const [fournisseurId, setFournisseurId] = useState("");
-  const [quantite, setQuantite] = useState("500");
+  const [quantite, setQuantite]           = useState(String(action.quantite ?? 500));
   const [dateLivraison, setDateLivraison] = useState("");
-  const [notes, setNotes] = useState(action.action);
-  const [saving, setSaving] = useState(false);
-  const [erreur, setErreur] = useState(null);
+  const [notes, setNotes]                 = useState("");
+  const [saving, setSaving]               = useState(false);
+  const [erreur, setErreur]               = useState(null);
+
+  const urgenceBg = action.urgence === "haute" ? "#FEF2F2" : action.urgence === "normale" ? "#FFFBEB" : "#F0F9FF";
 
   const handleSave = async () => {
     setErreur(null);
     if (!fournisseurId) { setErreur("Sélectionnez un fournisseur."); return; }
-    if (!quantite || parseInt(quantite, 10) <= 0) { setErreur("Quantité invalide."); return; }
+    const qty = parseInt(quantite, 10);
+    if (!qty || qty <= 0) { setErreur("Quantité invalide."); return; }
     setSaving(true);
     try {
+      const notesFinales = [
+        `Médicament : ${action.medicament}`,
+        `Quantité commandée : ${qty} unités`,
+        `Prévision IA : ${action.motif}`,
+        notes.trim() ? `Instructions : ${notes.trim()}` : null,
+      ].filter(Boolean).join(" | ");
+
       await insertCommande({
-        fournisseur_id: fournisseurId,
-        statut: "brouillon",
-        date_commande: new Date().toISOString(),
+        fournisseur_id:        fournisseurId,
+        statut:                "brouillon",
+        date_commande:         new Date().toISOString(),
         date_livraison_prevue: dateLivraison || null,
-        montant_total: 0,
-        notes: notes.trim(),
+        montant_total:         0,
+        notes:                 notesFinales,
         ...(etablissement_id ? { etablissement_id } : {}),
       });
-      onSaved("Commande créée en brouillon.");
+      onSaved(`Commande ${action.medicament} créée en brouillon.`);
       onClose();
     } catch (e) {
       setErreur("Erreur : " + e.message);
@@ -64,42 +74,63 @@ function AgirModal({ action, onClose, onSaved, fournisseurs, etablissement_id })
 
   return (
     <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-      <div style={{ backgroundColor: "white", borderRadius: 16, width: 480, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+      <div style={{ backgroundColor: "white", borderRadius: 16, width: 500, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+        {/* En-tête */}
         <div style={{ padding: "20px 24px 0", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
-            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Créer une commande fournisseur</h3>
-            <div style={{ fontSize: 12, color: "#6B7280", marginTop: 3 }}>Basée sur la prévision : {action.action}</div>
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Passer une commande fournisseur</h3>
+            <div style={{ fontSize: 12, color: "#6B7280", marginTop: 3 }}>{action.action}</div>
           </div>
           <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9CA3AF", flexShrink: 0 }}>×</button>
         </div>
 
         <div style={{ padding: "18px 24px" }}>
-          <div style={{ backgroundColor: action.urgence === "haute" ? "#FEF2F2" : action.urgence === "normale" ? "#FFFBEB" : "#F0F9FF", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: "#374151" }}>
-            <strong>Motif :</strong> {action.motif}
+          {/* Motif IA */}
+          <div style={{ backgroundColor: urgenceBg, borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: "#374151" }}>
+            <strong>Prévision IA :</strong> {action.motif}
           </div>
 
+          {/* Médicament pré-rempli (lecture seule) */}
           <div style={{ marginBottom: 12 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Fournisseur <span style={{ color: "#EF4444" }}>*</span></label>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Médicament concerné</label>
+            <input
+              style={{ ...inputStyle, backgroundColor: "#F8FAFC", color: "#6B7280", cursor: "not-allowed" }}
+              value={action.medicament}
+              readOnly
+            />
+          </div>
+
+          {/* Fournisseur */}
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>
+              Fournisseur <span style={{ color: "#EF4444" }}>*</span>
+            </label>
             <select style={{ ...inputStyle, cursor: "pointer" }} value={fournisseurId} onChange={(e) => setFournisseurId(e.target.value)}>
               <option value="">— Sélectionner un fournisseur —</option>
-              {fournisseurs.map((f) => <option key={f.id} value={f.id}>{f.nom}</option>)}
+              {fournisseurs.map((f) => (
+                <option key={f.id} value={f.id}>{f.nom}{f.pays ? ` — ${f.pays}` : ""}</option>
+              ))}
             </select>
           </div>
 
+          {/* Quantité + Date */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
             <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Quantité estimée</label>
+              <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>
+                Quantité (unités) <span style={{ fontSize: 10, color: "#F59E0B", fontWeight: 500 }}>suggérée par IA</span>
+              </label>
               <input style={inputStyle} type="number" min="1" value={quantite} onChange={(e) => setQuantite(e.target.value)} />
             </div>
             <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Livraison souhaitée</label>
+              <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Date de livraison souhaitée</label>
               <input style={inputStyle} type="date" value={dateLivraison} onChange={(e) => setDateLivraison(e.target.value)} />
             </div>
           </div>
 
+          {/* Notes libres */}
           <div style={{ marginBottom: 12 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Notes</label>
-            <input style={inputStyle} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Instructions particulières…" />
+            <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Instructions particulières</label>
+            <input style={inputStyle} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Conditionnement spécifique, urgence, etc." />
           </div>
 
           {erreur && (
@@ -139,11 +170,11 @@ export default function Previsions() {
     { label: "Livraisons en cours",       value: loadKpi ? "…" : kpi?.livraisonsEnCours ?? 0,                       color: "#8B5CF6" },
   ];
 
-  const actionsRecommandees = [
-    { action: "Commander Paracétamol 1g",   motif: "Demande prévue +24% en février",       urgence: "haute" },
-    { action: "Réduire stock Ibuprofène",   motif: "Surstock prévu de 18%",                urgence: "normale" },
-    { action: "Anticiper rupture Metformine", motif: "Demande +42% sur 3 mois",             urgence: "haute" },
-    { action: "Renégocier tarifs Vitamine C", motif: "Volume x1.5 prévu sur 6 mois",       urgence: "faible" },
+    const actionsRecommandees = [
+    { action: "Commander Paracétamol 1g",     medicament: "Paracétamol 1g",   quantite: 5000, motif: "Demande prévue +24% en février",  urgence: "haute"   },
+    { action: "Commander Metformine 500mg",   medicament: "Metformine 500mg", quantite: 3000, motif: "Demande +42% sur 3 mois",          urgence: "haute"   },
+    { action: "Réduire stock Ibuprofène",     medicament: "Ibuprofène 400mg", quantite: 500,  motif: "Surstock prévu de 18%",            urgence: "normale" },
+    { action: "Renégocier tarifs Vitamine C", medicament: "Vitamine C 500mg", quantite: 8000, motif: "Volume x1.5 prévu sur 6 mois",    urgence: "faible"  },
   ];
 
   return (
