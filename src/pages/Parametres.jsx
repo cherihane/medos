@@ -23,6 +23,7 @@ const PAGES_PAR_ROLE = {
     { path: "/hopital/dashboard",    label: "Dashboard" },
     { path: "/hopital/stock",        label: "Stock" },
     { path: "/hopital/fournisseurs", label: "Fournisseurs" },
+    { path: "/hopital/patients",     label: "Patients" },
     { path: "/hopital/predictions",  label: "Prédictions IA" },
     { path: "/hopital/scanner",      label: "Scanner" },
     { path: "/hopital/assistant",    label: "Assistant IA" },
@@ -60,8 +61,8 @@ const PERMISSIONS_DEFAUT = {
   },
   hopital: {
     Directeur:               null,
-    Médecin:                 ["/hopital/dashboard", "/hopital/assistant", "/hopital/alertes"],
-    Infirmière:              ["/hopital/dashboard", "/hopital/alertes"],
+    Médecin:                 ["/hopital/dashboard", "/hopital/patients", "/hopital/assistant", "/hopital/alertes"],
+    Infirmière:              ["/hopital/dashboard", "/hopital/patients", "/hopital/alertes"],
     "Pharmacien hospitalier":["/hopital/stock", "/hopital/scanner", "/hopital/alertes"],
   },
   distributeur: {

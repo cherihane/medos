@@ -62,6 +62,116 @@ function hasAllergies(patient) {
   return (patient.allergies ?? []).length > 0;
 }
 
+// ── Impression ordonnance ─────────────────────────────────────────────────────
+function printOrdonnance({ ordonnance, patient, hopitalNom, medecinNom, lignes, instr }) {
+  const win = window.open("", "_blank", "width=820,height=700");
+  if (!win) return;
+  const exp = ordonnance.date_expiration ? fmtDate(ordonnance.date_expiration) : null;
+  const lignesHTML = lignes.map((l) => `
+    <tr>
+      <td style="padding:9px 14px;border-bottom:1px solid #E5E7EB;font-weight:600;color:#0A1628">${l.nom}</td>
+      <td style="padding:9px 14px;border-bottom:1px solid #E5E7EB;color:#374151">${l.posologie}</td>
+      <td style="padding:9px 14px;border-bottom:1px solid #E5E7EB;color:#374151">${l.duree || "—"}</td>
+    </tr>`).join("");
+
+  win.document.write(`<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Ordonnance — ${patient.prenom} ${patient.nom}</title>
+<style>
+  @media print { body{margin:0} .no-print{display:none!important} }
+  *{box-sizing:border-box}
+  body{font-family:'Segoe UI',Arial,sans-serif;color:#0A1628;margin:0;padding:44px 52px;background:#fff}
+  .hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:22px;border-bottom:2.5px solid #10B981;margin-bottom:28px}
+  .logo{font-size:30px;font-weight:900;color:#10B981;letter-spacing:-0.5px}
+  .logo span{color:#0A1628}
+  .hopital-info{text-align:right;font-size:12px;color:#6B7280;line-height:1.7}
+  .hopital-nom{font-size:14px;font-weight:700;color:#0A1628;margin-bottom:2px}
+  .ref-line{display:flex;justify-content:space-between;font-size:12px;color:#6B7280;margin-bottom:20px}
+  .section-title{font-size:10px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px}
+  .info-grid{background:#F8FAFC;border-radius:8px;padding:14px 18px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:18px}
+  .info-label{font-size:10px;color:#9CA3AF;margin-bottom:2px}
+  .info-value{font-size:13px;font-weight:600;color:#0A1628}
+  .medecin-row{background:#ECFDF5;border-radius:8px;padding:14px 18px;display:flex;gap:32px;margin-bottom:18px}
+  table{width:100%;border-collapse:collapse;margin-bottom:12px}
+  thead th{background:#0A1628;color:#fff;padding:10px 14px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+  .instructions{background:#FFFBEB;border-left:3px solid #F59E0B;padding:10px 14px;border-radius:0 6px 6px 0;font-size:12px;color:#374151;margin-top:0}
+  .footer{margin-top:52px;display:grid;grid-template-columns:1fr 1fr;gap:48px}
+  .sign-box{border-top:1.5px solid #0A1628;padding-top:8px;font-size:11px;color:#6B7280}
+  .print-btn{position:fixed;top:14px;right:14px;padding:8px 18px;background:#10B981;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer}
+  .allergy-bar{margin-top:8px;padding:7px 12px;background:#FEF2F2;border-radius:6px;font-size:11px;color:#DC2626;font-weight:700}
+</style>
+</head>
+<body>
+<button class="print-btn no-print" onclick="window.print()">Imprimer</button>
+<div class="hdr">
+  <div>
+    <div class="logo">Med<span>OS</span></div>
+    <div style="font-size:11px;color:#6B7280;margin-top:4px">Plateforme de santé numérique</div>
+  </div>
+  <div class="hopital-info">
+    <div class="hopital-nom">${hopitalNom}</div>
+    <div>Ordonnance médicale</div>
+    ${exp ? `<div style="color:#EF4444;font-weight:600;margin-top:3px">Expire le ${exp}</div>` : ""}
+  </div>
+</div>
+<div class="ref-line">
+  <span>Réf. <strong style="font-family:monospace;color:#0A1628">${ordonnance.reference ?? "—"}</strong></span>
+  <span>Émise le <strong>${fmtDate(ordonnance.date_emission)}</strong></span>
+</div>
+<div class="section-title">Patient</div>
+<div class="info-grid">
+  <div><div class="info-label">Nom complet</div><div class="info-value">${patient.prenom} ${patient.nom}</div></div>
+  <div><div class="info-label">Date de naissance</div><div class="info-value">${fmtDate(patient.date_naissance)} (${age(patient.date_naissance)})</div></div>
+  <div><div class="info-label">N° Dossier</div><div class="info-value" style="font-family:monospace">${patient.numero_dossier ?? "—"}</div></div>
+</div>
+${patient.allergies?.length > 0 ? `<div class="allergy-bar">Contre-indications : ${patient.allergies.join(", ")}</div><br>` : ""}
+<div class="section-title" style="margin-top:4px">Médecin prescripteur</div>
+<div class="medecin-row">
+  <div><div class="info-label">Nom</div><div class="info-value">${medecinNom ?? ordonnance.medecin_nom ?? "—"}</div></div>
+  <div><div class="info-label">Établissement</div><div class="info-value">${hopitalNom}</div></div>
+</div>
+<div class="section-title">Médicaments prescrits</div>
+<table>
+  <thead><tr><th>Médicament</th><th>Posologie</th><th>Durée</th></tr></thead>
+  <tbody>${lignesHTML}</tbody>
+</table>
+${instr ? `<div class="instructions"><strong>Instructions :</strong> ${instr}</div>` : ""}
+<div class="footer">
+  <div class="sign-box">Date et signature du médecin</div>
+  <div class="sign-box">Cachet de l'établissement</div>
+</div>
+</body></html>`);
+  win.document.close();
+}
+
+// ── Envoi SMS ─────────────────────────────────────────────────────────────────
+function envoyerSMSOrdonnance(patient, lignes) {
+  const tel = (patient.telephone ?? "").replace(/\s/g, "");
+  if (!tel) { alert("Aucun numéro de téléphone enregistré pour ce patient."); return; }
+  const corps = [
+    `Ordonnance MedOS — ${patient.prenom} ${patient.nom}`,
+    ...lignes.map((l) => `- ${l.nom} : ${l.posologie}${l.duree ? ` (${l.duree})` : ""}`),
+    "Presentez ce message en pharmacie.",
+  ].join("\n");
+  window.open(`sms:${tel}?body=${encodeURIComponent(corps)}`);
+}
+
+function envoyerSMSRendezVous(patient, dateRdv, medecinNom, hopitalNom) {
+  const tel = (patient.telephone ?? "").replace(/\s/g, "");
+  if (!tel) { alert("Aucun numéro de téléphone enregistré pour ce patient."); return; }
+  const corps = [
+    `Rappel MedOS — Rendez-vous medical`,
+    `Patient : ${patient.prenom} ${patient.nom}`,
+    `Date : ${fmtDate(dateRdv)}`,
+    `Medecin : Dr. ${medecinNom}`,
+    `Lieu : ${hopitalNom}`,
+    `Merci de confirmer votre presence.`,
+  ].join("\n");
+  window.open(`sms:${tel}?body=${encodeURIComponent(corps)}`);
+}
+
 // ── Mutation locale comptes_rendus ────────────────────────────────────────────
 async function insertCompteRendu(fields) {
   const { data, error } = await supabase.from("comptes_rendus").insert(fields).select().single();
@@ -363,7 +473,7 @@ const STATUT_ORD = {
   expiree: { bg: "#F3F4F6", color: "#9CA3AF" },
 };
 
-function FichePatient({ patient, etablissement_id, medecinNom, medicaments, onClose, onPatientUpdated }) {
+function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medicaments, onClose, onPatientUpdated }) {
   const [onglet, setOnglet]           = useState("infos");
   const [ordonnances, setOrdonnances] = useState([]);
   const [comptes, setComptes]         = useState([]);
@@ -554,6 +664,23 @@ function FichePatient({ patient, etablissement_id, medecinNom, medicaments, onCl
                           {instr && <div style={{ marginTop: 8, fontSize: 12, color: "#6B7280", fontStyle: "italic" }}>{instr}</div>}
                         </div>
                       )}
+                      {/* Actions ordonnance */}
+                      <div style={{ padding: "8px 14px", borderTop: "1px solid #F3F4F6", background: "white", display: "flex", gap: 8 }}>
+                        <button
+                          onClick={() => printOrdonnance({ ordonnance: o, patient, hopitalNom: hopitalNom ?? "Hôpital", medecinNom, lignes, instr })}
+                          style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", background: "#0A1628", color: "white", border: "none", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                          Imprimer l'ordonnance
+                        </button>
+                        {patient.telephone && (
+                          <button
+                            onClick={() => envoyerSMSOrdonnance(patient, lignes)}
+                            style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", background: "white", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                            Envoyer par SMS
+                          </button>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -579,9 +706,19 @@ function FichePatient({ patient, etablissement_id, medecinNom, medicaments, onCl
                       {c.motif && <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}><strong style={{ color: "#374151" }}>Motif :</strong> {c.motif}</div>}
                       {c.diagnostic && <div style={{ fontSize: 12, color: "#374151", marginBottom: 4, fontWeight: 600 }}>{c.diagnostic.slice(0, 120)}{c.diagnostic.length > 120 ? "…" : ""}</div>}
                       {c.traitement && <div style={{ fontSize: 12, color: "#6B7280" }}>{c.traitement.slice(0, 100)}{c.traitement.length > 100 ? "…" : ""}</div>}
-                      <button onClick={() => setDetailCR(c)} style={{ marginTop: 8, padding: "4px 12px", background: "white", border: "1px solid #E5E7EB", borderRadius: 6, fontSize: 11, color: "#374151", cursor: "pointer", fontWeight: 600 }}>
-                        Voir le détail complet
-                      </button>
+                      <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                        <button onClick={() => setDetailCR(c)} style={{ padding: "4px 12px", background: "white", border: "1px solid #E5E7EB", borderRadius: 6, fontSize: 11, color: "#374151", cursor: "pointer", fontWeight: 600 }}>
+                          Voir le détail complet
+                        </button>
+                        {c.prochain_rdv && patient.telephone && (
+                          <button
+                            onClick={() => envoyerSMSRendezVous(patient, c.prochain_rdv, c.medecin, hopitalNom ?? "Hôpital")}
+                            style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 12px", background: "white", border: "1px solid #E5E7EB", borderRadius: 6, fontSize: 11, color: "#374151", cursor: "pointer", fontWeight: 600 }}>
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                            SMS rappel RDV
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -752,6 +889,7 @@ export default function PatientsHopital() {
 
   const etablissement_id = auth?.etablissement_id ?? null;
   const medecinNom       = auth?.user?.user_metadata?.display_name ?? auth?.structure ?? null;
+  const hopitalNom       = auth?.structure ?? "Hôpital";
 
   const filtered = patients
     .filter((p) => filtreStatut === "tous"    || p.statut  === filtreStatut)
@@ -782,7 +920,7 @@ export default function PatientsHopital() {
       {toast && <div style={{ position: "fixed", top: 20, right: 20, background: ACCENT, color: "white", padding: "12px 20px", borderRadius: 10, fontWeight: 600, fontSize: 13, zIndex: 2000, boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}>{toast}</div>}
 
       {showNouv && <ModalNouveauPatient etablissement_id={etablissement_id} medecinNom={medecinNom} onClose={() => setShowNouv(false)} onSaved={() => { setShowNouv(false); refetch(); showToast("Patient enregistré."); }} />}
-      {fichePatient && <FichePatient patient={fichePatient} etablissement_id={etablissement_id} medecinNom={medecinNom} medicaments={medicaments} onClose={() => setFichePatient(null)} onPatientUpdated={(msg) => { refetch(); showToast(msg); }} />}
+      {fichePatient && <FichePatient patient={fichePatient} etablissement_id={etablissement_id} medecinNom={medecinNom} hopitalNom={hopitalNom} medicaments={medicaments} onClose={() => setFichePatient(null)} onPatientUpdated={(msg) => { refetch(); showToast(msg); }} />}
 
       {/* KPI */}
       <div style={{ display: "flex", gap: 14, marginBottom: 20, flexWrap: "wrap" }}>
