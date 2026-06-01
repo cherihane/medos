@@ -28,11 +28,13 @@ function EnqueteModal({ onClose, onSaved }) {
     message: "",
   });
   const [saving, setSaving] = useState(false);
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const [formError, setFormError] = useState(null);
+  const set = (k) => (e) => { setFormError(null); setForm((f) => ({ ...f, [k]: e.target.value })); };
 
   const handleSave = async () => {
-    if (!form.titre.trim()) return alert("Le titre est obligatoire.");
+    if (!form.titre.trim()) { setFormError("Le titre de l'enquête est obligatoire."); return; }
     setSaving(true);
+    setFormError(null);
     try {
       await insertAlerte({
         type: "contrefacon",
@@ -45,7 +47,7 @@ function EnqueteModal({ onClose, onSaved }) {
       onSaved();
       onClose();
     } catch (e) {
-      alert("Erreur : " + e.message);
+      setFormError("Erreur : " + e.message);
     } finally {
       setSaving(false);
     }
@@ -79,6 +81,11 @@ function EnqueteModal({ onClose, onSaved }) {
           placeholder="Détails de l'incident, signalements reçus…"
         />
       </Field>
+      {formError && (
+        <div style={{ padding: "10px 14px", backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, fontSize: 13, color: "#DC2626" }}>
+          {formError}
+        </div>
+      )}
       <ModalFooter onCancel={onClose} onSubmit={handleSave} submitLabel="Ouvrir l'enquête" saving={saving} />
     </Modal>
   );

@@ -2,6 +2,7 @@ import { useState } from "react";
 import Layout from "../../components/Layout";
 import { useAlertesPaginated } from "../../hooks/useSupabaseData";
 import Pagination from "../../components/Pagination";
+import { supabase } from "../../supabaseClient";
 
 const severityStyle = {
   critique: { bg: "#FEF2F2", border: "#FCA5A5", color: "#EF4444", dot: "#EF4444" },
@@ -18,10 +19,23 @@ export default function AlertesDistributeur() {
   const [filter, setFilter] = useState("tous");
   const { data: alertes, loading, error, total, page, setPage, totalPages } = useAlertesPaginated(filter);
   const [readIds, setReadIds] = useState(new Set());
+  const [markingAll, setMarkingAll] = useState(false);
 
   const markRead = (id) => setReadIds((prev) => new Set([...prev, id]));
   const filtered = alertes;
   const unreadCount = alertes.filter((a) => !readIds.has(a.id)).length;
+
+  const markAllRead = async () => {
+    setMarkingAll(true);
+    try {
+      const { data: unread } = await supabase.from("alertes").select("id").eq("resolu", false);
+      if (unread && unread.length > 0) {
+        setReadIds(new Set(unread.map((a) => a.id)));
+      }
+    } finally {
+      setMarkingAll(false);
+    }
+  };
 
   return (
     <Layout title="Alertes" subtitle="Surveillance des alertes de distribution et livraison">
@@ -37,8 +51,8 @@ export default function AlertesDistributeur() {
           ))}
           {unreadCount > 0 && <span style={{ padding: "3px 10px", backgroundColor: "#EF4444", color: "white", borderRadius: 12, fontSize: 12, fontWeight: 700 }}>{unreadCount} non lues</span>}
         </div>
-        <button onClick={() => setReadIds(new Set(alertes.map(a => a.id)))} style={{ padding: "8px 16px", backgroundColor: "white", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 13, color: "#374151", cursor: "pointer", fontWeight: 600 }}>
-          Tout marquer lu
+        <button onClick={markAllRead} disabled={markingAll} style={{ padding: "8px 16px", backgroundColor: "white", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 13, color: "#374151", cursor: markingAll ? "wait" : "pointer", fontWeight: 600 }}>
+          {markingAll ? "…" : "Tout marquer lu"}
         </button>
       </div>
 

@@ -20,6 +20,12 @@ function getStatut(m) {
   return "normal";
 }
 
+const InlineError = ({ msg }) => msg ? (
+  <div style={{ padding: "10px 14px", backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, fontSize: 13, color: "#DC2626", marginBottom: 4 }}>
+    {msg}
+  </div>
+) : null;
+
 function EditModal({ med, onClose, onSaved }) {
   const [form, setForm] = useState({
     nom: med.nom ?? "", stock_actuel: med.stock_actuel ?? 0,
@@ -27,17 +33,19 @@ function EditModal({ med, onClose, onSaved }) {
     categorie: med.categorie ?? "",
   });
   const [saving, setSaving] = useState(false);
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const [formError, setFormError] = useState(null);
+  const set = (k) => (e) => { setFormError(null); setForm((f) => ({ ...f, [k]: e.target.value })); };
   const handleSave = async () => {
+    if (!form.nom.trim()) { setFormError("Le nom est obligatoire."); return; }
     setSaving(true);
     try {
       await updateMedicament(med.id, { ...form, stock_actuel: Number(form.stock_actuel), stock_minimum: Number(form.stock_minimum), prix_unitaire: Number(form.prix_unitaire) });
       onSaved(); onClose();
-    } catch (e) { alert("Erreur : " + e.message); } finally { setSaving(false); }
+    } catch (e) { setFormError("Erreur : " + e.message); } finally { setSaving(false); }
   };
   return (
     <Modal title={`Éditer — ${med.nom}`} onClose={onClose}>
-      <Field label="Nom"><input style={inputStyle} value={form.nom} onChange={set("nom")} /></Field>
+      <Field label="Nom *"><input style={inputStyle} value={form.nom} onChange={set("nom")} /></Field>
       <Row>
         <Field label="Stock actuel"><input style={inputStyle} type="number" min="0" value={form.stock_actuel} onChange={set("stock_actuel")} /></Field>
         <Field label="Seuil minimum"><input style={inputStyle} type="number" min="0" value={form.stock_minimum} onChange={set("stock_minimum")} /></Field>
@@ -46,6 +54,7 @@ function EditModal({ med, onClose, onSaved }) {
         <Field label="Prix (FCFA)"><input style={inputStyle} type="number" min="0" value={form.prix_unitaire} onChange={set("prix_unitaire")} /></Field>
         <Field label="Catégorie"><input style={inputStyle} value={form.categorie} onChange={set("categorie")} /></Field>
       </Row>
+      <InlineError msg={formError} />
       <ModalFooter onCancel={onClose} onSubmit={handleSave} submitLabel="Sauvegarder" saving={saving} />
     </Modal>
   );
@@ -54,14 +63,15 @@ function EditModal({ med, onClose, onSaved }) {
 function CommanderModal({ med, fournisseurs, onClose, onSaved }) {
   const [form, setForm] = useState({ fournisseur_id: fournisseurs[0]?.id ?? "", quantite: med.stock_minimum ?? 50, date_livraison_prevue: "" });
   const [saving, setSaving] = useState(false);
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const [formError, setFormError] = useState(null);
+  const set = (k) => (e) => { setFormError(null); setForm((f) => ({ ...f, [k]: e.target.value })); };
   const handleSave = async () => {
-    if (!form.fournisseur_id) return alert("Sélectionnez un fournisseur.");
+    if (!form.fournisseur_id) { setFormError("Sélectionnez un fournisseur."); return; }
     setSaving(true);
     try {
       await insertCommande({ fournisseur_id: form.fournisseur_id, statut: "envoyee", date_commande: new Date().toISOString(), date_livraison_prevue: form.date_livraison_prevue || null, montant_total: 0, notes: `${med.nom} — Qté : ${form.quantite}` });
       onSaved(); onClose();
-    } catch (e) { alert("Erreur : " + e.message); } finally { setSaving(false); }
+    } catch (e) { setFormError("Erreur : " + e.message); } finally { setSaving(false); }
   };
   return (
     <Modal title={`Commander — ${med.nom}`} onClose={onClose}>
@@ -75,6 +85,7 @@ function CommanderModal({ med, fournisseurs, onClose, onSaved }) {
         <Field label="Quantité"><input style={inputStyle} type="number" min="1" value={form.quantite} onChange={set("quantite")} /></Field>
         <Field label="Livraison souhaitée"><input style={inputStyle} type="date" value={form.date_livraison_prevue} onChange={set("date_livraison_prevue")} /></Field>
       </Row>
+      <InlineError msg={formError} />
       <ModalFooter onCancel={onClose} onSubmit={handleSave} submitLabel="Passer la commande" saving={saving} />
     </Modal>
   );
@@ -83,14 +94,15 @@ function CommanderModal({ med, fournisseurs, onClose, onSaved }) {
 function NouveauModal({ onClose, onSaved }) {
   const [form, setForm] = useState({ nom: "", code: "", categorie: "", stock_actuel: 0, stock_minimum: 0, prix_unitaire: 0 });
   const [saving, setSaving] = useState(false);
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const [formError, setFormError] = useState(null);
+  const set = (k) => (e) => { setFormError(null); setForm((f) => ({ ...f, [k]: e.target.value })); };
   const handleSave = async () => {
-    if (!form.nom.trim()) return alert("Le nom est obligatoire.");
+    if (!form.nom.trim()) { setFormError("Le nom est obligatoire."); return; }
     setSaving(true);
     try {
       await insertMedicament({ ...form, stock_actuel: Number(form.stock_actuel), stock_minimum: Number(form.stock_minimum), prix_unitaire: Number(form.prix_unitaire) });
       onSaved(); onClose();
-    } catch (e) { alert("Erreur : " + e.message); } finally { setSaving(false); }
+    } catch (e) { setFormError("Erreur : " + e.message); } finally { setSaving(false); }
   };
   return (
     <Modal title="Nouveau médicament" onClose={onClose}>
@@ -104,6 +116,7 @@ function NouveauModal({ onClose, onSaved }) {
         <Field label="Seuil minimum"><input style={inputStyle} type="number" min="0" value={form.stock_minimum} onChange={set("stock_minimum")} /></Field>
       </Row>
       <Field label="Prix unitaire (FCFA)"><input style={inputStyle} type="number" min="0" value={form.prix_unitaire} onChange={set("prix_unitaire")} /></Field>
+      <InlineError msg={formError} />
       <ModalFooter onCancel={onClose} onSubmit={handleSave} submitLabel="Ajouter" saving={saving} />
     </Modal>
   );

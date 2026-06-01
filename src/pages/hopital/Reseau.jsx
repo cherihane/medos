@@ -36,12 +36,14 @@ function EtabModal({ etab, onClose }) {
 function RedistribModal({ etab, medicaments, onClose, onSaved }) {
   const [form, setForm] = useState({ medicament_id: "", quantite: 10, notes: "" });
   const [saving, setSaving] = useState(false);
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const [formError, setFormError] = useState(null);
+  const set = (k) => (e) => { setFormError(null); setForm((f) => ({ ...f, [k]: e.target.value })); };
   const selectedMed = medicaments.find((m) => m.id === form.medicament_id);
 
   const handleSave = async () => {
-    if (!form.medicament_id) return alert("Sélectionnez un médicament.");
+    if (!form.medicament_id) { setFormError("Sélectionnez un médicament à transférer."); return; }
     setSaving(true);
+    setFormError(null);
     try {
       await insertCommande({
         statut: "envoyee",
@@ -52,7 +54,7 @@ function RedistribModal({ etab, medicaments, onClose, onSaved }) {
       onSaved();
       onClose();
     } catch (e) {
-      alert("Erreur : " + e.message);
+      setFormError("Erreur : " + e.message);
     } finally {
       setSaving(false);
     }
@@ -72,6 +74,11 @@ function RedistribModal({ etab, medicaments, onClose, onSaved }) {
       <Field label="Message / justification">
         <input style={inputStyle} value={form.notes} onChange={set("notes")} placeholder="Ex: Surplus de stock, urgence…" />
       </Field>
+      {formError && (
+        <div style={{ padding: "10px 14px", backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, fontSize: 13, color: "#DC2626" }}>
+          {formError}
+        </div>
+      )}
       <ModalFooter onCancel={onClose} onSubmit={handleSave} submitLabel="Envoyer la proposition" saving={saving} />
     </Modal>
   );

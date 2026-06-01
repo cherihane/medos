@@ -7,6 +7,8 @@ import { useMedicamentsPaginated, useMedicamentStats, useFournisseurs } from "..
 import { updateMedicament, insertMedicament, insertCommande } from "../../hooks/useMutations";
 import Pagination from "../../components/Pagination";
 
+const FORMES_GALENIQUES = ["Comprimé", "Gélule", "Sirop", "Injectable", "Crème", "Suppositoire", "Patch"];
+
 function getStatut(med) {
   if (!med.stock_minimum || med.stock_minimum === 0) return "normal";
   const ratio = med.stock_actuel / med.stock_minimum;
@@ -44,13 +46,16 @@ function EditModal({ med, onClose, onSaved }) {
     forme:         med.forme         ?? "",
   });
   const [saving, setSaving] = useState(false);
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const [formError, setFormError] = useState(null);
+  const set = (k) => (e) => { setFormError(null); setForm((f) => ({ ...f, [k]: e.target.value })); };
 
   const handleSave = async () => {
+    if (!form.nom.trim()) { setFormError("Le nom du médicament est obligatoire."); return; }
+    if (Number(form.stock_actuel) < 0) { setFormError("Le stock actuel ne peut pas être négatif."); return; }
     setSaving(true);
     try {
       await updateMedicament(med.id, {
-        nom:           form.nom,
+        nom:           form.nom.trim(),
         stock_actuel:  Number(form.stock_actuel),
         stock_minimum: Number(form.stock_minimum),
         prix_unitaire: Number(form.prix_unitaire),
@@ -60,7 +65,7 @@ function EditModal({ med, onClose, onSaved }) {
       onSaved();
       onClose();
     } catch (e) {
-      alert("Erreur : " + e.message);
+      setFormError("Erreur : " + e.message);
     } finally {
       setSaving(false);
     }
@@ -68,7 +73,7 @@ function EditModal({ med, onClose, onSaved }) {
 
   return (
     <Modal title={`Éditer — ${med.nom}`} onClose={onClose}>
-      <Field label="Nom du médicament">
+      <Field label="Nom du médicament *">
         <input style={inputStyle} value={form.nom} onChange={set("nom")} />
       </Field>
       <Row>
@@ -90,11 +95,16 @@ function EditModal({ med, onClose, onSaved }) {
       <Field label="Forme galénique">
         <select style={selectStyle} value={form.forme} onChange={set("forme")}>
           <option value="">— Sélectionner —</option>
-          {["Comprimé", "Gélule", "Sirop", "Injectable", "Crème", "Suppositoire", "Patch"].map((f) => (
+          {FORMES_GALENIQUES.map((f) => (
             <option key={f} value={f}>{f}</option>
           ))}
         </select>
       </Field>
+      {formError && (
+        <div style={{ padding: "10px 14px", backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, fontSize: 13, color: "#DC2626" }}>
+          {formError}
+        </div>
+      )}
       <ModalFooter onCancel={onClose} onSubmit={handleSave} submitLabel="Sauvegarder" saving={saving} />
     </Modal>
   );
@@ -109,10 +119,12 @@ function CommanderModal({ med, fournisseurs, onClose, onSaved }) {
     notes:                 "",
   });
   const [saving, setSaving] = useState(false);
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const [formError, setFormError] = useState(null);
+  const set = (k) => (e) => { setFormError(null); setForm((f) => ({ ...f, [k]: e.target.value })); };
 
   const handleSave = async () => {
-    if (!form.fournisseur_id) return alert("Veuillez sélectionner un fournisseur.");
+    if (!form.fournisseur_id) { setFormError("Veuillez sélectionner un fournisseur."); return; }
+    if (Number(form.quantite) <= 0) { setFormError("La quantité doit être supérieure à 0."); return; }
     setSaving(true);
     try {
       await insertCommande({
@@ -126,7 +138,7 @@ function CommanderModal({ med, fournisseurs, onClose, onSaved }) {
       onSaved();
       onClose();
     } catch (e) {
-      alert("Erreur : " + e.message);
+      setFormError("Erreur : " + e.message);
     } finally {
       setSaving(false);
     }
@@ -151,6 +163,11 @@ function CommanderModal({ med, fournisseurs, onClose, onSaved }) {
       <Field label="Notes (optionnel)">
         <input style={inputStyle} value={form.notes} onChange={set("notes")} placeholder="Instructions particulières…" />
       </Field>
+      {formError && (
+        <div style={{ padding: "10px 14px", backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, fontSize: 13, color: "#DC2626" }}>
+          {formError}
+        </div>
+      )}
       <ModalFooter onCancel={onClose} onSubmit={handleSave} submitLabel="Passer la commande" saving={saving} />
     </Modal>
   );
@@ -165,14 +182,16 @@ function NouveauModal({ onClose, onSaved }) {
     fabricant: "", dci: "",
   });
   const [saving, setSaving] = useState(false);
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const [formError, setFormError] = useState(null);
+  const set = (k) => (e) => { setFormError(null); setForm((f) => ({ ...f, [k]: e.target.value })); };
 
   const handleSave = async () => {
-    if (!form.nom.trim()) return alert("Le nom est obligatoire.");
+    if (!form.nom.trim()) { setFormError("Le nom du médicament est obligatoire."); return; }
+    if (Number(form.stock_actuel) < 0) { setFormError("Le stock initial ne peut pas être négatif."); return; }
     setSaving(true);
     try {
       await insertMedicament({
-        nom:           form.nom,
+        nom:           form.nom.trim(),
         code:          form.code || null,
         categorie:     form.categorie || null,
         forme:         form.forme || null,
@@ -186,7 +205,7 @@ function NouveauModal({ onClose, onSaved }) {
       onSaved();
       onClose();
     } catch (e) {
-      alert("Erreur : " + e.message);
+      setFormError("Erreur : " + e.message);
     } finally {
       setSaving(false);
     }
@@ -217,7 +236,7 @@ function NouveauModal({ onClose, onSaved }) {
         <Field label="Forme galénique">
           <select style={selectStyle} value={form.forme} onChange={set("forme")}>
             <option value="">— Sélectionner —</option>
-            {["Comprimé", "Gélule", "Sirop", "Injectable", "Crème", "Suppositoire", "Patch"].map((f) => (
+            {FORMES_GALENIQUES.map((f) => (
               <option key={f} value={f}>{f}</option>
             ))}
           </select>
@@ -239,6 +258,11 @@ function NouveauModal({ onClose, onSaved }) {
           <input style={inputStyle} type="number" min="0" value={form.prix_unitaire} onChange={set("prix_unitaire")} />
         </Field>
       </Row>
+      {formError && (
+        <div style={{ padding: "10px 14px", backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, fontSize: 13, color: "#DC2626" }}>
+          {formError}
+        </div>
+      )}
       <ModalFooter onCancel={onClose} onSubmit={handleSave} submitLabel="Ajouter le médicament" saving={saving} />
     </Modal>
   );

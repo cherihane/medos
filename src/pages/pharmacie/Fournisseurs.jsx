@@ -129,11 +129,12 @@ function FournisseurModal({ initial, onClose, onSaved }) {
     : EMPTY_FORM
   );
   const [saving, setSaving] = useState(false);
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const [formError, setFormError] = useState(null);
+  const set = (k) => (e) => { setFormError(null); setForm((f) => ({ ...f, [k]: e.target.value })); };
   const isEdit = !!initial;
 
   const handleSave = async () => {
-    if (!form.nom.trim()) return alert("Le nom du fournisseur est obligatoire.");
+    if (!form.nom.trim()) { setFormError("Le nom du fournisseur est obligatoire."); return; }
     setSaving(true);
     try {
       if (isEdit) {
@@ -144,7 +145,7 @@ function FournisseurModal({ initial, onClose, onSaved }) {
       onSaved();
       onClose();
     } catch (e) {
-      alert("Erreur : " + e.message);
+      setFormError("Erreur : " + e.message);
     } finally {
       setSaving(false);
     }
@@ -180,6 +181,11 @@ function FournisseurModal({ initial, onClose, onSaved }) {
       <Field label="Notes">
         <input style={inputStyle} value={form.notes} onChange={set("notes")} placeholder="Informations complémentaires…" />
       </Field>
+      {formError && (
+        <div style={{ padding: "10px 14px", backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, fontSize: 13, color: "#DC2626" }}>
+          {formError}
+        </div>
+      )}
       <ModalFooter
         onCancel={onClose}
         onSubmit={handleSave}
@@ -198,6 +204,7 @@ function CommandeModal({ fournisseur, etablissement_id, auth, onClose, onSaved }
   const [dateLivraison, setDateLivraison] = useState("");
   const [notes, setNotes]                 = useState("");
   const [saving, setSaving]               = useState(false);
+  const [formError, setFormError]         = useState(null);
 
   // Médicament sélectionné et calcul automatique du montant
   const selectedMed  = medicaments.find((m) => m.id === medicamentId) || null;
@@ -206,8 +213,8 @@ function CommandeModal({ fournisseur, etablissement_id, auth, onClose, onSaved }
   const montantTotal = qty * prixUnitaire;
 
   const handleSave = async () => {
-    if (!medicamentId) return alert("Veuillez sélectionner un médicament.");
-    if (qty <= 0)      return alert("Veuillez saisir une quantité valide.");
+    if (!medicamentId) { setFormError("Veuillez sélectionner un médicament."); return; }
+    if (qty <= 0)      { setFormError("Veuillez saisir une quantité valide."); return; }
     setSaving(true);
     try {
       await insertCommande({
@@ -222,7 +229,7 @@ function CommandeModal({ fournisseur, etablissement_id, auth, onClose, onSaved }
       onSaved();
       onClose();
     } catch (e) {
-      alert("Erreur : " + e.message);
+      setFormError("Erreur : " + e.message);
     } finally {
       setSaving(false);
     }
@@ -318,6 +325,11 @@ function CommandeModal({ fournisseur, etablissement_id, auth, onClose, onSaved }
         />
       </Field>
 
+      {formError && (
+        <div style={{ padding: "10px 14px", backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, fontSize: 13, color: "#DC2626", marginBottom: 4 }}>
+          {formError}
+        </div>
+      )}
       <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", padding: "16px 0 0" }}>
         <button onClick={onClose} style={{ padding: "9px 18px", background: "white", border: "1.5px solid #E5E7EB", borderRadius: 9, fontSize: 13, color: "#6B7280", cursor: "pointer" }}>Annuler</button>
         {selectedMed && qty > 0 && (
