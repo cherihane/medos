@@ -9,7 +9,7 @@ import Pagination from "../../components/Pagination";
 import { insertPatient, insertOrdonnance } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../supabaseClient";
-import { openDocument, tableHTML, infoGridHTML, alertBannerHTML, signatureRowHTML, etabFromAuth } from "../../utils/MedOSDocument";
+import { openDocument, tableHTML, infoGridHTML, alertBannerHTML, signatureRowHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 const ACCENT = "#10B981";
@@ -65,8 +65,8 @@ function hasAllergies(patient) {
 }
 
 // ── Impression ordonnance ─────────────────────────────────────────────────────
-function printOrdonnance({ ordonnance, patient, hopitalNom, medecinNom, lignes, instr, auth }) {
-  const etab = etabFromAuth(auth) ?? { nom: hopitalNom, ville: "", type: "Hôpital" };
+async function printOrdonnance({ ordonnance, patient, hopitalNom, medecinNom, lignes, instr, auth }) {
+  const etab = await fetchEtabFromAuth(auth) ?? { nom: hopitalNom, ville: "", type: "Hôpital" };
   const ref  = ordonnance.reference ?? "—";
   const emis = fmtDate(ordonnance.date_emission);
   const exp  = ordonnance.date_expiration ? `Expire le ${fmtDate(ordonnance.date_expiration)}` : null;
@@ -107,8 +107,8 @@ function printOrdonnance({ ordonnance, patient, hopitalNom, medecinNom, lignes, 
 }
 
 // ── Impression fiche patient ──────────────────────────────────────────────────
-function printFichePatient({ patient, ordonnances, comptes, auth }) {
-  const etab = etabFromAuth(auth);
+async function printFichePatient({ patient, ordonnances, comptes, auth }) {
+  const etab = await fetchEtabFromAuth(auth);
   openDocument({
     titre: "Dossier patient",
     sousTitre: `N° ${patient.numero_dossier ?? "—"} — Édité le ${new Date().toLocaleDateString("fr-FR")}`,

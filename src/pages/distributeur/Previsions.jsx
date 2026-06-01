@@ -6,7 +6,7 @@ import { useKpiDistributeur, useCommandes, useMedicamentsCritiques } from "../..
 import { insertCommande } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../supabaseClient";
-import { openDocument, tableHTML, infoGridHTML, etabFromAuth } from "../../utils/MedOSDocument";
+import { openDocument, tableHTML, infoGridHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
 
 const MOIS_LABELS = ["Jan", "Fev", "Mar", "Avr", "Mai", "Jun", "Jul", "Aou", "Sep", "Oct", "Nov", "Dec"];
 
@@ -283,8 +283,8 @@ function AgirModal({ action, onClose, onSaved, etablissement_id, distributeurNom
               Annuler
             </button>
             <button
-              onClick={() => {
-                const etab = etabFromAuth(auth);
+              onClick={async () => {
+                const etab = await fetchEtabFromAuth(auth);
                 openDocument({
                   titre: "Bon de commande fabricant",
                   sousTitre: `Prévision IA — Émis le ${new Date().toLocaleDateString("fr-FR")}`,

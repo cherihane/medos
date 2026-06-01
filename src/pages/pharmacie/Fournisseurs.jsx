@@ -6,11 +6,11 @@ import { useToast } from "../../hooks/useToast";
 import { useFournisseursPaginated, useCommandesRealtime, useMedicaments } from "../../hooks/useSupabaseData";
 import { insertCommande, insertFournisseur, updateFournisseur } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
-import { openDocument, tableHTML, infoGridHTML, etabFromAuth } from "../../utils/MedOSDocument";
+import { openDocument, tableHTML, infoGridHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
 import Pagination from "../../components/Pagination";
 
-function printBonCommandeFournisseur({ fournisseur, medicamentNom, quantite, dateLivraison, notes, montantTotal, auth }) {
-  const etab = etabFromAuth(auth);
+async function printBonCommandeFournisseur({ fournisseur, medicamentNom, quantite, dateLivraison, notes, montantTotal, auth }) {
+  const etab = await fetchEtabFromAuth(auth);
   const dateFr = new Date().toLocaleDateString("fr-FR");
   openDocument({
     titre: "Bon de commande fournisseur",

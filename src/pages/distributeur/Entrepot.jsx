@@ -13,7 +13,7 @@ import { useToast } from "../../hooks/useToast";
 import { useMedicaments } from "../../hooks/useSupabaseData";
 import { insertLot, incrementStock, insertCommande } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
-import { openDocument, tableHTML, infoGridHTML, etabFromAuth } from "../../utils/MedOSDocument";
+import { openDocument, tableHTML, infoGridHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
 
 function printBonCommandeFabricant({ header, lignes, etab }) {
   const dateFr = new Date().toLocaleDateString("fr-FR");
@@ -481,14 +481,15 @@ function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id
               Annuler
             </button>
             <button
-              onClick={() => {
+              onClick={async () => {
                 const lignesValides = lignes.filter((l) => l.medicament_id && parseInt(l.quantite, 10) > 0);
                 if (lignesValides.length === 0) return;
                 const lignesPrint = lignesValides.map((l) => {
                   const med = medicaments.find((m) => m.id === l.medicament_id);
                   return { medicamentNom: med?.nom ?? "—", quantite: parseInt(l.quantite, 10) };
                 });
-                printBonCommandeFabricant({ header, lignes: lignesPrint, etab: etabFromAuth(auth) });
+                const etab = await fetchEtabFromAuth(auth);
+                printBonCommandeFabricant({ header, lignes: lignesPrint, etab });
               }}
               style={{ padding: "11px 16px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
             >
