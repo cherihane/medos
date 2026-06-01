@@ -227,7 +227,16 @@ export default function Login() {
             </button>
           </form>
 
-          <p style={{ textAlign: "center", fontSize: 11, color: "#9CA3AF", marginTop: 24 }}>
+          <p style={{ textAlign: "center", marginTop: 16, marginBottom: 0 }}>
+            <a href="/inscription" style={{ fontSize: 12, color: "#6B7280", textDecoration: "none" }}
+              onMouseEnter={(e) => e.target.style.color = "#3B82F6"}
+              onMouseLeave={(e) => e.target.style.color = "#6B7280"}
+            >
+              Pas encore de compte ? Demander un accès
+            </a>
+          </p>
+
+          <p style={{ textAlign: "center", fontSize: 11, color: "#9CA3AF", marginTop: 16 }}>
             2024 Kela Group — Tous droits réservés
           </p>
         </div>
