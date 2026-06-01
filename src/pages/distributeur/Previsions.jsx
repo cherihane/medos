@@ -93,7 +93,7 @@ async function sendCommandeEmail({ emailFabricant, fabricant, medicament, quanti
 
   <div style="background:#F8FAFC;padding:16px 32px;border-top:1px solid #e5e7eb;text-align:center">
     <p style="font-size:12px;color:#9CA3AF;margin:0">
-      MedOS — Plateforme de distribution médicale &nbsp;·&nbsp; Côte d'Ivoire
+      MedOS — ${distributeur}
     </p>
   </div>
 </div>`;
