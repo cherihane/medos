@@ -4,12 +4,11 @@ import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useKpiAutorite, useMedicaments, useEtablissements, useAlertes } from "../../hooks/useSupabaseData";
 import { useAuth } from "../../context/AuthContext";
-import { openDocument, tableHTML, kpiHTML, etabFromAuth } from "../../utils/MedOSDocument";
+import { openDocument, tableHTML, kpiHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
 
 
 export default function RapportsODD() {
   const { auth } = useAuth();
-  const etab = etabFromAuth(auth);
   const { data: kpi } = useKpiAutorite();
   const { data: medicaments } = useMedicaments();
   const { data: etablissements } = useEtablissements();
@@ -30,8 +29,9 @@ export default function RapportsODD() {
     { goal: "ODD 3.b", label: "Acces medicaments essentiels", progress: null,         target: 85 },
   ];
 
-  const genererPDF = (rapportNom) => {
+  const genererPDF = async (rapportNom) => {
     setGenerating(rapportNom);
+    const etab = await fetchEtabFromAuth(auth);
 
     const oddRows = oddData.map((o) => {
       const ok = o.progress >= o.target;

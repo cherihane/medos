@@ -305,18 +305,47 @@ export function signatureRowHTML(labels) {
 // ── Helper auth ───────────────────────────────────────────────────────────────
 
 /**
- * Construit l'objet établissement depuis le contexte auth.
+ * Construit l'objet établissement depuis le contexte auth (synchrone, valeurs statiques).
+ * Utilisé comme fallback interne — préférer fetchEtabFromAuth pour les documents imprimés.
  * @param {object|null} auth
  * @returns {{ nom: string, ville: string, type: string }}
  */
 export function etabFromAuth(auth) {
   if (!auth) return { nom: "MedOS", ville: "", type: "" };
   const [ville = ""] = (auth.location ?? "").split(",");
+  const nom = auth.structure || auth.user?.email || "MedOS";
   return {
-    nom:  auth.structure ?? "MedOS",
+    nom,
     ville: ville.trim(),
     type: auth.label ?? "",
   };
+}
+
+/**
+ * Construit l'objet établissement depuis le contexte auth en interrogeant la base de données.
+ * Priorité : nom réel dans `etablissements` > auth.structure > auth.user.email > "MedOS".
+ * @param {object|null} auth
+ * @returns {Promise<{ nom: string, ville: string, type: string }>}
+ */
+export async function fetchEtabFromAuth(auth) {
+  const fallback = etabFromAuth(auth);
+  if (!auth?.etablissement_id) return fallback;
+  try {
+    const { supabase } = await import("../supabaseClient");
+    const { data } = await supabase
+      .from("etablissements")
+      .select("nom, ville, type")
+      .eq("id", auth.etablissement_id)
+      .maybeSingle();
+    if (!data) return fallback;
+    return {
+      nom:   data.nom  || fallback.nom,
+      ville: data.ville || fallback.ville,
+      type:  data.type  || fallback.type,
+    };
+  } catch {
+    return fallback;
+  }
 }
 
 // ── Ouverture document ────────────────────────────────────────────────────────

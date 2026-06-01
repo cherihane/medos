@@ -3,7 +3,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recha
 import Layout from "../../components/Layout";
 import { useAuth } from "../../context/AuthContext";
 import { useOrdonnances, useMedicaments } from "../../hooks/useSupabaseData";
-import { openDocument, tableHTML, kpiHTML, etabFromAuth } from "../../utils/MedOSDocument";
+import { openDocument, tableHTML, kpiHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
 
 const MOIS_LABELS = ["Jan", "Fev", "Mar", "Avr", "Mai", "Jun", "Jul", "Aou", "Sep", "Oct", "Nov", "Dec"];
 
@@ -31,7 +31,6 @@ function exportRapportGlobal(etab, monthlyData, kpis) {
 
 export default function Rapports() {
   const { auth } = useAuth();
-  const etab = etabFromAuth(auth);
   const { data: ordonnances, loading: loadOrd } = useOrdonnances();
   const { data: medicaments, loading: loadMed } = useMedicaments();
 
@@ -110,7 +109,7 @@ export default function Rapports() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Synthese</h3>
           <button
-            onClick={() => exportRapportGlobal(etab, monthlyData, kpis)}
+            onClick={async () => { const etab = await fetchEtabFromAuth(auth); exportRapportGlobal(etab, monthlyData, kpis); }}
             style={{ padding: "7px 16px", backgroundColor: "#10B981", color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
           >
             Generer rapport

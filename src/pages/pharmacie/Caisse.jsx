@@ -6,7 +6,7 @@ import { useMedicaments } from "../../hooks/useSupabaseData";
 import { insertVentes, decrementStock, insertJournalCaisse, fetchJournalJour, insertClotureCaisse, fetchClotureCaisse } from "../../hooks/useMutations";
 import { supabase } from "../../supabaseClient";
 import { useAuth } from "../../context/AuthContext";
-import { openDocument, tableHTML, kpiHTML, etabFromAuth } from "../../utils/MedOSDocument";
+import { openDocument, tableHTML, kpiHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 function todayISO() {
@@ -160,8 +160,8 @@ function printCloture({ date, totaux, nb, gerant, etab }) {
 }
 
 // ─── Impression journal du gérant ─────────────────────────────────────────────
-function printJournal(journal, date, auth) {
-  const etab = etabFromAuth(auth);
+async function printJournal(journal, date, auth) {
+  const etab = await fetchEtabFromAuth(auth);
   const totalEncaisse = journal.reduce((s, r) => s + (r.montant_total ?? 0), 0);
   const totalEspeces  = journal.filter((r) => r.mode_paiement === "especes").reduce((s, r) => s + (r.montant_total ?? 0), 0);
   const totalMonnaie  = journal.reduce((s, r) => s + (r.monnaie_rendue ?? 0), 0);
@@ -332,7 +332,7 @@ function OngletCaisse({ onSaleComplete }) {
         total,
         montantRecu: montantRecuNum,
         monnaie: monnaieRendue,
-        etab: etabFromAuth(auth),
+        etab: await fetchEtabFromAuth(auth),
       });
       setCart([]);
       setMontantRecu("");
@@ -564,7 +564,6 @@ function OngletCaisse({ onSaleComplete }) {
 
 // ─── Modal clôture de caisse ─────────────────────────────────────────────────
 function ClotureModal({ date, journal, byMode, totalEncaisse, auth, onClose, onDone }) {
-  const etab = etabFromAuth(auth);
   const [password, setPassword] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(null);
@@ -599,6 +598,7 @@ function ClotureModal({ date, journal, byMode, totalEncaisse, auth, onClose, onD
         total_encaisse:   totaux.total,
         nb_transactions:  nb,
       });
+      const etab = await fetchEtabFromAuth(auth);
       printCloture({
         date,
         totaux,
@@ -749,7 +749,7 @@ function OngletJournal({ refreshKey }) {
             </span>
           </div>
           <button
-            onClick={() => printCloture({ date, totaux: { especes: 0, mobile: 0, credit: 0, autres: 0, total: cloture.total_encaisse ?? 0 }, nb: cloture.nb_transactions ?? 0, gerant: cloture.gerant_email ?? "Gérant", etab: etabFromAuth(auth) })}
+            onClick={async () => { const etab = await fetchEtabFromAuth(auth); printCloture({ date, totaux: { especes: 0, mobile: 0, credit: 0, autres: 0, total: cloture.total_encaisse ?? 0 }, nb: cloture.nb_transactions ?? 0, gerant: cloture.gerant_email ?? "Gérant", etab }); }}
             style={{ padding: "6px 14px", backgroundColor: "#16A34A", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
           >
             Réimprimer

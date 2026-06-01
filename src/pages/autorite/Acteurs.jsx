@@ -2,7 +2,7 @@ import { useState } from "react";
 import Layout from "../../components/Layout";
 import { useAuth } from "../../context/AuthContext";
 import { useEtablissements } from "../../hooks/useSupabaseData";
-import { openDocument, tableHTML, etabFromAuth } from "../../utils/MedOSDocument";
+import { openDocument, tableHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
 
 // ─── Modal Inspection ────────────────────────────────────────────────────────
 function InspectionModal({ acteur, onClose }) {
@@ -66,7 +66,6 @@ function exportRegistre(liste, etab) {
 
 export default function Acteurs() {
   const { auth } = useAuth();
-  const etab = etabFromAuth(auth);
   const { data: etablissements, loading } = useEtablissements();
   const [inspected, setInspected] = useState(null);
   const [search, setSearch] = useState("");
@@ -116,7 +115,7 @@ export default function Acteurs() {
             style={{ padding: "7px 12px", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 12, outline: "none", flex: 1, maxWidth: 300 }}
           />
           <button
-            onClick={() => exportRegistre(filtered, etab)}
+            onClick={async () => { const etab = await fetchEtabFromAuth(auth); exportRegistre(filtered, etab); }}
             disabled={filtered.length === 0}
             style={{ padding: "7px 14px", backgroundColor: filtered.length === 0 ? "#E5E7EB" : "#8B5CF6", color: filtered.length === 0 ? "#9CA3AF" : "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: filtered.length === 0 ? "not-allowed" : "pointer", flexShrink: 0 }}
           >

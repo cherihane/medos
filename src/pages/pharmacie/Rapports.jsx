@@ -2,7 +2,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pi
 import Layout from "../../components/Layout";
 import { useMedicaments, useAlertes, usePatients } from "../../hooks/useSupabaseData";
 import { useAuth } from "../../context/AuthContext";
-import { openDocument, tableHTML, alertBannerHTML, etabFromAuth } from "../../utils/MedOSDocument";
+import { openDocument, tableHTML, alertBannerHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
 
 function exportRapport(type, { medicaments, alertes, patients }, etab) {
   const dateFr = new Date().toLocaleDateString("fr-FR");
@@ -80,7 +80,6 @@ const COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#8B5CF6", "#EF4444", "#EC4899"
 
 export default function Rapports() {
   const { auth } = useAuth();
-  const etab = etabFromAuth(auth);
   const { data: medicaments, loading: loadMed } = useMedicaments();
   const { data: alertes, loading: loadAlt } = useAlertes(50);
   const { data: patients, loading: loadPat } = usePatients();
@@ -223,7 +222,7 @@ export default function Rapports() {
                 <div style={{ fontSize: 13, fontWeight: 600, color: "#0A1628" }}>{r.name}</div>
                 <div style={{ fontSize: 11, color: "#9CA3AF" }}>{r.date} · {r.pages}</div>
               </div>
-              <button onClick={() => exportRapport(r.name, { medicaments, alertes, patients }, etab)} style={{ padding: "6px 14px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>
+              <button onClick={async () => { const etab = await fetchEtabFromAuth(auth); exportRapport(r.name, { medicaments, alertes, patients }, etab); }} style={{ padding: "6px 14px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>
                 Exporter
               </button>
             </div>
