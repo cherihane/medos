@@ -11,7 +11,78 @@ import Layout from "../../components/Layout";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useMedicaments } from "../../hooks/useSupabaseData";
-import { insertLot, incrementStock } from "../../hooks/useMutations";
+import { insertLot, incrementStock, insertCommande } from "../../hooks/useMutations";
+import { useAuth } from "../../context/AuthContext";
+
+// ── Resend ────────────────────────────────────────────────────────────────────
+const RESEND_KEY = "re_iUaDVQFG_LAX2mHCRxm6rf216167mGdJY";
+
+async function sendCommandeEmail({ emailFabricant, medicamentNom, fabricant, quantite, dateLivraison, notes, distributeur }) {
+  const dateStr = dateLivraison
+    ? new Date(dateLivraison).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })
+    : "Non précisée";
+  const now = new Date().toLocaleString("fr-FR", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
+  const html = `
+<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb">
+  <div style="background:#F59E0B;padding:28px 32px">
+    <h1 style="color:white;margin:0;font-size:20px;font-weight:700">Commande de médicaments</h1>
+    <p style="color:rgba(255,255,255,0.88);margin:6px 0 0;font-size:13px">MedOS — Plateforme de distribution médicale</p>
+  </div>
+  <div style="padding:28px 32px">
+    <p style="font-size:14px;color:#374151;margin:0 0 20px">Bonjour,</p>
+    <p style="font-size:14px;color:#374151;margin:0 0 20px">
+      Le distributeur <strong>${distributeur}</strong> vous adresse une commande via la plateforme MedOS.
+      Veuillez en prendre note et confirmer la disponibilité dans les meilleurs délais.
+    </p>
+    <div style="background:#F8FAFC;border-radius:10px;padding:20px;margin-bottom:20px">
+      <h2 style="font-size:14px;font-weight:700;color:#0A1628;margin:0 0 14px">Détails de la commande</h2>
+      <table style="width:100%;border-collapse:collapse">
+        <tr>
+          <td style="padding:9px 0;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:13px;width:46%">Médicament</td>
+          <td style="padding:9px 0;border-bottom:1px solid #e5e7eb;font-weight:700;font-size:13px;color:#0A1628">${medicamentNom}</td>
+        </tr>
+        ${fabricant ? `<tr>
+          <td style="padding:9px 0;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:13px">Fabricant</td>
+          <td style="padding:9px 0;border-bottom:1px solid #e5e7eb;font-weight:700;font-size:13px;color:#0A1628">${fabricant}</td>
+        </tr>` : ""}
+        <tr>
+          <td style="padding:9px 0;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:13px">Quantité commandée</td>
+          <td style="padding:9px 0;border-bottom:1px solid #e5e7eb;font-weight:700;font-size:13px;color:#0A1628">${quantite} unités</td>
+        </tr>
+        <tr>
+          <td style="padding:9px 0;border-bottom:${notes ? "1px solid #e5e7eb" : "none"};color:#6b7280;font-size:13px">Date de livraison souhaitée</td>
+          <td style="padding:9px 0;border-bottom:${notes ? "1px solid #e5e7eb" : "none"};font-weight:700;font-size:13px;color:#0A1628">${dateStr}</td>
+        </tr>
+        ${notes ? `<tr>
+          <td style="padding:9px 0;color:#6b7280;font-size:13px">Instructions particulières</td>
+          <td style="padding:9px 0;font-size:13px;color:#374151">${notes}</td>
+        </tr>` : ""}
+      </table>
+    </div>
+    <div style="background:#FFFBEB;border-left:4px solid #F59E0B;border-radius:6px;padding:12px 16px;margin-bottom:24px">
+      <p style="font-size:12px;color:#92400E;margin:0">
+        Merci de répondre directement à cet email ou de contacter le distributeur pour confirmer la disponibilité et le délai de livraison.
+      </p>
+    </div>
+    <p style="font-size:13px;color:#6b7280;margin:0">Commande émise le ${now}</p>
+  </div>
+  <div style="background:#F8FAFC;padding:16px 32px;border-top:1px solid #e5e7eb;text-align:center">
+    <p style="font-size:12px;color:#9CA3AF;margin:0">MedOS — ${distributeur}</p>
+  </div>
+</div>`;
+
+  await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from:    "MedOS Distribution <onboarding@resend.dev>",
+      to:      [emailFabricant],
+      subject: `Commande MedOS — ${medicamentNom} (${quantite} unités)`,
+      html,
+    }),
+  });
+}
 
 // ── Utilitaires ───────────────────────────────────────────────────────────────
 const ACCENT = "#F59E0B";
@@ -190,12 +261,158 @@ function ModalReception({ medicaments, onClose, onSuccess }) {
   );
 }
 
+// ── Modal Nouvelle commande fabricant ─────────────────────────────────────────
+function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id, onClose, onSuccess }) {
+  const [form, setForm] = useState({
+    medicament_id:  "",
+    email_fabricant: "",
+    fabricant:      "",
+    quantite:       "",
+    date_livraison: "",
+    notes:          "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr]       = useState(null);
+
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const medicamentNom = medicaments.find((m) => m.id === form.medicament_id)?.nom ?? "";
+
+  const handleSubmit = async () => {
+    setErr(null);
+    if (!form.medicament_id)                              { setErr("Sélectionnez un médicament."); return; }
+    if (!form.email_fabricant.trim() || !form.email_fabricant.includes("@")) { setErr("Email du fabricant invalide."); return; }
+    const qty = parseInt(form.quantite, 10);
+    if (!qty || qty <= 0)                                 { setErr("Quantité invalide."); return; }
+
+    setSaving(true);
+    try {
+      const notesFinales = [
+        `Médicament : ${medicamentNom}`,
+        form.fabricant.trim() ? `Fabricant : ${form.fabricant.trim()}` : null,
+        `Email fabricant : ${form.email_fabricant.trim()}`,
+        `Quantité commandée : ${qty} unités`,
+        `Livraison souhaitée : ${form.date_livraison || "Non précisée"}`,
+        form.notes.trim() ? `Instructions : ${form.notes.trim()}` : null,
+      ].filter(Boolean).join(" | ");
+
+      await insertCommande({
+        statut:                "envoyee",
+        date_commande:         new Date().toISOString(),
+        date_livraison_prevue: form.date_livraison || null,
+        montant_total:         0,
+        notes:                 notesFinales,
+        ...(etablissement_id ? { etablissement_id } : {}),
+      });
+
+      await sendCommandeEmail({
+        emailFabricant: form.email_fabricant.trim(),
+        medicamentNom,
+        fabricant:      form.fabricant.trim(),
+        quantite:       qty,
+        dateLivraison:  form.date_livraison,
+        notes:          form.notes.trim(),
+        distributeur:   distributeurNom,
+      });
+
+      onSuccess(`Commande envoyée à ${form.email_fabricant.trim()} pour ${medicamentNom}.`);
+    } catch (e) {
+      setErr(e.message);
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.45)", zIndex: 1100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ backgroundColor: "white", borderRadius: 16, padding: 28, width: "100%", maxWidth: 520, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#0A1628" }}>Nouvelle commande fabricant</h3>
+            <p style={{ margin: "4px 0 0", fontSize: 12, color: "#6B7280" }}>Un email de commande sera envoyé automatiquement au fabricant</p>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9CA3AF", lineHeight: 1 }}>×</button>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {/* Médicament */}
+          <div>
+            <label style={labelStyle}>Médicament <span style={{ color: "#EF4444" }}>*</span></label>
+            <select value={form.medicament_id} onChange={(e) => set("medicament_id", e.target.value)}
+              style={{ ...inputStyle, backgroundColor: "white" }}>
+              <option value="">— Sélectionner un médicament —</option>
+              {medicaments.map((m) => (
+                <option key={m.id} value={m.id}>{m.nom}{m.dosage ? ` ${m.dosage}` : ""}{m.forme ? ` — ${m.forme}` : ""}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Fabricant (optionnel) + Email (obligatoire) */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div>
+              <label style={labelStyle}>Nom du fabricant</label>
+              <input value={form.fabricant} onChange={(e) => set("fabricant", e.target.value)}
+                placeholder="Ex: Sanofi, Pfizer…" style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Email du fabricant <span style={{ color: "#EF4444" }}>*</span></label>
+              <input type="email" value={form.email_fabricant} onChange={(e) => set("email_fabricant", e.target.value)}
+                placeholder="commandes@fabricant.com" style={inputStyle} />
+            </div>
+          </div>
+
+          {/* Quantité + Date */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div>
+              <label style={labelStyle}>Quantité souhaitée <span style={{ color: "#EF4444" }}>*</span></label>
+              <input type="number" min="1" value={form.quantite} onChange={(e) => set("quantite", e.target.value)}
+                placeholder="Ex: 1000" style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Date de livraison souhaitée</label>
+              <input type="date" value={form.date_livraison} onChange={(e) => set("date_livraison", e.target.value)}
+                style={inputStyle} />
+            </div>
+          </div>
+
+          {/* Instructions */}
+          <div>
+            <label style={labelStyle}>Instructions particulières</label>
+            <input value={form.notes} onChange={(e) => set("notes", e.target.value)}
+              placeholder="Conditionnement, urgence, température de transport…" style={inputStyle} />
+          </div>
+        </div>
+
+        {err && (
+          <div style={{ marginTop: 14, padding: "8px 12px", backgroundColor: "#FEF2F2", borderRadius: 8, fontSize: 12, color: "#DC2626" }}>
+            {err}
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: "11px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 10, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>
+            Annuler
+          </button>
+          <button onClick={handleSubmit} disabled={saving}
+            style={{ flex: 2, padding: "11px", backgroundColor: saving ? "#E5E7EB" : ACCENT, color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+            {saving ? (
+              <><div style={{ width: 14, height: 14, border: "2px solid #9CA3AF", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />Envoi en cours…</>
+            ) : "Envoyer la commande"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function Entrepot() {
+  const { auth } = useAuth();
   const { data: medicaments, loading, refetch } = useMedicaments();
   const { toasts, success, error: toastError } = useToast();
-  const [showModal, setShowModal] = useState(false);
-  const [recherche, setRecherche] = useState("");
+  const [showModal, setShowModal]               = useState(false);
+  const [showCommande, setShowCommande]         = useState(false);
+  const [recherche, setRecherche]               = useState("");
 
   const stockFaible = medicaments.filter((m) => m.stock_actuel < m.stock_minimum);
 
@@ -222,6 +439,15 @@ export default function Entrepot() {
           medicaments={medicaments}
           onClose={() => setShowModal(false)}
           onSuccess={handleSuccess}
+        />
+      )}
+      {showCommande && (
+        <ModalCommandeFabricant
+          medicaments={medicaments}
+          distributeurNom={auth?.structure ?? "MedDistrib International"}
+          etablissement_id={auth?.etablissement_id ?? null}
+          onClose={() => setShowCommande(false)}
+          onSuccess={(msg) => { setShowCommande(false); success(msg); }}
         />
       )}
 
@@ -253,6 +479,14 @@ export default function Entrepot() {
           <span style={{ fontSize: 12, color: "#6B7280" }}>
             {loading ? "Chargement…" : `${filtered.length} produit${filtered.length !== 1 ? "s" : ""}`}
           </span>
+          <button
+            onClick={() => setShowCommande(true)}
+            style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 18px", backgroundColor: "white", color: ACCENT, border: `1.5px solid ${ACCENT}`, borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-1.5 7h13M10 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm7 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/>
+            </svg>
+            Nouvelle commande fabricant
+          </button>
           <button
             onClick={() => setShowModal(true)}
             style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 18px", backgroundColor: ACCENT, color: "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
