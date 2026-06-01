@@ -6,6 +6,7 @@ import { NotificationsProvider } from "./context/NotificationsContext";
 import Login from "./pages/Login";
 import Inscription from "./pages/Inscription";
 import Parametres from "./pages/Parametres";
+import MotDePasseOublie from "./pages/MotDePasseOublie";
 
 // Pharmacie
 import PhDashboard from "./pages/pharmacie/Dashboard";
@@ -62,6 +63,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={auth ? <Navigate to={auth.dashboardPath} replace /> : <Login />} />
+      <Route path="/mot-de-passe-oublie" element={<MotDePasseOublie />} />
       <Route path="/inscription" element={<Inscription />} />
       <Route path="/parametres" element={<ProtectedRoute><Parametres /></ProtectedRoute>} />
 

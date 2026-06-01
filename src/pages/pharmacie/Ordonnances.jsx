@@ -3,7 +3,8 @@ import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
-import { useOrdonnances, usePatients } from "../../hooks/useSupabaseData";
+import { useOrdonnancesPaginated, usePatients } from "../../hooks/useSupabaseData";
+import Pagination from "../../components/Pagination";
 import { updateOrdonnance, insertOrdonnance } from "../../hooks/useMutations";
 
 const statusStyle = {
@@ -102,7 +103,8 @@ function NouvelleModal({ patients, onClose, onSaved }) {
 }
 
 export default function Ordonnances() {
-  const { data: ordonnances, loading, error, refetch } = useOrdonnances();
+  const [statutFilter, setStatutFilter] = useState("");
+  const { data: ordonnances, loading, error, total, page, setPage, totalPages, refetch } = useOrdonnancesPaginated(statutFilter);
   const { data: patients } = usePatients();
   const { toasts, success, error: toastError } = useToast();
   const [selected, setSelected] = useState(null);
@@ -140,13 +142,25 @@ export default function Ordonnances() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: 20 }}>
         {/* ── Liste ── */}
         <div style={{ backgroundColor: "white", borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
-          <div style={{ padding: "16px 20px", borderBottom: "1px solid #E5E7EB", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ padding: "16px 20px", borderBottom: "1px solid #E5E7EB", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#0A1628" }}>
-              Ordonnances ({loading ? "…" : ordonnances.length})
+              Ordonnances ({loading ? "…" : total})
             </h3>
-            <button onClick={() => setShowNouvelle(true)} style={{ padding: "7px 14px", backgroundColor: "#3B82F6", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-              + Nouvelle
-            </button>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <select
+                value={statutFilter}
+                onChange={(e) => setStatutFilter(e.target.value)}
+                style={{ padding: "6px 10px", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 12, outline: "none" }}
+              >
+                <option value="">Tous les statuts</option>
+                {Object.entries(statusStyle).map(([k, v]) => (
+                  <option key={k} value={k}>{v.label}</option>
+                ))}
+              </select>
+              <button onClick={() => setShowNouvelle(true)} style={{ padding: "7px 14px", backgroundColor: "#3B82F6", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                + Nouvelle
+              </button>
+            </div>
           </div>
 
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
@@ -166,7 +180,7 @@ export default function Ordonnances() {
               )}
               {!loading && !error && ordonnances.length === 0 && (
                 <tr><td colSpan={5} style={{ padding: 40, textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>
-                  Aucune ordonnance enregistrée
+                  {statutFilter ? "Aucune ordonnance pour ce statut" : "Aucune ordonnance enregistrée"}
                 </td></tr>
               )}
               {!loading && ordonnances.map((o) => {
@@ -187,6 +201,7 @@ export default function Ordonnances() {
               })}
             </tbody>
           </table>
+          <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
         </div>
 
         {/* ── Détail ── */}

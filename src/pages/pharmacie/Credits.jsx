@@ -3,7 +3,8 @@ import Layout from "../../components/Layout";
 import Modal, { Field, ModalFooter, selectStyle } from "../../components/Modal";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
-import { useCommandes } from "../../hooks/useSupabaseData";
+import { useCommandesPaginated, useCommandesStats } from "../../hooks/useSupabaseData";
+import Pagination from "../../components/Pagination";
 import { updateCommande } from "../../hooks/useMutations";
 
 function getStatut(cmd) {
@@ -88,14 +89,18 @@ function PaiementModal({ commande, onClose, onSaved }) {
 }
 
 export default function Credits() {
-  const { data: commandes, loading, error, refetch } = useCommandes();
+  const { data: commandes, loading, error, total, page, setPage, totalPages, refetch } = useCommandesPaginated();
+  const { data: statsData } = useCommandesStats();
   const { toasts, success, error: toastError } = useToast();
   const [paiementModal, setPaiementModal] = useState(null);
 
-  const actives = commandes.filter((c) => !["annulee"].includes(c.statut));
-  const totalEncours = actives.reduce((s, c) => s + (c.montant_total ?? 0), 0);
-  const enAlerte   = actives.filter((c) => getStatut(c) === "alerte").length;
-  const enCritique = actives.filter((c) => getStatut(c) === "critique").length;
+  // KPI globaux calculés sur toutes les commandes (colonnes légères uniquement)
+  const statsActives = statsData.filter((c) => c.statut !== "annulee");
+  const totalEncours = statsActives.reduce((s, c) => s + (c.montant_total ?? 0), 0);
+  const enAlerte   = statsActives.filter((c) => (c.montant_total ?? 0) > 2000000 && (c.montant_total ?? 0) <= 5000000).length;
+  const enCritique = statsActives.filter((c) => (c.montant_total ?? 0) > 5000000).length;
+  // Liste paginée — uniquement les commandes non annulées de la page courante
+  const actives = commandes.filter((c) => c.statut !== "annulee");
 
   return (
     <Layout title="Crédits" subtitle="Suivi des commandes et encours clients">
@@ -183,6 +188,7 @@ export default function Credits() {
             </div>
           );
         })}
+        <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
       </div>
     </Layout>
   );

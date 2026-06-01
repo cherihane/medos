@@ -1,9 +1,10 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle } from "../../components/Modal";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
-import { useFournisseurs, useCommandesRealtime, useMedicaments } from "../../hooks/useSupabaseData";
+import { useFournisseursPaginated, useCommandesRealtime, useMedicaments } from "../../hooks/useSupabaseData";
+import Pagination from "../../components/Pagination";
 import { insertCommande, insertFournisseur, updateFournisseur } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
 import { openDocument, tableHTML, infoGridHTML, etabFromAuth } from "../../utils/MedOSDocument";
@@ -339,20 +340,14 @@ function CommandeModal({ fournisseur, etablissement_id, auth, onClose, onSaved }
 export default function Fournisseurs() {
   const { auth } = useAuth();
   const etablissement_id = auth?.etablissement_id ?? null;
-  const { data: fournisseurs, loading, error, refetch } = useFournisseurs();
+  const [filtre, setFiltre] = useState("actifs"); // "actifs" | "inactifs" | "tous"
+  const { data: liste, loading, error, total, page, setPage, totalPages, refetch } = useFournisseursPaginated(filtre);
   const { toasts, success, error: toastError } = useToast();
 
-  const [filtre, setFiltre] = useState("actifs"); // "actifs" | "inactifs" | "tous"
   const [addModal, setAddModal]         = useState(false);
   const [editModal, setEditModal]       = useState(null);   // fournisseur à éditer
   const [commandModal, setCommandModal] = useState(null);   // fournisseur à commander
   const [toggling, setToggling]         = useState(null);   // id en cours de désactivation
-
-  const liste = useMemo(() => {
-    if (filtre === "actifs")   return fournisseurs.filter((f) => f.actif !== false);
-    if (filtre === "inactifs") return fournisseurs.filter((f) => f.actif === false);
-    return fournisseurs;
-  }, [fournisseurs, filtre]);
 
   const handleToggleActif = async (f) => {
     setToggling(f.id);
@@ -435,7 +430,7 @@ export default function Fournisseurs() {
             ))}
           </div>
           <div style={{ fontSize: 13, color: "#9CA3AF" }}>
-            {loading ? "Chargement…" : `${liste.length} fournisseur${liste.length !== 1 ? "s" : ""}`}
+            {loading ? "Chargement…" : `${total} fournisseur${total !== 1 ? "s" : ""}`}
           </div>
         </div>
 
@@ -556,6 +551,7 @@ export default function Fournisseurs() {
           );
         })}
       </div>
+      <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
     </Layout>
   );
 }

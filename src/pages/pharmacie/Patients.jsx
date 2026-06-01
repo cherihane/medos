@@ -3,7 +3,8 @@ import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
-import { usePatients } from "../../hooks/useSupabaseData";
+import { usePatientsPaginated } from "../../hooks/useSupabaseData";
+import Pagination from "../../components/Pagination";
 import { insertPatient, updatePatient } from "../../hooks/useMutations";
 
 function calcAge(dateNaissance) {
@@ -117,16 +118,11 @@ function PatientModal({ patient, onClose, onSaved }) {
 }
 
 export default function Patients() {
-  const { data: patients, loading, error, refetch } = usePatients();
+  const [search, setSearch] = useState("");
+  const { data: patients, loading, error, total, page, setPage, totalPages, refetch } = usePatientsPaginated(search);
   const { toasts, success } = useToast();
   const [selected, setSelected] = useState(null);
-  const [search, setSearch] = useState("");
   const [modal, setModal] = useState(null); // null | "add" | "edit"
-
-  const filtered = patients.filter((p) => {
-    const fullName = `${p.prenom} ${p.nom}`.toLowerCase();
-    return fullName.includes(search.toLowerCase()) || (p.telephone || "").includes(search);
-  });
 
   return (
     <Layout title="Patients" subtitle="Dossiers patients et historique médicamenteux">
@@ -149,7 +145,7 @@ export default function Patients() {
         <div style={{ backgroundColor: "white", borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
           <div style={{ padding: "16px 20px", borderBottom: "1px solid #E5E7EB", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#0A1628" }}>
-              Patients ({loading ? "…" : filtered.length})
+              Patients ({loading ? "…" : total})
             </h3>
             <div style={{ display: "flex", gap: 8 }}>
               <input
@@ -170,13 +166,13 @@ export default function Patients() {
           {error && !loading && (
             <div style={{ padding: "20px", fontSize: 13, color: "#DC2626", textAlign: "center" }}>Erreur : {error.message}</div>
           )}
-          {!loading && !error && filtered.length === 0 && (
+          {!loading && !error && patients.length === 0 && (
             <div style={{ padding: "40px 20px", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>
               {search ? "Aucun patient trouvé" : "Aucun patient dans la base de données"}
             </div>
           )}
 
-          {!loading && filtered.map((p) => {
+          {!loading && patients.map((p) => {
             const initials = `${p.prenom?.[0] || ""}${p.nom?.[0] || ""}`;
             const age = calcAge(p.date_naissance);
             const isF = p.genre === "F";
@@ -208,6 +204,7 @@ export default function Patients() {
               </div>
             );
           })}
+          <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
         </div>
 
         {/* ── Fiche patient ── */}
