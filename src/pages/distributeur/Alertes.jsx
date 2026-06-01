@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Layout from "../../components/Layout";
-import { useAlertes } from "../../hooks/useSupabaseData";
+import { useAlertesPaginated } from "../../hooks/useSupabaseData";
+import Pagination from "../../components/Pagination";
 
 const severityStyle = {
   critique: { bg: "#FEF2F2", border: "#FCA5A5", color: "#EF4444", dot: "#EF4444" },
@@ -14,12 +15,12 @@ function fmt(iso) {
 }
 
 export default function AlertesDistributeur() {
-  const { data: alertes, loading, error } = useAlertes(100);
-  const [readIds, setReadIds] = useState(new Set());
   const [filter, setFilter] = useState("tous");
+  const { data: alertes, loading, error, total, page, setPage, totalPages } = useAlertesPaginated(filter);
+  const [readIds, setReadIds] = useState(new Set());
 
   const markRead = (id) => setReadIds((prev) => new Set([...prev, id]));
-  const filtered = alertes.filter((a) => filter === "tous" || a.severite === filter);
+  const filtered = alertes;
   const unreadCount = alertes.filter((a) => !readIds.has(a.id)).length;
 
   return (
@@ -42,7 +43,7 @@ export default function AlertesDistributeur() {
       </div>
 
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 8 }}>
         {loading && [1,2,3].map((i) => (
           <div key={i} style={{ height: 72, backgroundColor: "#F8FAFC", borderRadius: 14, animation: "pulse 1.5s ease-in-out infinite" }} />
         ))}
@@ -71,6 +72,7 @@ export default function AlertesDistributeur() {
           );
         })}
       </div>
+      <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
     </Layout>
   );
 }

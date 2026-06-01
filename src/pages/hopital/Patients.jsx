@@ -4,7 +4,8 @@
  */
 import { useState, useEffect, useCallback, useRef } from "react";
 import Layout from "../../components/Layout";
-import { usePatients, useMedicaments } from "../../hooks/useSupabaseData";
+import { usePatientsPaginated, usePatientsStats, useMedicaments } from "../../hooks/useSupabaseData";
+import Pagination from "../../components/Pagination";
 import { insertPatient, insertOrdonnance } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../supabaseClient";
@@ -895,10 +896,11 @@ function PatientRow({ patient, onOpen, isLast }) {
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function PatientsHopital() {
   const { auth }                             = useAuth();
-  const { data: patients, loading, refetch } = usePatients();
-  const { data: medicaments }                = useMedicaments();
   const [recherche, setRecherche]            = useState("");
   const [filtreStatut, setFiltreStatut]      = useState("tous");
+  const { data: patients, loading, total, page, setPage, totalPages, refetch } = usePatientsPaginated(recherche);
+  const patientStats = usePatientsStats();
+  const { data: medicaments }                = useMedicaments();
   const [filtreService, setFiltreService]    = useState("tous");
   const [showNouv, setShowNouv]              = useState(false);
   const [fichePatient, setFichePatient]      = useState(null);
@@ -944,10 +946,10 @@ export default function PatientsHopital() {
       {/* KPI */}
       <div style={{ display: "flex", gap: 14, marginBottom: 20, flexWrap: "wrap" }}>
         {[
-          { label: "Total patients",    value: loading ? "…" : patients.length,                                       color: ACCENT },
-          { label: "Hospitalisés",      value: loading ? "…" : patients.filter((p) => p.statut === "hospitalise").length, color: "#EF4444" },
-          { label: "Ambulatoires",      value: loading ? "…" : patients.filter((p) => p.statut !== "hospitalise").length, color: "#3B82F6" },
-          { label: "Alertes allergies", value: loading ? "…" : patients.filter(hasAllergies).length,                  color: "#DC2626" },
+          { label: "Total patients",    value: patientStats.loading ? "…" : patientStats.total,        color: ACCENT },
+          { label: "Hospitalisés",      value: patientStats.loading ? "…" : patientStats.hospitalise,  color: "#EF4444" },
+          { label: "Ambulatoires",      value: patientStats.loading ? "…" : patientStats.ambulatoire,  color: "#3B82F6" },
+          { label: "Alertes allergies", value: loading ? "…" : patients.filter(hasAllergies).length,   color: "#DC2626" },
         ].map((k) => (
           <div key={k.label} style={{ flex: 1, minWidth: 130, background: "white", borderRadius: 14, padding: "15px 18px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", borderLeft: `4px solid ${k.color}` }}>
             <div style={{ fontSize: 22, fontWeight: 800, color: k.color }}>{k.value}</div>
@@ -1019,11 +1021,7 @@ export default function PatientsHopital() {
         </div>
       ))}
 
-      {!loading && (
-        <div style={{ marginTop: 8, fontSize: 12, color: "#9CA3AF", textAlign: "right" }}>
-          {filtered.length} patient{filtered.length !== 1 ? "s" : ""}{filtreService !== "tous" || filtreStatut !== "tous" || recherche ? ` sur ${patients.length} au total` : ""}
-        </div>
-      )}
+      <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
     </Layout>
   );
 }

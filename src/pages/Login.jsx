@@ -189,7 +189,10 @@ export default function Login() {
                 <input type="checkbox" style={{ accentColor: "#3B82F6" }} />
                 Se souvenir de moi
               </label>
-              <span style={{ fontSize: 13, color: "#3B82F6", cursor: "pointer", fontWeight: 500 }}>
+              <span
+                onClick={() => navigate("/mot-de-passe-oublie")}
+                style={{ fontSize: 13, color: "#3B82F6", cursor: "pointer", fontWeight: 500 }}
+              >
                 Mot de passe oublié ?
               </span>
             </div>

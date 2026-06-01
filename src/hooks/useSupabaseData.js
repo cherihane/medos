@@ -5,6 +5,160 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "../supabaseClient";
 
+// ─── pagination serveur ───────────────────────────────────────────────────────
+// buildQuery() doit inclure { count: "exact" } dans le .select() pour que
+// Supabase retourne le total. Le hook applique .range(from, to) automatiquement.
+export function usePaginated(buildQuery, deps = [], pageSize = 20) {
+  const [page, setPage] = useState(0);
+  const [state, setState] = useState({ data: [], total: 0, loading: true, error: null });
+  const [tick, setTick] = useState(0);
+  const refetch = useCallback(() => setTick((t) => t + 1), []);
+  const buildRef = useRef(buildQuery);
+  useEffect(() => { buildRef.current = buildQuery; });
+
+  useEffect(() => {
+    const from = page * pageSize;
+    const to   = from + pageSize - 1;
+    setState((s) => ({ ...s, loading: true }));
+    buildRef.current()
+      .range(from, to)
+      .then(({ data, error, count }) =>
+        setState({ data: data ?? [], total: count ?? 0, loading: false, error: error ?? null })
+      );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, pageSize, tick, ...deps]);
+
+  // Réinitialise la page quand les filtres changent
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setPage(0); }, deps);
+
+  const totalPages = Math.max(1, Math.ceil(state.total / pageSize));
+  return { ...state, page, setPage, totalPages, refetch };
+}
+
+// Hooks paginés spécifiques ───────────────────────────────────────────────────
+
+export function useMedicamentsPaginated(search = "", pageSize = 20) {
+  return usePaginated(() => {
+    let q = supabase.from("medicaments").select("*", { count: "exact" }).order("nom");
+    if (search.trim()) q = q.ilike("nom", `%${search.trim()}%`);
+    return q;
+  }, [search], pageSize);
+}
+
+// Counts globaux pour les KPI de l'inventaire (ratio calculé côté JS)
+export function useMedicamentStats() {
+  return useQuery(() =>
+    supabase.from("medicaments").select("stock_actuel, stock_minimum")
+  );
+}
+
+export function usePatientsPaginated(search = "", pageSize = 20) {
+  return usePaginated(() => {
+    let q = supabase.from("patients").select("*", { count: "exact" }).order("nom");
+    const s = search.trim();
+    if (s) q = q.or(`nom.ilike.%${s}%,prenom.ilike.%${s}%`);
+    return q;
+  }, [search], pageSize);
+}
+
+// Counts globaux patients pour KPI hôpital
+export function usePatientsStats() {
+  const [stats, setStats] = useState({ total: 0, hospitalise: 0, ambulatoire: 0, loading: true });
+  useEffect(() => {
+    Promise.all([
+      supabase.from("patients").select("id", { count: "exact", head: true }),
+      supabase.from("patients").select("id", { count: "exact", head: true }).eq("statut", "hospitalise"),
+    ]).then(([tot, hosp]) => {
+      const t = tot.count ?? 0;
+      const h = hosp.count ?? 0;
+      setStats({ total: t, hospitalise: h, ambulatoire: t - h, loading: false });
+    });
+  }, []);
+  return stats;
+}
+
+export function useOrdonnancesPaginated(statut = "", pageSize = 20) {
+  return usePaginated(() => {
+    let q = supabase.from("ordonnances").select(`
+      id, reference, statut, date_emission, date_expiration, medecin_nom, notes,
+      patients ( prenom, nom )
+    `, { count: "exact" }).order("date_emission", { ascending: false });
+    if (statut) q = q.eq("statut", statut);
+    return q;
+  }, [statut], pageSize);
+}
+
+export function useFournisseursPaginated(filtre = "actifs", pageSize = 20) {
+  return usePaginated(() => {
+    let q = supabase.from("fournisseurs").select("*", { count: "exact" }).order("nom");
+    if (filtre === "actifs")   q = q.eq("actif", true);
+    if (filtre === "inactifs") q = q.eq("actif", false);
+    return q;
+  }, [filtre], pageSize);
+}
+
+export function useCommandesPaginated(etablissement_id = null, pageSize = 20) {
+  return usePaginated(() => {
+    let q = supabase.from("commandes").select(`
+      id, reference, statut, date_commande, date_livraison_prevue, montant_total, notes,
+      etablissements ( nom, ville ),
+      fournisseurs ( nom )
+    `, { count: "exact" }).order("date_commande", { ascending: false });
+    if (etablissement_id) q = q.eq("etablissement_id", etablissement_id);
+    return q;
+  }, [etablissement_id], pageSize);
+}
+
+// Totaux commandes pour les KPI Crédits (montant_total + statut seulement)
+export function useCommandesStats(etablissement_id = null) {
+  return useQuery(() => {
+    let q = supabase.from("commandes").select("statut, montant_total");
+    if (etablissement_id) q = q.eq("etablissement_id", etablissement_id);
+    return q;
+  }, [etablissement_id]);
+}
+
+export function useLivraisonsPaginated(statut = "", pageSize = 20) {
+  return usePaginated(() => {
+    let q = supabase.from("livraisons").select(`
+      id, statut, date_depart, date_arrivee_prevue, date_arrivee_reelle,
+      transporteur, numero_suivi, etablissement_id, created_at,
+      etablissements ( nom, ville )
+    `, { count: "exact" }).order("created_at", { ascending: false });
+    if (statut && statut !== "tous") q = q.eq("statut", statut);
+    return q;
+  }, [statut], pageSize);
+}
+
+export function useAlertesPaginated(severite = "", pageSize = 20) {
+  return usePaginated(() => {
+    let q = supabase.from("alertes").select(
+      "id, type, severite, titre, message, lu, resolu, created_at, medicament_id",
+      { count: "exact" }
+    ).eq("resolu", false).order("created_at", { ascending: false });
+    if (severite && severite !== "tous") q = q.eq("severite", severite);
+    return q;
+  }, [severite], pageSize);
+}
+
+// Counts globaux alertes pour les KPI (requêtes count uniquement)
+export function useAlertesStats() {
+  const [stats, setStats] = useState({ critique: 0, alerte: 0, info: 0, total: 0, loading: true });
+  useEffect(() => {
+    const base = () => supabase.from("alertes").select("id", { count: "exact", head: true }).eq("resolu", false);
+    Promise.all([
+      base().eq("severite", "critique"),
+      base().eq("severite", "alerte"),
+      base().eq("severite", "info"),
+      base(),
+    ]).then(([c, a, i, t]) =>
+      setStats({ critique: c.count ?? 0, alerte: a.count ?? 0, info: i.count ?? 0, total: t.count ?? 0, loading: false })
+    );
+  }, []);
+  return stats;
+}
+
 // ─── utilitaire générique ────────────────────────────────────────────────────
 function useQuery(fn, deps = []) {
   const [state, setState] = useState({ data: [], loading: true, error: null });

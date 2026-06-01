@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
-import { useMedicaments, useFournisseurs } from "../../hooks/useSupabaseData";
+import { useMedicamentsPaginated, useMedicamentStats, useFournisseurs } from "../../hooks/useSupabaseData";
 import { updateMedicament, insertMedicament, insertCommande } from "../../hooks/useMutations";
+import Pagination from "../../components/Pagination";
 
 function getStatut(med) {
   if (!med.stock_minimum || med.stock_minimum === 0) return "normal";
@@ -244,30 +245,30 @@ function NouveauModal({ onClose, onSaved }) {
 }
 
 export default function Inventaire() {
-  const { data: medicaments, loading, error, refetch } = useMedicaments();
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("tous");
+  const { data: medicaments, loading, error, total, page, setPage, totalPages, refetch } = useMedicamentsPaginated(search);
+  const { data: statsData } = useMedicamentStats();
   const { data: fournisseurs } = useFournisseurs();
   const { toasts, success } = useToast();
-  const [filter, setFilter] = useState("tous");
-  const [search, setSearch] = useState("");
   const [editMed, setEditMed] = useState(null);
   const [commandMed, setCommandMed] = useState(null);
   const [showNouveau, setShowNouveau] = useState(false);
 
-  const enriched = medicaments.map((m) => ({ ...m, statut: getStatut(m) }));
-  const filtered = enriched.filter((m) => {
-    const matchSearch = m.nom.toLowerCase().includes(search.toLowerCase())
-      || (m.categorie || "").toLowerCase().includes(search.toLowerCase())
-      || (m.code || "").toLowerCase().includes(search.toLowerCase());
-    const matchFilter = filter === "tous" || m.statut === filter;
-    return matchSearch && matchFilter;
-  });
+  // KPI globaux calculés sur toutes les lignes (stock_actuel + stock_minimum seulement)
+  const counts = useMemo(() => {
+    const all = statsData.map((m) => ({ ...m, statut: getStatut(m) }));
+    return {
+      total:    all.length,
+      critique: all.filter((m) => m.statut === "critique").length,
+      alerte:   all.filter((m) => m.statut === "alerte").length,
+      normal:   all.filter((m) => m.statut === "normal").length,
+    };
+  }, [statsData]);
 
-  const counts = {
-    total:    enriched.length,
-    critique: enriched.filter((m) => m.statut === "critique").length,
-    alerte:   enriched.filter((m) => m.statut === "alerte").length,
-    normal:   enriched.filter((m) => m.statut === "normal").length,
-  };
+  // Filtre de statut appliqué côté client sur la page courante (20 items)
+  const enriched = medicaments.map((m) => ({ ...m, statut: getStatut(m) }));
+  const filtered = filter === "tous" ? enriched : enriched.filter((m) => m.statut === filter);
 
   const handleEditSaved = () => { refetch(); success("Médicament mis à jour avec succès"); };
   const handleCommandSaved = () => { refetch(); success("Commande passée avec succès"); };
@@ -413,6 +414,7 @@ export default function Inventaire() {
             })}
           </tbody>
         </table>
+        <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
       </div>
     </Layout>
   );

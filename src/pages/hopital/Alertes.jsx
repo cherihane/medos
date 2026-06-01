@@ -2,8 +2,9 @@ import { useState } from "react";
 import Layout from "../../components/Layout";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
-import { useAlertes } from "../../hooks/useSupabaseData";
+import { useAlertesPaginated, useAlertesStats } from "../../hooks/useSupabaseData";
 import { updateAlerte } from "../../hooks/useMutations";
+import Pagination from "../../components/Pagination";
 
 const severityStyle = {
   critique: { bg: "#FEF2F2", border: "#FCA5A5", color: "#EF4444", dot: "#EF4444" },
@@ -17,10 +18,11 @@ function fmt(iso) {
 }
 
 export default function Alertes() {
-  const { data: alertes, loading, error, refetch } = useAlertes(100);
+  const [filter, setFilter] = useState("tous");
+  const { data: alertes, loading, error, total, page, setPage, totalPages, refetch } = useAlertesPaginated(filter);
+  const stats = useAlertesStats();
   const { toasts, success, error: toastError } = useToast();
   const [readIds, setReadIds] = useState(new Set());
-  const [filter, setFilter] = useState("tous");
   const [actioning, setActioning] = useState(null);
 
   const markRead = async (id) => {
@@ -47,7 +49,7 @@ export default function Alertes() {
     }
   };
 
-  const filtered = alertes.filter((a) => filter === "tous" || a.severite === filter);
+  const filtered = alertes;
   const unreadCount = alertes.filter((a) => !readIds.has(a.id)).length;
 
   return (
@@ -80,10 +82,10 @@ export default function Alertes() {
 
       <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
         {[
-          { label: "Critiques",    value: loading ? "…" : alertes.filter(a => a.severite === "critique").length, color: "#EF4444", bg: "#FEF2F2" },
-          { label: "Alertes",      value: loading ? "…" : alertes.filter(a => a.severite === "alerte").length,   color: "#F59E0B", bg: "#FFFBEB" },
-          { label: "Informations", value: loading ? "…" : alertes.filter(a => a.severite === "info").length,     color: "#3B82F6", bg: "#EFF6FF" },
-          { label: "Non lues",     value: loading ? "…" : unreadCount,                                           color: "#8B5CF6", bg: "#F5F3FF" },
+          { label: "Critiques",    value: stats.loading ? "…" : stats.critique, color: "#EF4444", bg: "#FEF2F2" },
+          { label: "Alertes",      value: stats.loading ? "…" : stats.alerte,   color: "#F59E0B", bg: "#FFFBEB" },
+          { label: "Informations", value: stats.loading ? "…" : stats.info,     color: "#3B82F6", bg: "#EFF6FF" },
+          { label: "Non lues",     value: loading ? "…" : unreadCount,          color: "#8B5CF6", bg: "#F5F3FF" },
         ].map((s) => (
           <div key={s.label} style={{ backgroundColor: s.bg, borderRadius: 12, padding: "14px 20px", flex: 1, borderLeft: `4px solid ${s.color}` }}>
             <div style={{ fontSize: 24, fontWeight: 800, color: s.color }}>{s.value}</div>
@@ -144,6 +146,7 @@ export default function Alertes() {
           );
         })}
       </div>
+      <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
     </Layout>
   );
 }

@@ -3,7 +3,8 @@ import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
-import { useLivraisons, useEtablissements } from "../../hooks/useSupabaseData";
+import { useLivraisonsPaginated, useEtablissements } from "../../hooks/useSupabaseData";
+import Pagination from "../../components/Pagination";
 import { insertLivraison, updateLivraison, receiveLivraison } from "../../hooks/useMutations";
 
 const statusStyle = {
@@ -165,14 +166,14 @@ function StatutModal({ livraison, onClose, onSaved }) {
 }
 
 export default function Livraisons() {
-  const { data: livraisons, loading, error, refetch } = useLivraisons();
+  const [filter, setFilter] = useState("tous");
+  const { data: livraisons, loading, error, total, page, setPage, totalPages, refetch } = useLivraisonsPaginated(filter);
   const { data: etablissements } = useEtablissements();
   const { toasts, success, error: toastError } = useToast();
-  const [filter, setFilter] = useState("tous");
   const [showNouvelle, setShowNouvelle] = useState(false);
   const [statutModal, setStatutModal] = useState(null);
 
-  const filtered = livraisons.filter((l) => filter === "tous" || l.statut === filter);
+  const filtered = livraisons;
 
   return (
     <Layout title="Livraisons" subtitle="Suivi des livraisons en temps réel">
@@ -287,6 +288,7 @@ export default function Livraisons() {
             })}
           </tbody>
         </table>
+        <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
       </div>
     </Layout>
   );
