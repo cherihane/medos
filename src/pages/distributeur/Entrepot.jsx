@@ -17,57 +17,68 @@ import { useAuth } from "../../context/AuthContext";
 // ── Resend ────────────────────────────────────────────────────────────────────
 const RESEND_KEY = "re_iUaDVQFG_LAX2mHCRxm6rf216167mGdJY";
 
-async function sendCommandeEmail({ emailFabricant, medicamentNom, fabricant, quantite, dateLivraison, notes, distributeur }) {
+// lignes = [{ medicamentNom, quantite }]
+async function sendCommandeEmail({ emailFabricant, fabricant, lignes, dateLivraison, notes, distributeur }) {
   const dateStr = dateLivraison
     ? new Date(dateLivraison).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })
     : "Non précisée";
   const now = new Date().toLocaleString("fr-FR", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  const totalQty = lignes.reduce((s, l) => s + l.quantite, 0);
+
+  const lignesHtml = lignes.map((l, i) => `
+    <tr style="background:${i % 2 === 0 ? "#ffffff" : "#F8FAFC"}">
+      <td style="padding:10px 14px;font-size:13px;color:#0A1628;font-weight:600;border-bottom:1px solid #e5e7eb">${l.medicamentNom}</td>
+      <td style="padding:10px 14px;font-size:13px;color:#374151;text-align:right;border-bottom:1px solid #e5e7eb">${l.quantite.toLocaleString("fr-FR")} unités</td>
+    </tr>`).join("");
 
   const html = `
-<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb">
+<div style="font-family:Arial,sans-serif;max-width:640px;margin:auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb">
   <div style="background:#F59E0B;padding:28px 32px">
-    <h1 style="color:white;margin:0;font-size:20px;font-weight:700">Commande de médicaments</h1>
+    <h1 style="color:white;margin:0;font-size:20px;font-weight:700">Bon de commande médicaments</h1>
     <p style="color:rgba(255,255,255,0.88);margin:6px 0 0;font-size:13px">MedOS — Plateforme de distribution médicale</p>
   </div>
   <div style="padding:28px 32px">
-    <p style="font-size:14px;color:#374151;margin:0 0 20px">Bonjour,</p>
-    <p style="font-size:14px;color:#374151;margin:0 0 20px">
-      Le distributeur <strong>${distributeur}</strong> vous adresse une commande via la plateforme MedOS.
-      Veuillez en prendre note et confirmer la disponibilité dans les meilleurs délais.
+    <p style="font-size:14px;color:#374151;margin:0 0 6px">Bonjour${fabricant ? ` <strong>${fabricant}</strong>` : ""},</p>
+    <p style="font-size:14px;color:#374151;margin:0 0 22px">
+      Le distributeur <strong>${distributeur}</strong> vous adresse le bon de commande ci-dessous via la plateforme MedOS.
+      Merci de confirmer la disponibilité dans les meilleurs délais.
     </p>
-    <div style="background:#F8FAFC;border-radius:10px;padding:20px;margin-bottom:20px">
-      <h2 style="font-size:14px;font-weight:700;color:#0A1628;margin:0 0 14px">Détails de la commande</h2>
-      <table style="width:100%;border-collapse:collapse">
-        <tr>
-          <td style="padding:9px 0;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:13px;width:46%">Médicament</td>
-          <td style="padding:9px 0;border-bottom:1px solid #e5e7eb;font-weight:700;font-size:13px;color:#0A1628">${medicamentNom}</td>
+
+    <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
+      <tr style="background:#F8FAFC">
+        <td style="padding:9px 0;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:12px;width:44%">Date de livraison souhaitée</td>
+        <td style="padding:9px 0;border-bottom:1px solid #e5e7eb;font-weight:700;font-size:13px;color:#0A1628">${dateStr}</td>
+      </tr>
+      ${notes ? `<tr>
+        <td style="padding:9px 0;color:#6b7280;font-size:12px">Instructions particulières</td>
+        <td style="padding:9px 0;font-size:13px;color:#374151">${notes}</td>
+      </tr>` : ""}
+    </table>
+
+    <h2 style="font-size:14px;font-weight:700;color:#0A1628;margin:0 0 10px">Médicaments commandés</h2>
+    <table style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin-bottom:20px">
+      <thead>
+        <tr style="background:#0A1628">
+          <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;font-weight:700">Médicament</th>
+          <th style="padding:10px 14px;text-align:right;font-size:12px;color:#fff;font-weight:700">Quantité</th>
         </tr>
-        ${fabricant ? `<tr>
-          <td style="padding:9px 0;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:13px">Fabricant</td>
-          <td style="padding:9px 0;border-bottom:1px solid #e5e7eb;font-weight:700;font-size:13px;color:#0A1628">${fabricant}</td>
-        </tr>` : ""}
-        <tr>
-          <td style="padding:9px 0;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:13px">Quantité commandée</td>
-          <td style="padding:9px 0;border-bottom:1px solid #e5e7eb;font-weight:700;font-size:13px;color:#0A1628">${quantite} unités</td>
+      </thead>
+      <tbody>${lignesHtml}
+        <tr style="background:#FFFBEB">
+          <td style="padding:10px 14px;font-size:13px;font-weight:700;color:#92400E">${lignes.length} référence${lignes.length > 1 ? "s" : ""}</td>
+          <td style="padding:10px 14px;font-size:13px;font-weight:700;color:#92400E;text-align:right">${totalQty.toLocaleString("fr-FR")} unités au total</td>
         </tr>
-        <tr>
-          <td style="padding:9px 0;border-bottom:${notes ? "1px solid #e5e7eb" : "none"};color:#6b7280;font-size:13px">Date de livraison souhaitée</td>
-          <td style="padding:9px 0;border-bottom:${notes ? "1px solid #e5e7eb" : "none"};font-weight:700;font-size:13px;color:#0A1628">${dateStr}</td>
-        </tr>
-        ${notes ? `<tr>
-          <td style="padding:9px 0;color:#6b7280;font-size:13px">Instructions particulières</td>
-          <td style="padding:9px 0;font-size:13px;color:#374151">${notes}</td>
-        </tr>` : ""}
-      </table>
-    </div>
+      </tbody>
+    </table>
+
     <div style="background:#FFFBEB;border-left:4px solid #F59E0B;border-radius:6px;padding:12px 16px;margin-bottom:24px">
       <p style="font-size:12px;color:#92400E;margin:0">
-        Merci de répondre directement à cet email ou de contacter le distributeur pour confirmer la disponibilité et le délai de livraison.
+        Merci de répondre directement à cet email pour confirmer la disponibilité et le délai de livraison.
       </p>
     </div>
-    <p style="font-size:13px;color:#6b7280;margin:0">Commande émise le ${now}</p>
+    <p style="font-size:12px;color:#9CA3AF;margin:0">Commande émise le ${now}</p>
   </div>
-  <div style="background:#F8FAFC;padding:16px 32px;border-top:1px solid #e5e7eb;text-align:center">
+  <div style="background:#F8FAFC;padding:14px 32px;border-top:1px solid #e5e7eb;text-align:center">
     <p style="font-size:12px;color:#9CA3AF;margin:0">MedOS — ${distributeur}</p>
   </div>
 </div>`;
@@ -78,7 +89,7 @@ async function sendCommandeEmail({ emailFabricant, medicamentNom, fabricant, qua
     body: JSON.stringify({
       from:    "MedOS Distribution <onboarding@resend.dev>",
       to:      [emailFabricant],
-      subject: `Commande MedOS — ${medicamentNom} (${quantite} unités)`,
+      subject: `Bon de commande MedOS — ${lignes.length} médicament${lignes.length > 1 ? "s" : ""} (${totalQty.toLocaleString("fr-FR")} unités)`,
       html,
     }),
   });
@@ -261,61 +272,69 @@ function ModalReception({ medicaments, onClose, onSuccess }) {
   );
 }
 
-// ── Modal Nouvelle commande fabricant ─────────────────────────────────────────
+// ── Modal Nouvelle commande fabricant (bon de commande multi-médicaments) ──────
+const LIGNE_VIDE = () => ({ id: Date.now() + Math.random(), medicament_id: "", quantite: "" });
+
 function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id, onClose, onSuccess }) {
-  const [form, setForm] = useState({
-    medicament_id:  "",
-    email_fabricant: "",
-    fabricant:      "",
-    quantite:       "",
-    date_livraison: "",
-    notes:          "",
-  });
+  const [header, setHeader] = useState({ email_fabricant: "", fabricant: "", date_livraison: "", notes: "" });
+  const [lignes, setLignes] = useState([LIGNE_VIDE()]);
   const [saving, setSaving] = useState(false);
   const [err, setErr]       = useState(null);
 
-  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const setH = (k, v) => setHeader((h) => ({ ...h, [k]: v }));
 
-  const medicamentNom = medicaments.find((m) => m.id === form.medicament_id)?.nom ?? "";
+  const setLigne = (id, k, v) =>
+    setLignes((ls) => ls.map((l) => l.id === id ? { ...l, [k]: v } : l));
+  const addLigne  = () => setLignes((ls) => [...ls, LIGNE_VIDE()]);
+  const delLigne  = (id) => setLignes((ls) => ls.filter((l) => l.id !== id));
+
+  const totalRefs = lignes.filter((l) => l.medicament_id).length;
+  const totalQty  = lignes.reduce((s, l) => s + (parseInt(l.quantite, 10) || 0), 0);
 
   const handleSubmit = async () => {
     setErr(null);
-    if (!form.medicament_id)                              { setErr("Sélectionnez un médicament."); return; }
-    if (!form.email_fabricant.trim() || !form.email_fabricant.includes("@")) { setErr("Email du fabricant invalide."); return; }
-    const qty = parseInt(form.quantite, 10);
-    if (!qty || qty <= 0)                                 { setErr("Quantité invalide."); return; }
+    if (!header.email_fabricant.trim() || !header.email_fabricant.includes("@")) {
+      setErr("Email du fabricant invalide."); return;
+    }
+    const lignesValides = lignes.filter((l) => l.medicament_id && parseInt(l.quantite, 10) > 0);
+    if (lignesValides.length === 0) {
+      setErr("Ajoutez au moins un médicament avec une quantité valide."); return;
+    }
 
     setSaving(true);
     try {
-      const notesFinales = [
-        `Médicament : ${medicamentNom}`,
-        form.fabricant.trim() ? `Fabricant : ${form.fabricant.trim()}` : null,
-        `Email fabricant : ${form.email_fabricant.trim()}`,
-        `Quantité commandée : ${qty} unités`,
-        `Livraison souhaitée : ${form.date_livraison || "Non précisée"}`,
-        form.notes.trim() ? `Instructions : ${form.notes.trim()}` : null,
-      ].filter(Boolean).join(" | ");
+      const lignesPayload = lignesValides.map((l) => {
+        const med = medicaments.find((m) => m.id === l.medicament_id);
+        return { medicament_id: l.medicament_id, medicamentNom: med?.nom ?? "", quantite: parseInt(l.quantite, 10) };
+      });
+
+      const notesJSON = JSON.stringify({
+        fabricant:      header.fabricant.trim() || null,
+        email_fabricant: header.email_fabricant.trim(),
+        livraison:      header.date_livraison || null,
+        instructions:   header.notes.trim() || null,
+        lignes:         lignesPayload.map(({ medicamentNom, quantite }) => ({ medicamentNom, quantite })),
+      });
 
       await insertCommande({
         statut:                "envoyee",
         date_commande:         new Date().toISOString(),
-        date_livraison_prevue: form.date_livraison || null,
+        date_livraison_prevue: header.date_livraison || null,
         montant_total:         0,
-        notes:                 notesFinales,
+        notes:                 notesJSON,
         ...(etablissement_id ? { etablissement_id } : {}),
       });
 
       await sendCommandeEmail({
-        emailFabricant: form.email_fabricant.trim(),
-        medicamentNom,
-        fabricant:      form.fabricant.trim(),
-        quantite:       qty,
-        dateLivraison:  form.date_livraison,
-        notes:          form.notes.trim(),
+        emailFabricant: header.email_fabricant.trim(),
+        fabricant:      header.fabricant.trim(),
+        lignes:         lignesPayload,
+        dateLivraison:  header.date_livraison,
+        notes:          header.notes.trim(),
         distributeur:   distributeurNom,
       });
 
-      onSuccess(`Commande envoyée à ${form.email_fabricant.trim()} pour ${medicamentNom}.`);
+      onSuccess(`Bon de commande envoyé à ${header.email_fabricant.trim()} — ${lignesPayload.length} médicament${lignesPayload.length > 1 ? "s" : ""}.`);
     } catch (e) {
       setErr(e.message);
       setSaving(false);
@@ -324,82 +343,123 @@ function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id
 
   return (
     <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.45)", zIndex: 1100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div style={{ backgroundColor: "white", borderRadius: 16, padding: 28, width: "100%", maxWidth: 520, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
-        {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
-          <div>
-            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#0A1628" }}>Nouvelle commande fabricant</h3>
-            <p style={{ margin: "4px 0 0", fontSize: 12, color: "#6B7280" }}>Un email de commande sera envoyé automatiquement au fabricant</p>
-          </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9CA3AF", lineHeight: 1 }}>×</button>
-        </div>
+      <div style={{ backgroundColor: "white", borderRadius: 16, width: "100%", maxWidth: 680, maxHeight: "90vh", overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {/* Médicament */}
-          <div>
-            <label style={labelStyle}>Médicament <span style={{ color: "#EF4444" }}>*</span></label>
-            <select value={form.medicament_id} onChange={(e) => set("medicament_id", e.target.value)}
-              style={{ ...inputStyle, backgroundColor: "white" }}>
-              <option value="">— Sélectionner un médicament —</option>
-              {medicaments.map((m) => (
-                <option key={m.id} value={m.id}>{m.nom}{m.dosage ? ` ${m.dosage}` : ""}{m.forme ? ` — ${m.forme}` : ""}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Fabricant (optionnel) + Email (obligatoire) */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        {/* ── En-tête fixe ── */}
+        <div style={{ padding: "22px 28px 0", flexShrink: 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
             <div>
-              <label style={labelStyle}>Nom du fabricant</label>
-              <input value={form.fabricant} onChange={(e) => set("fabricant", e.target.value)}
-                placeholder="Ex: Sanofi, Pfizer…" style={inputStyle} />
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#0A1628" }}>Nouveau bon de commande fabricant</h3>
+              <p style={{ margin: "4px 0 0", fontSize: 12, color: "#6B7280" }}>Le bon de commande sera envoyé par email au fabricant</p>
             </div>
+            <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9CA3AF", lineHeight: 1, flexShrink: 0 }}>×</button>
+          </div>
+
+          {/* Champs en-tête */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
             <div>
               <label style={labelStyle}>Email du fabricant <span style={{ color: "#EF4444" }}>*</span></label>
-              <input type="email" value={form.email_fabricant} onChange={(e) => set("email_fabricant", e.target.value)}
+              <input type="email" value={header.email_fabricant} onChange={(e) => setH("email_fabricant", e.target.value)}
                 placeholder="commandes@fabricant.com" style={inputStyle} />
             </div>
-          </div>
-
-          {/* Quantité + Date */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div>
-              <label style={labelStyle}>Quantité souhaitée <span style={{ color: "#EF4444" }}>*</span></label>
-              <input type="number" min="1" value={form.quantite} onChange={(e) => set("quantite", e.target.value)}
-                placeholder="Ex: 1000" style={inputStyle} />
+              <label style={labelStyle}>Nom du fabricant</label>
+              <input value={header.fabricant} onChange={(e) => setH("fabricant", e.target.value)}
+                placeholder="Ex : Sanofi, Pfizer…" style={inputStyle} />
             </div>
             <div>
               <label style={labelStyle}>Date de livraison souhaitée</label>
-              <input type="date" value={form.date_livraison} onChange={(e) => set("date_livraison", e.target.value)}
+              <input type="date" value={header.date_livraison} onChange={(e) => setH("date_livraison", e.target.value)}
                 style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Instructions générales</label>
+              <input value={header.notes} onChange={(e) => setH("notes", e.target.value)}
+                placeholder="Température, conditionnement…" style={inputStyle} />
             </div>
           </div>
 
-          {/* Instructions */}
-          <div>
-            <label style={labelStyle}>Instructions particulières</label>
-            <input value={form.notes} onChange={(e) => set("notes", e.target.value)}
-              placeholder="Conditionnement, urgence, température de transport…" style={inputStyle} />
+          {/* En-tête tableau */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 130px 36px", gap: 8, padding: "8px 12px", backgroundColor: "#F8FAFC", borderRadius: "8px 8px 0 0", border: "1px solid #E5E7EB", borderBottom: "none" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>Médicament</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>Quantité</div>
+            <div />
           </div>
         </div>
 
-        {err && (
-          <div style={{ marginTop: 14, padding: "8px 12px", backgroundColor: "#FEF2F2", borderRadius: 8, fontSize: 12, color: "#DC2626" }}>
-            {err}
+        {/* ── Lignes défilables ── */}
+        <div style={{ overflowY: "auto", flexGrow: 1, padding: "0 28px", borderLeft: "none" }}>
+          <div style={{ border: "1px solid #E5E7EB", borderTop: "none", borderRadius: "0 0 8px 8px", overflow: "hidden" }}>
+            {lignes.map((l, i) => (
+              <div key={l.id} style={{ display: "grid", gridTemplateColumns: "1fr 130px 36px", gap: 8, padding: "8px 12px", borderBottom: i < lignes.length - 1 ? "1px solid #F3F4F6" : "none", alignItems: "center", backgroundColor: i % 2 === 0 ? "white" : "#FAFAFA" }}>
+                <select
+                  value={l.medicament_id}
+                  onChange={(e) => setLigne(l.id, "medicament_id", e.target.value)}
+                  style={{ ...inputStyle, fontSize: 12, padding: "7px 10px", backgroundColor: "white" }}
+                >
+                  <option value="">— Médicament —</option>
+                  {medicaments.map((m) => (
+                    <option key={m.id} value={m.id}>{m.nom}{m.dosage ? ` ${m.dosage}` : ""}</option>
+                  ))}
+                </select>
+                <input
+                  type="number" min="1"
+                  value={l.quantite}
+                  onChange={(e) => setLigne(l.id, "quantite", e.target.value)}
+                  placeholder="Qté"
+                  style={{ ...inputStyle, fontSize: 12, padding: "7px 10px", textAlign: "right" }}
+                />
+                <button
+                  onClick={() => lignes.length > 1 && delLigne(l.id)}
+                  disabled={lignes.length === 1}
+                  style={{ width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: lignes.length === 1 ? "#F8FAFC" : "#FEF2F2", border: "none", borderRadius: 6, cursor: lignes.length === 1 ? "not-allowed" : "pointer", color: lignes.length === 1 ? "#D1D5DB" : "#EF4444", fontSize: 16, flexShrink: 0 }}
+                  title="Supprimer cette ligne"
+                >×</button>
+              </div>
+            ))}
           </div>
-        )}
 
-        <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
-          <button onClick={onClose} style={{ flex: 1, padding: "11px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 10, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>
-            Annuler
-          </button>
-          <button onClick={handleSubmit} disabled={saving}
-            style={{ flex: 2, padding: "11px", backgroundColor: saving ? "#E5E7EB" : ACCENT, color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-            {saving ? (
-              <><div style={{ width: 14, height: 14, border: "2px solid #9CA3AF", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />Envoi en cours…</>
-            ) : "Envoyer la commande"}
+          <button
+            onClick={addLigne}
+            style={{ marginTop: 10, marginBottom: 4, display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", backgroundColor: "white", border: `1.5px dashed ${ACCENT}`, borderRadius: 8, fontSize: 12, color: ACCENT, fontWeight: 600, cursor: "pointer" }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            Ajouter un médicament
           </button>
         </div>
+
+        {/* ── Pied fixe : total + actions ── */}
+        <div style={{ padding: "12px 28px 20px", flexShrink: 0, borderTop: "1px solid #F3F4F6" }}>
+          {/* Totaux */}
+          <div style={{ display: "flex", gap: 16, marginBottom: 12 }}>
+            <div style={{ fontSize: 12, color: "#6B7280" }}>
+              Références : <strong style={{ color: "#0A1628" }}>{totalRefs}</strong>
+            </div>
+            <div style={{ fontSize: 12, color: "#6B7280" }}>
+              Quantité totale : <strong style={{ color: "#0A1628" }}>{totalQty.toLocaleString("fr-FR")} unités</strong>
+            </div>
+          </div>
+
+          {err && (
+            <div style={{ padding: "8px 12px", backgroundColor: "#FEF2F2", borderRadius: 8, fontSize: 12, color: "#DC2626", marginBottom: 12 }}>
+              {err}
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={onClose} style={{ flex: 1, padding: "11px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 10, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>
+              Annuler
+            </button>
+            <button onClick={handleSubmit} disabled={saving}
+              style={{ flex: 2, padding: "11px", backgroundColor: saving ? "#E5E7EB" : ACCENT, color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+              {saving
+                ? <><div style={{ width: 14, height: 14, border: "2px solid #9CA3AF", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />Envoi en cours…</>
+                : "Envoyer le bon de commande"
+              }
+            </button>
+          </div>
+        </div>
+
       </div>
     </div>
   );
