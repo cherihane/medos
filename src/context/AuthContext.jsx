@@ -8,19 +8,19 @@ const AuthContext = createContext(null);
 const NAV_INTERNE = {
   pharmacie: {
     gerant:      null, // accès complet
-    pharmacien:  ["/pharmacie/dashboard", "/pharmacie/inventaire", "/pharmacie/ordonnances", "/pharmacie/patients", "/pharmacie/scanner", "/parametres"],
-    caissier:    ["/pharmacie/caisse", "/pharmacie/scanner", "/parametres"],
+    pharmacien:  ["/pharmacie/dashboard", "/pharmacie/inventaire", "/pharmacie/ordonnances", "/pharmacie/patients", "/pharmacie/scanner"],
+    caissier:    ["/pharmacie/caisse", "/pharmacie/scanner"],
   },
   hopital: {
     directeur:            null,
-    medecin:              ["/hopital/dashboard", "/hopital/assistant", "/hopital/alertes", "/parametres"],
-    infirmiere:           ["/hopital/dashboard", "/hopital/alertes", "/parametres"],
-    pharmacien_hospitalier: ["/hopital/stock", "/hopital/scanner", "/hopital/alertes", "/parametres"],
+    medecin:              ["/hopital/dashboard", "/hopital/assistant", "/hopital/alertes"],
+    infirmiere:           ["/hopital/dashboard", "/hopital/alertes"],
+    pharmacien_hospitalier: ["/hopital/stock", "/hopital/scanner", "/hopital/alertes"],
   },
   distributeur: {
     directeur:  null,
-    commercial: ["/distributeur/dashboard", "/distributeur/reseau-clients", "/distributeur/clients", "/distributeur/previsions", "/parametres"],
-    logistique: ["/distributeur/entrepot", "/distributeur/livraisons", "/distributeur/tracabilite", "/parametres"],
+    commercial: ["/distributeur/dashboard", "/distributeur/reseau-clients", "/distributeur/clients", "/distributeur/previsions"],
+    logistique: ["/distributeur/entrepot", "/distributeur/livraisons", "/distributeur/tracabilite"],
   },
   autorite: {
     ministre:   null,
