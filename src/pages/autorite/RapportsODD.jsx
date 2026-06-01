@@ -6,12 +6,6 @@ import { useKpiAutorite, useMedicaments, useEtablissements, useAlertes } from ".
 import { useAuth } from "../../context/AuthContext";
 import { openDocument, tableHTML, kpiHTML, etabFromAuth } from "../../utils/MedOSDocument";
 
-const oddData = [
-  { goal: "ODD 3.3", label: "Maladies infectieuses", progress: 67, target: 80 },
-  { goal: "ODD 3.4", label: "Maladies non transmissibles", progress: 54, target: 70 },
-  { goal: "ODD 3.8", label: "Couverture santé universelle", progress: 72, target: 90 },
-  { goal: "ODD 3.b", label: "Accès médicaments essentiels", progress: 78, target: 85 },
-];
 
 export default function RapportsODD() {
   const { auth } = useAuth();
@@ -22,6 +16,18 @@ export default function RapportsODD() {
   const { data: alertes } = useAlertes(100);
   const { toasts, success } = useToast();
   const [generating, setGenerating] = useState(null);
+
+  // ODD 3.8 : couverture = etablissements actifs / total
+  const totalEtab  = etablissements.length;
+  const actifsEtab = etablissements.filter((e) => e.actif).length;
+  const couverture38 = totalEtab > 0 ? Math.round((actifsEtab / totalEtab) * 100) : 0;
+
+  const oddData = [
+    { goal: "ODD 3.3", label: "Maladies infectieuses",       progress: null, target: 80 },
+    { goal: "ODD 3.4", label: "Maladies non transmissibles", progress: null, target: 70 },
+    { goal: "ODD 3.8", label: "Couverture sante universelle", progress: couverture38, target: 90 },
+    { goal: "ODD 3.b", label: "Acces medicaments essentiels", progress: null, target: 85 },
+  ];
 
   const genererPDF = (rapportNom) => {
     setGenerating(rapportNom);
@@ -91,10 +97,10 @@ export default function RapportsODD() {
       <Toast toasts={toasts} />
       <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
         {[
-          { label: "Score ODD moyen", value: "68%", color: "#8B5CF6" },
-          { label: "Objectifs atteints", value: "1/4", color: "#10B981" },
-          { label: "Progression annuelle", value: "+4.2%", color: "#3B82F6" },
-          { label: "Classement régional", value: "7/54", color: "#F59E0B" },
+          { label: "Etablissements actifs",   value: !totalEtab ? "—" : `${actifsEtab}/${totalEtab}`, color: "#8B5CF6" },
+          { label: "Couverture ODD 3.8",      value: !totalEtab ? "—" : `${couverture38}%`,           color: "#10B981" },
+          { label: "Medicaments traces",      value: kpi?.medicamentsTraces ?? "—",                   color: "#3B82F6" },
+          { label: "Alertes pharmacovig.",    value: kpi?.alertesPharmacovig ?? "—",                  color: "#F59E0B" },
         ].map((k) => (
           <div key={k.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "18px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
             <div style={{ fontSize: 22, fontWeight: 800, color: k.color }}>{k.value}</div>
@@ -114,13 +120,26 @@ export default function RapportsODD() {
                   <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginTop: 4 }}>{o.label}</div>
                 </div>
                 <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: o.progress >= o.target ? "#10B981" : "#F59E0B" }}>{o.progress}%</div>
-                  <div style={{ fontSize: 10, color: "#9CA3AF" }}>cible : {o.target}%</div>
+                  {o.progress != null ? (
+                    <>
+                      <div style={{ fontSize: 22, fontWeight: 800, color: o.progress >= o.target ? "#10B981" : "#F59E0B" }}>{o.progress}%</div>
+                      <div style={{ fontSize: 10, color: "#9CA3AF" }}>cible : {o.target}%</div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: "#9CA3AF" }}>Donnees insuffisantes</div>
+                      <div style={{ fontSize: 10, color: "#9CA3AF" }}>cible : {o.target}%</div>
+                    </>
+                  )}
                 </div>
               </div>
               <div style={{ height: 8, backgroundColor: "#E5E7EB", borderRadius: 4, position: "relative" }}>
-                <div style={{ height: "100%", width: `${o.progress}%`, backgroundColor: o.progress >= o.target ? "#10B981" : "#8B5CF6", borderRadius: 4 }} />
-                <div style={{ position: "absolute", top: 0, left: `${o.target}%`, width: 2, height: "100%", backgroundColor: "#F59E0B" }} />
+                {o.progress != null && (
+                  <>
+                    <div style={{ height: "100%", width: `${o.progress}%`, backgroundColor: o.progress >= o.target ? "#10B981" : "#8B5CF6", borderRadius: 4 }} />
+                    <div style={{ position: "absolute", top: 0, left: `${o.target}%`, width: 2, height: "100%", backgroundColor: "#F59E0B" }} />
+                  </>
+                )}
               </div>
               <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>Ligne jaune = cible ONU 2030</div>
             </div>
@@ -129,14 +148,24 @@ export default function RapportsODD() {
 
         <div>
           <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 16 }}>
-            <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Résumé exécutif 2024</h3>
-            <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.8 }}>
-              La Côte d'Ivoire progresse vers les ODD Santé avec une amélioration de +4.2% de la couverture vaccinale et une réduction de 12% de la mortalité infantile par rapport à 2023. La couverture santé universelle reste l'objectif le plus déficitaire avec 18 points d'écart à la cible.
-            </div>
-            <div style={{ marginTop: 16, padding: "12px", backgroundColor: "#F5F3FF", borderRadius: 10 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "#7C3AED", marginBottom: 4 }}>Priorité 2024-2025</div>
-              <div style={{ fontSize: 12, color: "#6B7280" }}>Renforcer l'accès aux médicaments essentiels dans les zones rurales et améliorer la couverture vaccinale dans les régions nord.</div>
-            </div>
+            <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Resume executif</h3>
+            {totalEtab === 0 ? (
+              <div style={{ padding: "20px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>
+                Aucune donnee disponible. Enregistrez des etablissements pour generer les indicateurs.
+              </div>
+            ) : (
+              <>
+                <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.8 }}>
+                  Le systeme MedOS recense <strong>{totalEtab}</strong> etablissement{totalEtab > 1 ? "s" : ""} dont <strong>{actifsEtab}</strong> actif{actifsEtab > 1 ? "s" : ""}.
+                  La couverture ODD 3.8 calculee depuis les etablissements actifs est de <strong>{couverture38}%</strong> (cible ONU : 90%).
+                  Les autres indicateurs ODD necessitent des donnees epidemiologiques complementaires.
+                </div>
+                <div style={{ marginTop: 16, padding: "12px", backgroundColor: "#F5F3FF", borderRadius: 10 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#7C3AED", marginBottom: 4 }}>Prochaine etape</div>
+                  <div style={{ fontSize: 12, color: "#6B7280" }}>Connecter les donnees epidemiologiques nationales pour calculer automatiquement les indicateurs ODD 3.3, 3.4 et 3.b.</div>
+                </div>
+              </>
+            )}
           </div>
 
           <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>

@@ -1,70 +1,30 @@
+import { useMemo } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import Layout from "../../components/Layout";
 import { useAuth } from "../../context/AuthContext";
+import { useOrdonnances, useMedicaments } from "../../hooks/useSupabaseData";
 import { openDocument, tableHTML, kpiHTML, etabFromAuth } from "../../utils/MedOSDocument";
 
-const rapportsStatiques = [
-  { name: "Rapport de dispensation — Janvier 2024", type: "Dispensations", date: "01/02/2024",
-    kpis: [["Dispensations totales","1 240"],["Coût total","18 400 000 FCFA"],["Taux de disponibilité","91.3%"],["Patients servis","892"]],
-    lignes: [["Période","Janvier 2024"],["Médicaments dispensés","1 240"],["Coût total","18 400 000 FCFA"],["Taux de disponibilité","91.3%"],["Patients servis","892"]] },
-  { name: "Rapport de coûts médicamenteux — Q4 2023", type: "Finances", date: "15/01/2024",
-    kpis: [["Coût total","54 200 000 FCFA"],["Budget alloué","60 000 000 FCFA"],["Taux d'utilisation","90.3%"],["Écart favorable","5 800 000 FCFA"]],
-    lignes: [["Période","Q4 2023 (Oct-Déc)"],["Coût total médicaments","54 200 000 FCFA"],["Budget alloué","60 000 000 FCFA"],["Taux d'utilisation","90.3%"],["Écart favorable","5 800 000 FCFA"]] },
-  { name: "Rapport de disponibilité — 2023", type: "Stock", date: "10/01/2024",
-    kpis: [["Taux moyen","89.7%"],["Ruptures","14"],["Durée moy. rupture","3.2 jours"],["Médicaments essentiels","97.1%"]],
-    lignes: [["Année","2023"],["Taux de disponibilité moyen","89.7%"],["Ruptures enregistrées","14"],["Durée moyenne de rupture","3.2 jours"],["Médicaments essentiels disponibles","97.1%"]] },
-];
+const MOIS_LABELS = ["Jan", "Fev", "Mar", "Avr", "Mai", "Jun", "Jul", "Aou", "Sep", "Oct", "Nov", "Dec"];
 
-const monthlyData = [
-  { mois: "Août", dispensations: 1120 },
-  { mois: "Sep",  dispensations: 1340 },
-  { mois: "Oct",  dispensations: 1180 },
-  { mois: "Nov",  dispensations: 1560 },
-  { mois: "Déc",  dispensations: 1820 },
-  { mois: "Jan",  dispensations: 1240 },
-];
-
-function exportRapportHopital(rapport, etab) {
-  openDocument({
-    titre: rapport.name,
-    sousTitre: `${rapport.type} — Période : ${rapport.date}`,
-    etablissement: etab,
-    sections: [
-      {
-        titre: "Indicateurs clés",
-        html: kpiHTML(rapport.kpis.map(([label, value]) => ({ label, value }))),
-      },
-      {
-        titre: "Détail des indicateurs",
-        html: tableHTML(["Indicateur", "Valeur"], rapport.lignes),
-      },
-    ],
-  });
-}
-
-function exportRapportGlobal(etab) {
+function exportRapportGlobal(etab, monthlyData, kpis) {
   openDocument({
     titre: "Rapport global hospitalier",
-    sousTitre: `Données consolidées — ${new Date().toLocaleDateString("fr-FR")}`,
+    sousTitre: `Donnees consolidees — ${new Date().toLocaleDateString("fr-FR")}`,
     etablissement: etab,
     sections: [
       {
         titre: "Indicateurs du mois",
-        html: kpiHTML([
-          { label: "Dispensations", value: "1 240", color: "#10B981" },
-          { label: "Coût médicaments", value: "18,4M FCFA", color: "#3B82F6" },
-          { label: "Taux disponibilité", value: "91.3%", color: "#8B5CF6" },
-          { label: "Patients servis", value: "892", color: "#F59E0B" },
-        ]),
+        html: kpiHTML(kpis.map((k) => ({ label: k.label, value: String(k.value), color: k.color }))),
       },
-      {
-        titre: "Dispensations mensuelles — 6 derniers mois",
+      ...(monthlyData.length > 0 ? [{
+        titre: "Ordonnances mensuelles — 6 derniers mois",
         html: tableHTML(
-          ["Mois", "Dispensations"],
+          ["Mois", "Ordonnances"],
           monthlyData.map((m) => [m.mois, m.dispensations.toLocaleString("fr-FR")]),
           { alignRight: [1] }
         ),
-      },
+      }] : []),
     ],
   });
 }
@@ -72,16 +32,53 @@ function exportRapportGlobal(etab) {
 export default function Rapports() {
   const { auth } = useAuth();
   const etab = etabFromAuth(auth);
+  const { data: ordonnances, loading: loadOrd } = useOrdonnances();
+  const { data: medicaments, loading: loadMed } = useMedicaments();
+
+  const loading = loadOrd || loadMed;
+
+  // Ordonnances par mois (6 derniers mois)
+  const monthlyData = useMemo(() => {
+    const now = new Date();
+    const mois = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      mois.push({ mois: MOIS_LABELS[d.getMonth()], year: d.getFullYear(), month: d.getMonth(), dispensations: 0 });
+    }
+    ordonnances.forEach((o) => {
+      const d = new Date(o.date_emission ?? o.created_at ?? "");
+      if (isNaN(d)) return;
+      const m = mois.find((x) => x.year === d.getFullYear() && x.month === d.getMonth());
+      if (m) m.dispensations += 1;
+    });
+    return mois;
+  }, [ordonnances]);
+
+  // KPIs calcules
+  const moisActuel = new Date().getMonth();
+  const anneeActuelle = new Date().getFullYear();
+  const ordMoisActuel = ordonnances.filter((o) => {
+    const d = new Date(o.date_emission ?? o.created_at ?? "");
+    return !isNaN(d) && d.getMonth() === moisActuel && d.getFullYear() === anneeActuelle;
+  });
+
+  const ruptures = medicaments.filter((m) => (m.stock_actuel ?? 0) < (m.stock_minimum ?? 0)).length;
+  const tauxDispo = medicaments.length > 0
+    ? Math.round(((medicaments.length - ruptures) / medicaments.length) * 100)
+    : 0;
+  const enAttente = ordonnances.filter((o) => o.statut === "en_attente").length;
+
+  const kpis = [
+    { label: "Ordonnances (mois)", value: loading ? "…" : ordMoisActuel.length, color: "#10B981" },
+    { label: "Total ordonnances",  value: loading ? "…" : ordonnances.length,   color: "#3B82F6" },
+    { label: "Taux disponibilite", value: loading ? "…" : `${tauxDispo}%`,       color: "#8B5CF6" },
+    { label: "En attente",         value: loading ? "…" : enAttente,             color: "#F59E0B" },
+  ];
 
   return (
     <Layout title="Rapports Hospitaliers" subtitle="Tableaux de bord et rapports de performance">
       <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
-        {[
-          { label: "Dispensations (mois)", value: "1 240", color: "#10B981" },
-          { label: "Coût médicaments", value: "18.4M FCFA", color: "#3B82F6" },
-          { label: "Taux disponibilité", value: "91.3%", color: "#8B5CF6" },
-          { label: "Patients servis", value: "892", color: "#F59E0B" },
-        ].map((k) => (
+        {kpis.map((k) => (
           <div key={k.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "18px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
             <div style={{ fontSize: 22, fontWeight: 800, color: k.color }}>{k.value}</div>
             <div style={{ fontSize: 12, color: "#6B7280" }}>{k.label}</div>
@@ -90,46 +87,58 @@ export default function Rapports() {
       </div>
 
       <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 20, minWidth: 0 }}>
-        <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Dispensations mensuelles</h3>
-        <div style={{ width: "100%", height: 220 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={monthlyData}>
-              <XAxis dataKey="mois" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip />
-              <Bar dataKey="dispensations" fill="#10B981" radius={[6, 6, 0, 0]} name="Dispensations" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+        <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Ordonnances mensuelles</h3>
+        {loading ? (
+          <div style={{ height: 220, display: "flex", alignItems: "center", justifyContent: "center", color: "#9CA3AF", fontSize: 14 }}>Chargement…</div>
+        ) : ordonnances.length === 0 ? (
+          <div style={{ height: 220, display: "flex", alignItems: "center", justifyContent: "center", color: "#9CA3AF", fontSize: 14 }}>Aucune ordonnance enregistree.</div>
+        ) : (
+          <div style={{ width: "100%", height: 220 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={monthlyData}>
+                <XAxis dataKey="mois" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
+                <Tooltip />
+                <Bar dataKey="dispensations" fill="#10B981" radius={[6, 6, 0, 0]} name="Ordonnances" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </div>
 
       <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Rapports disponibles</h3>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Synthese</h3>
           <button
-            onClick={() => exportRapportGlobal(etab)}
+            onClick={() => exportRapportGlobal(etab, monthlyData, kpis)}
             style={{ padding: "7px 16px", backgroundColor: "#10B981", color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
           >
-            Générer rapport
+            Generer rapport
           </button>
         </div>
-        {rapportsStatiques.map((r) => (
-          <div key={r.name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid #F3F4F6" }}>
-            <div>
-              <div style={{ fontWeight: 600, fontSize: 13, color: "#0A1628" }}>{r.name}</div>
-              <div style={{ fontSize: 11, color: "#9CA3AF" }}>Généré le {r.date}</div>
+
+        {loading ? (
+          <div style={{ padding: "32px", textAlign: "center", color: "#9CA3AF", fontSize: 14 }}>Chargement…</div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div style={{ padding: "16px", backgroundColor: "#F0FDF4", borderRadius: 10 }}>
+              <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>Ordonnances ce mois</div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: "#10B981" }}>{ordMoisActuel.length}</div>
             </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <span style={{ padding: "3px 10px", backgroundColor: "#DCFCE7", color: "#16A34A", borderRadius: 8, fontSize: 11, fontWeight: 600 }}>{r.type}</span>
-              <button
-                onClick={() => exportRapportHopital(r, etab)}
-                style={{ padding: "6px 14px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 12, cursor: "pointer" }}
-              >
-                Imprimer
-              </button>
+            <div style={{ padding: "16px", backgroundColor: "#EFF6FF", borderRadius: 10 }}>
+              <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>Medicaments en base</div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: "#3B82F6" }}>{medicaments.length}</div>
+            </div>
+            <div style={{ padding: "16px", backgroundColor: "#F5F3FF", borderRadius: 10 }}>
+              <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>Taux de disponibilite</div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: "#8B5CF6" }}>{tauxDispo}%</div>
+            </div>
+            <div style={{ padding: "16px", backgroundColor: ruptures > 0 ? "#FEF2F2" : "#F0FDF4", borderRadius: 10 }}>
+              <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>Ruptures de stock</div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: ruptures > 0 ? "#EF4444" : "#10B981" }}>{ruptures}</div>
             </div>
           </div>
-        ))}
+        )}
       </div>
     </Layout>
   );

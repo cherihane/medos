@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Layout from "../../components/Layout";
+import { useEtablissements } from "../../hooks/useSupabaseData";
 
 const endpoints = [
   { method: "GET", path: "/api/v1/structures", desc: "Lister toutes les structures de santé", status: "stable" },
@@ -72,17 +73,20 @@ function CleModal({ onClose }) {
 
 export default function API() {
   const [showCle, setShowCle] = useState(false);
+  const { data: etablissements, loading: loadEtab } = useEtablissements();
+
+  const kpis = [
+    { label: "Endpoints documentes", value: endpoints.length,                              color: "#8B5CF6" },
+    { label: "Organisations",        value: loadEtab ? "…" : etablissements.length,        color: "#3B82F6" },
+    { label: "Structures actives",   value: loadEtab ? "…" : etablissements.filter((e) => e.actif).length, color: "#10B981" },
+    { label: "Version API",          value: "v1.0",                                        color: "#F59E0B" },
+  ];
 
   return (
-    <Layout title="API" subtitle="Documentation et accès à l'API nationale MedOS">
+    <Layout title="API" subtitle="Documentation et acces a l'API nationale MedOS">
       {showCle && <CleModal onClose={() => setShowCle(false)} />}
       <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
-        {[
-          { label: "Endpoints actifs", value: "34", color: "#8B5CF6" },
-          { label: "Clés API délivrées", value: "128", color: "#3B82F6" },
-          { label: "Appels/heure", value: "4 821", color: "#10B981" },
-          { label: "Disponibilité", value: "99.8%", color: "#F59E0B" },
-        ].map((k) => (
+        {kpis.map((k) => (
           <div key={k.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "18px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
             <div style={{ fontSize: 22, fontWeight: 800, color: k.color }}>{k.value}</div>
             <div style={{ fontSize: 12, color: "#6B7280" }}>{k.label}</div>
@@ -131,22 +135,29 @@ export default function API() {
             </button>
           </div>
 
-          <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-            <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Organisations connectées</h3>
-            {[
-              { org: "OMS Côte d'Ivoire", usage: "Épidémiologie", calls: "842/j" },
-              { org: "CEDEAO Santé", usage: "Stocks", calls: "1 204/j" },
-              { org: "Institut Pasteur CI", usage: "Traçabilité", calls: "321/j" },
-              { org: "Banque Mondiale", usage: "ODD", calls: "156/j" },
-            ].map((o) => (
-              <div key={o.org} style={{ display: "flex", justifyContent: "space-between", padding: "9px 0", borderBottom: "1px solid #F3F4F6" }}>
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: "#0A1628" }}>{o.org}</div>
-                  <div style={{ fontSize: 10, color: "#9CA3AF" }}>{o.usage}</div>
-                </div>
-                <span style={{ fontSize: 12, color: "#8B5CF6", fontWeight: 700 }}>{o.calls}</span>
+          <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", maxHeight: 280, overflowY: "auto" }}>
+            <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>
+              Organisations connectees {!loadEtab && `(${etablissements.length})`}
+            </h3>
+            {loadEtab ? (
+              <div style={{ color: "#9CA3AF", fontSize: 13 }}>Chargement…</div>
+            ) : etablissements.length === 0 ? (
+              <div style={{ padding: "20px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>
+                Aucune organisation enregistree.
               </div>
-            ))}
+            ) : (
+              etablissements.map((e) => (
+                <div key={e.id} style={{ display: "flex", justifyContent: "space-between", padding: "9px 0", borderBottom: "1px solid #F3F4F6" }}>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "#0A1628" }}>{e.nom ?? "—"}</div>
+                    <div style={{ fontSize: 10, color: "#9CA3AF" }}>{e.type ?? "—"}{e.ville ? ` · ${e.ville}` : ""}</div>
+                  </div>
+                  <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 8, fontWeight: 700, backgroundColor: e.actif ? "#DCFCE7" : "#F3F4F6", color: e.actif ? "#16A34A" : "#9CA3AF" }}>
+                    {e.actif ? "actif" : "inactif"}
+                  </span>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>
