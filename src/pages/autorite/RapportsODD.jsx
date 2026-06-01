@@ -169,22 +169,25 @@ export default function RapportsODD() {
           </div>
 
           <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-            <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Rapports disponibles</h3>
+            <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Generer un rapport</h3>
+            <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 16, lineHeight: 1.6 }}>
+              Chaque rapport est genere a partir des donnees Supabase en temps reel : etablissements, medicaments, alertes.
+            </div>
             {[
-              { name: "Rapport ODD Santé 2023", date: "Jan 2024", pages: "84 pages" },
-              { name: "Bilan mi-parcours 2020-2030", date: "Juil 2023", pages: "120 pages" },
-              { name: "Rapport régional CEDEAO", date: "Oct 2023", pages: "56 pages" },
+              { name: "Rapport ODD consolidé", desc: `${totalEtab} etablissement${totalEtab !== 1 ? "s" : ""} · ${medicaments.length} medicament${medicaments.length !== 1 ? "s" : ""}` },
+              { name: "Rapport pharmacovigilance", desc: `${alertes.length} alerte${alertes.length !== 1 ? "s" : ""} enregistree${alertes.length !== 1 ? "s" : ""}` },
             ].map((r) => (
               <div key={r.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 0", borderBottom: "1px solid #F3F4F6" }}>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: "#0A1628" }}>{r.name}</div>
-                  <div style={{ fontSize: 11, color: "#9CA3AF" }}>{r.date} · {r.pages}</div>
+                  <div style={{ fontSize: 11, color: "#9CA3AF" }}>{r.desc}</div>
                 </div>
                 <button
                   onClick={() => genererPDF(r.name)}
                   disabled={generating === r.name}
-                  style={{ padding: "6px 14px", backgroundColor: generating === r.name ? "#E5E7EB" : "#F8FAFC", color: generating === r.name ? "#9CA3AF" : "#374151", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 12, cursor: generating === r.name ? "wait" : "pointer" }}>
-                  {generating === r.name ? "Génération…" : "Télécharger"}
+                  style={{ padding: "6px 14px", backgroundColor: generating === r.name ? "#E5E7EB" : "#F8FAFC", color: generating === r.name ? "#9CA3AF" : "#374151", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 12, cursor: generating === r.name ? "wait" : "pointer" }}
+                >
+                  {generating === r.name ? "Generation…" : "Telecharger"}
                 </button>
               </div>
             ))}
