@@ -136,18 +136,59 @@ export function useLots() {
   );
 }
 
+// ─── Ventes des 7 derniers jours (chart pharmacie) ───────────────────────────
+export function useVentes7Jours() {
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    const NOMS = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
+    const jours = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      jours.push({ iso: d.toISOString().slice(0, 10), label: NOMS[d.getDay()] });
+    }
+    const debut = jours[0].iso + "T00:00:00";
+    Promise.all([
+      supabase.from("ventes").select("created_at, montant_total").gte("created_at", debut),
+      supabase.from("ordonnances").select("date_emission").gte("date_emission", jours[0].iso),
+    ]).then(([vRes, oRes]) => {
+      const vm = {};
+      (vRes.data ?? []).forEach((v) => {
+        const d = v.created_at?.slice(0, 10);
+        if (d) vm[d] = (vm[d] ?? 0) + (v.montant_total ?? 0);
+      });
+      const om = {};
+      (oRes.data ?? []).forEach((o) => {
+        const d = o.date_emission;
+        if (d) om[d] = (om[d] ?? 0) + 1;
+      });
+      setData(jours.map((j) => ({
+        day: j.label,
+        ventes: Math.round(vm[j.iso] ?? 0),
+        ordonnances: om[j.iso] ?? 0,
+      })));
+      setLoading(false);
+    });
+  }, []);
+  return { data, loading };
+}
+
 // ─── KPI pharmacie ────────────────────────────────────────────────────────────
 export function useKpiPharmacie() {
   const [state, setState] = useState({ data: null, loading: true, error: null });
   useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10) + "T00:00:00";
     Promise.all([
       supabase.from("medicaments").select("id, stock_actuel, stock_minimum"),
       supabase.from("patients").select("id", { count: "exact", head: true }),
       supabase.from("alertes").select("id").eq("resolu", false),
       supabase.from("ordonnances").select("id").eq("statut", "en_attente"),
-    ]).then(([meds, pats, alts, ords]) => {
+      supabase.from("ventes").select("montant_total").gte("created_at", today),
+    ]).then(([meds, pats, alts, ords, ventes]) => {
       const all = meds.data ?? [];
       const ruptures = all.filter((m) => m.stock_actuel < m.stock_minimum).length;
+      const ventesJour = (ventes.data ?? []).reduce((s, v) => s + (v.montant_total ?? 0), 0);
       setState({
         data: {
           totalMedicaments: all.length,
@@ -155,6 +196,7 @@ export function useKpiPharmacie() {
           totalPatients: pats.count ?? 0,
           alertesActives: alts.data?.length ?? 0,
           ordonnancesEnAttente: ords.data?.length ?? 0,
+          ventesJour,
         },
         loading: false,
         error: meds.error ?? pats.error ?? alts.error ?? null,

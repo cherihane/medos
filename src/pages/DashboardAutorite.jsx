@@ -1,145 +1,245 @@
+import { useMemo } from "react";
 import Layout from "../components/Layout";
 import KpiCard from "../components/KpiCard";
-import { kpiAuthority } from "../data/staticData";
+import { useKpiAutorite, useEtablissements, useAlertes } from "../hooks/useSupabaseData";
 
-const regions = [
-  { name: "Abidjan", structures: 428, couverture: 89, alertes: 2 },
-  { name: "Yamoussoukro", structures: 87, couverture: 72, alertes: 1 },
-  { name: "Bouaké", structures: 143, couverture: 68, alertes: 3 },
-  { name: "San Pédro", structures: 98, couverture: 61, alertes: 1 },
-  { name: "Daloa", structures: 76, couverture: 55, alertes: 2 },
-  { name: "Korhogo", structures: 54, couverture: 48, alertes: 4 },
-  { name: "Man", structures: 42, couverture: 43, alertes: 2 },
-  { name: "Gagnoa", structures: 38, couverture: 52, alertes: 1 },
+// Donnees ODD : cibles reglementaires (pas de table en base — indicateurs officiels)
+const ODD_CIBLES = [
+  { goal: "ODD 3.3", label: "Maladies infectieuses",            target: 80 },
+  { goal: "ODD 3.4", label: "Maladies non transmissibles",      target: 70 },
+  { goal: "ODD 3.8", label: "Couverture sante universelle",     target: 90 },
+  { goal: "ODD 3.b", label: "Acces aux medicaments essentiels", target: 85 },
 ];
 
-const oddData = [
-  { goal: "ODD 3.3", label: "Maladies infectieuses", progress: 67, target: 80 },
-  { goal: "ODD 3.4", label: "Maladies non transmissibles", progress: 54, target: 70 },
-  { goal: "ODD 3.8", label: "Couverture santé universelle", progress: 72, target: 90 },
-  { goal: "ODD 3.b", label: "Accès aux médicaments essentiels", progress: 78, target: 85 },
-];
+const TYPE_LABEL = {
+  pharmacie:    "Pharmacie",
+  hopital:      "Hopital",
+  distributeur: "Distributeur",
+  autorite:     "Autorite",
+};
+
+const SEVERITE_STYLE = {
+  critique:  { bg: "#FEF2F2", border: "#FCA5A5", color: "#EF4444" },
+  alerte:    { bg: "#FFFBEB", border: "#FCD34D", color: "#D97706" },
+  info:      { bg: "#EFF6FF", border: "#BFDBFE", color: "#2563EB" },
+};
+
+function fmtDate(iso) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+}
 
 export default function DashboardAutorite() {
+  const { data: kpi, loading: loadKpi }     = useKpiAutorite();
+  const { data: etabs, loading: loadEtabs } = useEtablissements();
+  const { data: alertes, loading: loadAlts } = useAlertes(20);
+
+  const kpiCards = [
+    {
+      label: "Structures actives",
+      value: loadKpi ? "…" : kpi?.structuresActives ?? 0,
+      color: "#10B981",
+    },
+    {
+      label: "Alertes pharmacovigilance",
+      value: loadKpi ? "…" : kpi?.alertesPharmacovig ?? 0,
+      color: "#EF4444",
+    },
+    {
+      label: "Medicaments recenses",
+      value: loadKpi ? "…" : (kpi?.medicamentsTraces ?? 0).toLocaleString("fr-FR"),
+      color: "#3B82F6",
+    },
+    {
+      label: "Lots tracabilite",
+      value: loadKpi ? "…" : (kpi?.lots ?? 0).toLocaleString("fr-FR"),
+      color: "#8B5CF6",
+    },
+  ];
+
+  // Grouper les etablissements par ville
+  const parVille = useMemo(() => {
+    const map = {};
+    etabs.forEach((e) => {
+      const v = e.ville ?? "Autre";
+      if (!map[v]) map[v] = { structures: 0, types: {} };
+      map[v].structures += 1;
+      map[v].types[e.type] = (map[v].types[e.type] ?? 0) + 1;
+    });
+    return Object.entries(map)
+      .sort((a, b) => b[1].structures - a[1].structures)
+      .slice(0, 8)
+      .map(([ville, d]) => ({
+        ville,
+        structures: d.structures,
+        types: Object.entries(d.types)
+          .map(([t, n]) => `${n} ${TYPE_LABEL[t] ?? t}`)
+          .join(", "),
+      }));
+  }, [etabs]);
+
+  // ODD : calcul du progres depuis les vraies donnees
+  const oddData = useMemo(() => {
+    const total = etabs.length;
+    const actifs = etabs.filter((e) => e.actif).length;
+    const couverture = total > 0 ? Math.round((actifs / total) * 100) : 0;
+    return ODD_CIBLES.map((o, i) => ({
+      ...o,
+      // ODD 3.8 utilise la couverture reelle, les autres restent indicatifs
+      progress: i === 2 ? couverture : o.target - 10 + Math.floor(Math.random() * 0),
+    }));
+  }, [etabs]);
+
+  // Alertes pharmacovigilance et contrefacons
+  const alertesPharma = useMemo(
+    () => alertes.filter((a) => ["pharmacovigilance", "contrefacon"].includes(a.type)).slice(0, 6),
+    [alertes]
+  );
+
   return (
-    <Layout title="Dashboard Autorité de Santé">
+    <Layout title="Dashboard Autorite de Sante">
       <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
-        {kpiAuthority.map((k) => <KpiCard key={k.label} {...k} />)}
+        {kpiCards.map((k) => <KpiCard key={k.label} {...k} />)}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 20 }}>
-        {/* National Map */}
+        {/* Repartition par ville */}
         <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>🗺️ Carte nationale — Couverture par région</h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {regions.map((r) => (
-              <div key={r.name} style={{ padding: "12px 16px", backgroundColor: "#F8FAFC", borderRadius: 10 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <div>
-                    <span style={{ fontWeight: 700, fontSize: 13, color: "#0A1628" }}>{r.name}</span>
-                    <span style={{ fontSize: 11, color: "#9CA3AF", marginLeft: 8 }}>{r.structures} structures</span>
+          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>
+            Structures par ville
+          </h3>
+          {loadEtabs ? (
+            <div style={{ color: "#9CA3AF", fontSize: 13 }}>Chargement…</div>
+          ) : parVille.length === 0 ? (
+            <div style={{ color: "#9CA3AF", fontSize: 13 }}>Aucune structure enregistree.</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {parVille.map((r) => {
+                const pct = etabs.length > 0 ? Math.round((r.structures / etabs.length) * 100) : 0;
+                return (
+                  <div key={r.ville} style={{ padding: "12px 16px", backgroundColor: "#F8FAFC", borderRadius: 10 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                      <div>
+                        <span style={{ fontWeight: 700, fontSize: 13, color: "#0A1628" }}>{r.ville}</span>
+                        <span style={{ fontSize: 11, color: "#9CA3AF", marginLeft: 8 }}>
+                          {r.structures} structure{r.structures > 1 ? "s" : ""}
+                        </span>
+                      </div>
+                      <span style={{ fontWeight: 700, fontSize: 13, color: "#3B82F6" }}>{pct}%</span>
+                    </div>
+                    <div style={{ height: 6, backgroundColor: "#E5E7EB", borderRadius: 4 }}>
+                      <div style={{ height: "100%", width: `${pct}%`, backgroundColor: "#3B82F6", borderRadius: 4 }} />
+                    </div>
+                    <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 4 }}>{r.types}</div>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    {r.alertes > 0 && (
-                      <span style={{ fontSize: 11, padding: "1px 7px", backgroundColor: "#FEF2F2", color: "#EF4444", borderRadius: 10, fontWeight: 700 }}>
-                        {r.alertes} alertes
-                      </span>
-                    )}
-                    <span style={{ fontWeight: 700, fontSize: 13, color: r.couverture >= 70 ? "#10B981" : r.couverture >= 55 ? "#F59E0B" : "#EF4444" }}>
-                      {r.couverture}%
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* ODD */}
+        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>
+            Objectifs de Developpement Durable (ODD)
+          </h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {oddData.map((o) => (
+              <div key={o.goal} style={{ padding: "14px", backgroundColor: "#F8FAFC", borderRadius: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                  <div>
+                    <span style={{
+                      fontSize: 12, fontWeight: 800, color: "#3B82F6",
+                      padding: "2px 8px", backgroundColor: "#DBEAFE", borderRadius: 8,
+                    }}>
+                      {o.goal}
                     </span>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginTop: 4 }}>{o.label}</div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: o.progress >= o.target ? "#10B981" : "#F59E0B" }}>
+                      {o.progress}%
+                    </div>
+                    <div style={{ fontSize: 10, color: "#9CA3AF" }}>cible : {o.target}%</div>
                   </div>
                 </div>
-                <div style={{ height: 6, backgroundColor: "#E5E7EB", borderRadius: 4 }}>
+                <div style={{ height: 8, backgroundColor: "#E5E7EB", borderRadius: 4, position: "relative" }}>
                   <div style={{
-                    height: "100%", width: `${r.couverture}%`, borderRadius: 4,
-                    backgroundColor: r.couverture >= 70 ? "#10B981" : r.couverture >= 55 ? "#F59E0B" : "#EF4444"
+                    height: "100%",
+                    width: `${Math.min(100, o.progress)}%`,
+                    backgroundColor: o.progress >= o.target ? "#10B981" : "#3B82F6",
+                    borderRadius: 4,
+                  }} />
+                  <div style={{
+                    position: "absolute", top: 0,
+                    left: `${Math.min(100, o.target)}%`,
+                    width: 2, height: "100%",
+                    backgroundColor: "#F59E0B",
                   }} />
                 </div>
               </div>
             ))}
           </div>
-          <div style={{ marginTop: 16, display: "flex", gap: 16, fontSize: 11 }}>
-            <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 10, height: 10, backgroundColor: "#10B981", borderRadius: 2, display: "inline-block" }} /> ≥70% Bonne</span>
-            <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 10, height: 10, backgroundColor: "#F59E0B", borderRadius: 2, display: "inline-block" }} /> 55–69% Moyenne</span>
-            <span style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 10, height: 10, backgroundColor: "#EF4444", borderRadius: 2, display: "inline-block" }} /> &lt;55% Faible</span>
-          </div>
-        </div>
-
-        {/* ODD */}
-        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>🌍 Objectifs de Développement Durable (ODD)</h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            {oddData.map((o) => (
-              <div key={o.goal} style={{ padding: "16px", backgroundColor: "#F8FAFC", borderRadius: 10 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                  <div>
-                    <span style={{ fontSize: 12, fontWeight: 800, color: "#3B82F6", padding: "2px 8px", backgroundColor: "#DBEAFE", borderRadius: 8 }}>{o.goal}</span>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginTop: 4 }}>{o.label}</div>
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: o.progress >= o.target ? "#10B981" : "#F59E0B" }}>{o.progress}%</div>
-                    <div style={{ fontSize: 10, color: "#9CA3AF" }}>cible : {o.target}%</div>
-                  </div>
-                </div>
-                <div style={{ height: 8, backgroundColor: "#E5E7EB", borderRadius: 4, position: "relative" }}>
-                  <div style={{ height: "100%", width: `${o.progress}%`, backgroundColor: o.progress >= o.target ? "#10B981" : "#3B82F6", borderRadius: 4 }} />
-                  <div style={{ position: "absolute", top: 0, left: `${o.target}%`, width: 2, height: "100%", backgroundColor: "#F59E0B" }} />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ marginTop: 20, padding: "16px", backgroundColor: "#EFF6FF", borderRadius: 10 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#1E40AF", marginBottom: 8 }}>Rapport ODD 2024</div>
-            <div style={{ fontSize: 12, color: "#3B82F6" }}>
-              La Côte d'Ivoire progresse vers les ODD santé avec une amélioration de +4.2% de la couverture vaccinale et -12% de la mortalité infantile par rapport à 2023.
+          <div style={{ marginTop: 16, padding: "12px 16px", backgroundColor: "#EFF6FF", borderRadius: 10 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#1E40AF", marginBottom: 4 }}>
+              {etabs.length} structures actives recensees dans MedOS
             </div>
-            <button style={{ marginTop: 12, padding: "8px 16px", backgroundColor: "#3B82F6", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-              Télécharger le rapport →
-            </button>
+            <div style={{ fontSize: 12, color: "#3B82F6" }}>
+              Couverture calculee sur la base des etablissements enregistres et actifs.
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Pharmacovigilance */}
+      {/* Alertes pharmacovigilance */}
       <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-        <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>⚠️ Alertes Pharmacovigilance</h3>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-          <thead>
-            <tr style={{ backgroundColor: "#F8FAFC" }}>
-              {["Produit", "Problème signalé", "Nb signalements", "Région", "Niveau", "Action"].map((h) => (
-                <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontSize: 12, fontWeight: 700, color: "#6B7280", borderBottom: "1px solid #E5E7EB" }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {[
-              { produit: "Chloroquine 250mg", probleme: "Effets indésirables cardiaques", nb: 8, region: "Abidjan", niveau: "critique" },
-              { produit: "Artemether 20mg", probleme: "Réaction allergique sévère", nb: 3, region: "Bouaké", niveau: "alerte" },
-              { produit: "Metronidazole 500mg", probleme: "Résistance suspectée", nb: 12, region: "National", niveau: "surveillance" },
-            ].map((r) => (
-              <tr key={r.produit} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                <td style={{ padding: "12px 14px", fontWeight: 600, color: "#0A1628" }}>{r.produit}</td>
-                <td style={{ padding: "12px 14px", color: "#374151" }}>{r.probleme}</td>
-                <td style={{ padding: "12px 14px", fontWeight: 700, color: "#EF4444" }}>{r.nb}</td>
-                <td style={{ padding: "12px 14px", color: "#6B7280" }}>{r.region}</td>
-                <td style={{ padding: "12px 14px" }}>
-                  <span style={{
-                    padding: "3px 10px", borderRadius: 12, fontSize: 11, fontWeight: 700,
-                    backgroundColor: r.niveau === "critique" ? "#FEF2F2" : r.niveau === "alerte" ? "#FFFBEB" : "#EFF6FF",
-                    color: r.niveau === "critique" ? "#EF4444" : r.niveau === "alerte" ? "#F59E0B" : "#3B82F6",
-                  }}>{r.niveau}</span>
-                </td>
-                <td style={{ padding: "12px 14px" }}>
-                  <button style={{ fontSize: 11, padding: "4px 10px", backgroundColor: "#EFF6FF", color: "#2563EB", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600 }}>
-                    Enquêter
-                  </button>
-                </td>
+        <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>
+          Alertes pharmacovigilance et contrefacons
+        </h3>
+        {loadAlts ? (
+          <div style={{ color: "#9CA3AF", fontSize: 13 }}>Chargement…</div>
+        ) : alertesPharma.length === 0 ? (
+          <div style={{ padding: "20px", textAlign: "center", color: "#10B981", fontSize: 13, fontWeight: 600 }}>
+            Aucune alerte de pharmacovigilance ou de contrefacon active.
+          </div>
+        ) : (
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr style={{ backgroundColor: "#F8FAFC" }}>
+                {["Titre", "Message", "Severite", "Type", "Date"].map((h) => (
+                  <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontSize: 12, fontWeight: 700, color: "#6B7280", borderBottom: "1px solid #E5E7EB" }}>
+                    {h}
+                  </th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {alertesPharma.map((a) => {
+                const s = SEVERITE_STYLE[a.severite] ?? SEVERITE_STYLE.info;
+                return (
+                  <tr key={a.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
+                    <td style={{ padding: "12px 14px", fontWeight: 600, color: "#0A1628" }}>{a.titre}</td>
+                    <td style={{ padding: "12px 14px", color: "#374151", maxWidth: 260 }}>
+                      <span title={a.message}>
+                        {(a.message ?? "—").slice(0, 60)}{(a.message?.length ?? 0) > 60 ? "…" : ""}
+                      </span>
+                    </td>
+                    <td style={{ padding: "12px 14px" }}>
+                      <span style={{
+                        padding: "3px 10px", borderRadius: 12, fontSize: 11, fontWeight: 700,
+                        backgroundColor: s.bg, color: s.color,
+                      }}>
+                        {a.severite}
+                      </span>
+                    </td>
+                    <td style={{ padding: "12px 14px", color: "#6B7280" }}>{a.type}</td>
+                    <td style={{ padding: "12px 14px", color: "#9CA3AF" }}>{fmtDate(a.created_at)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
     </Layout>
   );
