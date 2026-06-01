@@ -99,7 +99,7 @@ function StatutModal({ livraison, onClose, onSaved }) {
         const nom = medicamentNom.trim();
         const qte = parseInt(quantiteLivree, 10);
         if (nom && !isNaN(qte) && qte > 0) {
-          const result = await receiveLivraison(livraison.id, nom, qte);
+          const result = await receiveLivraison(nom, qte, livraison.etablissement_id);
           if (result === "medicament_introuvable") {
             setStockWarn(`Statut mis à jour, mais "${nom}" est introuvable dans l'inventaire du destinataire — stock non incrémenté.`);
             setSaving(false);
