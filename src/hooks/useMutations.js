@@ -131,3 +131,33 @@ export async function insertFournisseur(fields) {
 export async function updateFournisseur(id, fields) {
   return run(supabase.from("fournisseurs").update(fields).eq("id", id).select().single());
 }
+
+// ─── Clôtures de caisse ───────────────────────────────────────────────────────
+export async function insertClotureCaisse(fields) {
+  return run(supabase.from("clotures_caisse").insert(fields).select().single());
+}
+
+// Renvoie la clôture du jour si elle existe, null sinon
+export async function fetchClotureCaisse(etablissement_id, dateISO) {
+  let q = supabase
+    .from("clotures_caisse")
+    .select("id, date_journee, total_encaisse, nb_transactions, gerant_email, created_at")
+    .eq("date_journee", dateISO);
+  if (etablissement_id) q = q.eq("etablissement_id", etablissement_id);
+  const { data, error } = await q.maybeSingle();
+  if (error) throw new Error(`clotures_caisse: ${error.message}`);
+  return data ?? null;
+}
+
+// ─── Réception livraison → incrément stock destinataire (SECURITY DEFINER) ───
+// Le distributeur ne peut pas écrire directement dans le stock d'un autre
+// établissement. La RPC tourne côté Supabase avec des droits étendus.
+export async function receiveLivraison(livraisonId, medicamentNom, quantite) {
+  const { data, error } = await supabase.rpc("receive_livraison", {
+    p_livraison_id:   livraisonId,
+    p_medicament_nom: medicamentNom,
+    p_quantite:       quantite,
+  });
+  if (error) throw new Error(`receive_livraison: ${error.message}`);
+  return data; // "ok" | "medicament_introuvable" | "livraison_introuvable"
+}

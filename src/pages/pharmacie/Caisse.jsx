@@ -3,7 +3,8 @@ import Layout from "../../components/Layout";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useMedicaments } from "../../hooks/useSupabaseData";
-import { insertVentes, decrementStock, insertJournalCaisse, fetchJournalJour } from "../../hooks/useMutations";
+import { insertVentes, decrementStock, insertJournalCaisse, fetchJournalJour, insertClotureCaisse, fetchClotureCaisse } from "../../hooks/useMutations";
+import { supabase } from "../../supabaseClient";
 import { useAuth } from "../../context/AuthContext";
 import { openDocument, tableHTML, kpiHTML, etabFromAuth } from "../../utils/MedOSDocument";
 
@@ -29,6 +30,134 @@ const MODE_LABELS = {
   carte: "Carte",
   assurance: "Assurance",
 };
+
+// ─── Ticket de caisse imprimable ─────────────────────────────────────────────
+function printTicket({ ref, date, items, paiement, total, montantRecu, monnaie, etab }) {
+  const dateStr = date.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const heureStr = date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  const modeLabel = MODE_LABELS[paiement] ?? paiement;
+  const lignes = items.map((i) => `
+    <tr>
+      <td style="padding:2px 0;font-size:11px;max-width:28mm;overflow:hidden;white-space:nowrap">${i.nom}</td>
+      <td style="text-align:center;padding:2px 4px;font-size:11px">${i.qty}</td>
+      <td style="text-align:right;padding:2px 0;font-size:11px;white-space:nowrap">${(i.prix_unitaire ?? 0).toLocaleString("fr-FR")} FCFA</td>
+      <td style="text-align:right;padding:2px 0;font-size:11px;white-space:nowrap">${((i.prix_unitaire ?? 0) * i.qty).toLocaleString("fr-FR")}</td>
+    </tr>`).join("");
+
+  const html = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Ticket ${ref}</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'Courier New',Courier,monospace; width:72mm; padding:4mm 3mm; font-size:12px; color:#000; }
+    .centre { text-align:center; }
+    .bold   { font-weight:bold; }
+    .sep-solid  { border-top:1px solid #000; margin:5px 0; }
+    .sep-dashed { border-top:1px dashed #000; margin:5px 0; }
+    table { width:100%; border-collapse:collapse; }
+    th { font-size:9px; text-transform:uppercase; padding:2px 0; border-bottom:1px solid #000; }
+    th:nth-child(2),td:nth-child(2) { text-align:center; }
+    th:nth-child(3),td:nth-child(3),th:nth-child(4),td:nth-child(4) { text-align:right; }
+    .row-total td { font-weight:bold; font-size:14px; border-top:1px solid #000; padding-top:4px; }
+    .footer { text-align:center; font-size:10px; margin-top:8px; }
+    @media print { @page { size:72mm auto; margin:0; } body { width:72mm; } }
+  </style>
+</head>
+<body>
+  <div class="centre bold" style="font-size:15px">${etab?.nom ?? "Pharmacie"}</div>
+  ${etab?.ville ? `<div class="centre" style="font-size:10px">${etab.ville}</div>` : ""}
+  <div class="sep-solid"></div>
+  <div class="centre bold" style="font-size:12px;letter-spacing:1px">${ref}</div>
+  <div class="centre" style="font-size:10px">${dateStr} &nbsp; ${heureStr}</div>
+  <div class="sep-dashed"></div>
+  <table>
+    <thead>
+      <tr>
+        <th style="text-align:left">Article</th>
+        <th>Qte</th>
+        <th>P.U.</th>
+        <th>Total</th>
+      </tr>
+    </thead>
+    <tbody>${lignes}</tbody>
+    <tfoot>
+      <tr class="row-total">
+        <td colspan="3">TOTAL TTC</td>
+        <td style="text-align:right;white-space:nowrap">${total.toLocaleString("fr-FR")} FCFA</td>
+      </tr>
+    </tfoot>
+  </table>
+  <div class="sep-dashed"></div>
+  <div style="font-size:11px">Mode de paiement : <strong>${modeLabel}</strong></div>
+  ${paiement === "especes" && montantRecu != null ? `
+  <div style="font-size:11px">Montant recu      : ${montantRecu.toLocaleString("fr-FR")} FCFA</div>
+  <div style="font-size:11px">Monnaie rendue    : ${(monnaie ?? 0).toLocaleString("fr-FR")} FCFA</div>` : ""}
+  <div class="sep-solid"></div>
+  <div class="footer">MedOS — Merci de votre confiance</div>
+</body>
+</html>`;
+
+  const w = window.open("", "_blank", "width=320,height=600,toolbar=0,menubar=0");
+  if (!w) { alert("Autorisez les pop-ups pour imprimer le ticket."); return; }
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  setTimeout(() => { w.print(); }, 350);
+}
+
+// ─── Document de clôture imprimable ──────────────────────────────────────────
+function printCloture({ date, totaux, nb, gerant, etab }) {
+  const dateStr = new Date(date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const heureStr = new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  const html = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Cloture ${date}</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:Arial,sans-serif; max-width:160mm; margin:auto; padding:12mm; font-size:13px; }
+    h1 { font-size:18px; font-weight:800; color:#0A1628; margin-bottom:4px; }
+    .sub { font-size:12px; color:#6B7280; margin-bottom:16px; }
+    table { width:100%; border-collapse:collapse; margin-top:16px; }
+    th { background:#F3F4F6; padding:8px 12px; text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.05em; }
+    td { padding:10px 12px; border-bottom:1px solid #E5E7EB; font-size:13px; }
+    .val { text-align:right; font-weight:700; }
+    .total-row td { font-size:15px; font-weight:800; color:#0A1628; background:#F0F4FB; border-top:2px solid #0A1628; }
+    .footer { margin-top:24px; font-size:11px; color:#9CA3AF; text-align:center; border-top:1px solid #E5E7EB; padding-top:12px; }
+    .badge { display:inline-block; padding:3px 10px; border-radius:4px; background:#DCFCE7; color:#16A34A; font-weight:700; font-size:11px; }
+    @media print { @page { margin:10mm; } }
+  </style>
+</head>
+<body>
+  <h1>Cloture de caisse</h1>
+  <div class="sub">${etab?.nom ?? ""} ${etab?.ville ? "· " + etab.ville : ""}</div>
+  <div><strong>Journee du</strong> ${dateStr}</div>
+  <div style="margin-top:6px;font-size:12px;color:#6B7280">Cloturee le ${new Date().toLocaleDateString("fr-FR")} a ${heureStr} par ${gerant}</div>
+  <div style="margin-top:6px"><span class="badge">JOURNEE CLOTUREE — LECTURE SEULE</span></div>
+  <table>
+    <thead><tr><th>Mode de paiement</th><th class="val">Montant (FCFA)</th></tr></thead>
+    <tbody>
+      <tr><td>Especes</td><td class="val">${totaux.especes.toLocaleString("fr-FR")}</td></tr>
+      <tr><td>Mobile Money</td><td class="val">${totaux.mobile.toLocaleString("fr-FR")}</td></tr>
+      <tr><td>Credit</td><td class="val">${totaux.credit.toLocaleString("fr-FR")}</td></tr>
+      <tr><td>Autres</td><td class="val">${totaux.autres.toLocaleString("fr-FR")}</td></tr>
+      <tr class="total-row"><td>TOTAL ENCAISSE</td><td class="val">${totaux.total.toLocaleString("fr-FR")}</td></tr>
+    </tbody>
+  </table>
+  <div style="margin-top:12px;font-size:13px">Nombre de transactions : <strong>${nb}</strong></div>
+  <div class="footer">MedOS — Document de cloture officiel · ${dateStr}</div>
+</body>
+</html>`;
+  const w = window.open("", "_blank", "width=700,height=900,toolbar=0,menubar=0");
+  if (!w) { alert("Autorisez les pop-ups pour imprimer la cloture."); return; }
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  setTimeout(() => { w.print(); }, 350);
+}
 
 // ─── Impression journal du gérant ─────────────────────────────────────────────
 function printJournal(journal, date, auth) {
@@ -111,6 +240,7 @@ function OngletCaisse({ onSaleComplete }) {
   const [paiement, setPaiement] = useState("especes");
   const [montantRecu, setMontantRecu] = useState("");
   const [saving, setSaving] = useState(false);
+  const [lastTicket, setLastTicket] = useState(null);
 
   const total = cart.reduce((s, i) => s + (i.prix_unitaire ?? 0) * i.qty, 0);
   const monnaie = paiement === "especes" ? Math.max(0, Number(montantRecu) - total) : 0;
@@ -192,6 +322,18 @@ function OngletCaisse({ onSaleComplete }) {
       });
 
       success(`Vente enregistrée — ${total.toLocaleString()} FCFA`);
+      const ticketYear = now.getFullYear();
+      const rand = Math.random().toString(36).slice(2, 7).toUpperCase();
+      setLastTicket({
+        ref: `TKT-${ticketYear}-${rand}`,
+        date: now,
+        items: cart.map((i) => ({ nom: i.nom, qty: i.qty, prix_unitaire: i.prix_unitaire })),
+        paiement,
+        total,
+        montantRecu: montantRecuNum,
+        monnaie: monnaieRendue,
+        etab: etabFromAuth(auth),
+      });
       setCart([]);
       setMontantRecu("");
       onSaleComplete?.();
@@ -205,6 +347,31 @@ function OngletCaisse({ onSaleComplete }) {
   return (
     <>
       <Toast toasts={toasts} />
+
+      {/* Bannière ticket après vente */}
+      {lastTicket && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px", backgroundColor: "#DCFCE7", border: "1.5px solid #16A34A", borderRadius: 12, marginBottom: 16 }}>
+          <div>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#15803D" }}>Vente enregistrée — {lastTicket.ref}</span>
+            <span style={{ fontSize: 12, color: "#16A34A", marginLeft: 12 }}>{lastTicket.total.toLocaleString()} FCFA · {MODE_LABELS[lastTicket.paiement] ?? lastTicket.paiement}</span>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={() => printTicket(lastTicket)}
+              style={{ padding: "7px 16px", backgroundColor: "#16A34A", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+            >
+              Imprimer le ticket
+            </button>
+            <button
+              onClick={() => setLastTicket(null)}
+              style={{ padding: "7px 12px", backgroundColor: "transparent", color: "#16A34A", border: "1.5px solid #16A34A", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+            >
+              Fermer
+            </button>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 20, height: "calc(100vh - 220px)" }}>
         {/* Gauche */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -395,6 +562,118 @@ function OngletCaisse({ onSaleComplete }) {
   );
 }
 
+// ─── Modal clôture de caisse ─────────────────────────────────────────────────
+function ClotureModal({ date, journal, byMode, totalEncaisse, auth, onClose, onDone }) {
+  const etab = etabFromAuth(auth);
+  const [password, setPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const nb = journal.length;
+  const totaux = {
+    especes:  byMode.especes     ?? 0,
+    mobile:   byMode.mobile_money ?? 0,
+    credit:   byMode.credit       ?? 0,
+    autres:   Object.entries(byMode).filter(([k]) => !["especes", "mobile_money", "credit"].includes(k)).reduce((s, [, v]) => s + v, 0),
+    total:    totalEncaisse,
+  };
+
+  const handleCloturer = async () => {
+    if (!password) { setErr("Mot de passe requis"); return; }
+    setSaving(true);
+    setErr(null);
+    try {
+      const { error: authErr } = await supabase.auth.signInWithPassword({
+        email: auth?.user?.email ?? "",
+        password,
+      });
+      if (authErr) throw new Error("Mot de passe incorrect");
+      await insertClotureCaisse({
+        etablissement_id: auth?.etablissement_id ?? null,
+        gerant_id:        auth?.user?.id         ?? null,
+        gerant_email:     auth?.user?.email       ?? null,
+        date_journee:     date,
+        total_especes:    totaux.especes,
+        total_mobile:     totaux.mobile,
+        total_credit:     totaux.credit,
+        total_encaisse:   totaux.total,
+        nb_transactions:  nb,
+      });
+      printCloture({
+        date,
+        totaux,
+        nb,
+        gerant: auth?.user?.email ?? "Gérant",
+        etab,
+      });
+      onDone();
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const dateStr = new Date(date + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+
+  return (
+    <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ backgroundColor: "white", borderRadius: 16, padding: "28px 32px", width: 480, maxWidth: "95vw", boxShadow: "0 8px 40px rgba(0,0,0,0.18)" }}>
+        <h2 style={{ margin: "0 0 4px", fontSize: 17, fontWeight: 800, color: "#0A1628" }}>Clôture de caisse</h2>
+        <p style={{ margin: "0 0 20px", fontSize: 12, color: "#6B7280" }}>{dateStr}</p>
+
+        {/* Récapitulatif */}
+        <div style={{ backgroundColor: "#F8FAFC", borderRadius: 10, padding: "14px 16px", marginBottom: 20 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <tbody>
+              {[
+                { label: "Espèces",      val: totaux.especes },
+                { label: "Mobile Money", val: totaux.mobile },
+                { label: "Crédit",       val: totaux.credit },
+                { label: "Autres",       val: totaux.autres },
+              ].map((r) => (
+                <tr key={r.label}>
+                  <td style={{ fontSize: 13, color: "#374151", padding: "5px 0" }}>{r.label}</td>
+                  <td style={{ fontSize: 13, fontWeight: 700, color: "#0A1628", textAlign: "right" }}>{r.val.toLocaleString("fr-FR")} FCFA</td>
+                </tr>
+              ))}
+              <tr style={{ borderTop: "2px solid #0A1628" }}>
+                <td style={{ fontSize: 14, fontWeight: 800, color: "#0A1628", paddingTop: 8 }}>TOTAL ENCAISSÉ</td>
+                <td style={{ fontSize: 15, fontWeight: 800, color: "#10B981", textAlign: "right", paddingTop: 8 }}>{totaux.total.toLocaleString("fr-FR")} FCFA</td>
+              </tr>
+            </tbody>
+          </table>
+          <div style={{ marginTop: 10, fontSize: 12, color: "#6B7280" }}>Transactions : <strong>{nb}</strong></div>
+        </div>
+
+        <div style={{ backgroundColor: "#FFFBEB", border: "1.5px solid #FCD34D", borderRadius: 8, padding: "10px 14px", marginBottom: 20, fontSize: 12, color: "#92400E" }}>
+          Cette opération est irréversible. La journée sera verrouillée en lecture seule. Confirmez avec votre mot de passe.
+        </div>
+
+        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Mot de passe du gérant</label>
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleCloturer()}
+          placeholder="Votre mot de passe"
+          style={{ width: "100%", padding: "9px 12px", border: `1.5px solid ${err ? "#EF4444" : "#E5E7EB"}`, borderRadius: 8, fontSize: 13, boxSizing: "border-box", outline: "none", marginBottom: err ? 6 : 16 }}
+        />
+        {err && <div style={{ fontSize: 12, color: "#EF4444", marginBottom: 12 }}>{err}</div>}
+
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: "10px", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", backgroundColor: "white", color: "#374151" }}>
+            Annuler
+          </button>
+          <button onClick={handleCloturer} disabled={saving} style={{ flex: 2, padding: "10px", backgroundColor: saving ? "#E5E7EB" : "#DC2626", color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer" }}>
+            {saving ? "Clôture en cours…" : "Clôturer et imprimer"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Onglet Journal du gérant ─────────────────────────────────────────────────
 function OngletJournal({ refreshKey }) {
   const { auth } = useAuth();
@@ -402,13 +681,21 @@ function OngletJournal({ refreshKey }) {
   const [journal, setJournal] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [cloture, setCloture] = useState(null);
+  const [showCloture, setShowCloture] = useState(false);
+
+  const isGerant = auth?.role_interne === null || auth?.role_interne === "gerant";
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchJournalJour(auth?.etablissement_id ?? null, date);
+      const [data, clot] = await Promise.all([
+        fetchJournalJour(auth?.etablissement_id ?? null, date),
+        fetchClotureCaisse(auth?.etablissement_id ?? null, date),
+      ]);
       setJournal(data);
+      setCloture(clot);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -439,6 +726,37 @@ function OngletJournal({ refreshKey }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
+      {/* Modal clôture */}
+      {showCloture && (
+        <ClotureModal
+          date={date}
+          journal={journal}
+          byMode={byMode}
+          totalEncaisse={totalEncaisse}
+          auth={auth}
+          onClose={() => setShowCloture(false)}
+          onDone={() => { setShowCloture(false); load(); }}
+        />
+      )}
+
+      {/* Bannière journée clôturée */}
+      {cloture && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px", backgroundColor: "#DCFCE7", border: "1.5px solid #16A34A", borderRadius: 12 }}>
+          <div>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#15803D" }}>Journée clôturée — lecture seule</span>
+            <span style={{ fontSize: 12, color: "#16A34A", marginLeft: 12 }}>
+              {cloture.total_encaisse?.toLocaleString("fr-FR")} FCFA · {cloture.nb_transactions} transaction{cloture.nb_transactions !== 1 ? "s" : ""}
+            </span>
+          </div>
+          <button
+            onClick={() => printCloture({ date, totaux: { especes: 0, mobile: 0, credit: 0, autres: 0, total: cloture.total_encaisse ?? 0 }, nb: cloture.nb_transactions ?? 0, gerant: cloture.gerant_email ?? "Gérant", etab: etabFromAuth(auth) })}
+            style={{ padding: "6px 14px", backgroundColor: "#16A34A", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+          >
+            Réimprimer
+          </button>
+        </div>
+      )}
+
       {/* Barre d'outils */}
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <input
@@ -451,6 +769,22 @@ function OngletJournal({ refreshKey }) {
           Actualiser
         </button>
         <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
+          {isGerant && (
+            <button
+              onClick={() => setShowCloture(true)}
+              disabled={cloture != null || journal.length === 0}
+              style={{
+                padding: "8px 16px",
+                backgroundColor: cloture != null ? "#DCFCE7" : journal.length === 0 ? "#E5E7EB" : "#DC2626",
+                color: cloture != null ? "#16A34A" : journal.length === 0 ? "#9CA3AF" : "white",
+                border: cloture != null ? "1.5px solid #16A34A" : "none",
+                borderRadius: 8, fontSize: 13, fontWeight: 700,
+                cursor: cloture != null || journal.length === 0 ? "not-allowed" : "pointer",
+              }}
+            >
+              {cloture != null ? "Journee cloturee" : "Cloturer la journee"}
+            </button>
+          )}
           <button
             onClick={() => printJournal(journal, date, auth)}
             disabled={journal.length === 0}
