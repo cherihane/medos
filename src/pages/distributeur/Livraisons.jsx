@@ -4,7 +4,7 @@ import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../c
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useLivraisons, useEtablissements } from "../../hooks/useSupabaseData";
-import { insertLivraison, updateLivraison } from "../../hooks/useMutations";
+import { insertLivraison, updateLivraison, receiveLivraison } from "../../hooks/useMutations";
 
 const statusStyle = {
   planifiee:   { bg: "#F3F4F6",  color: "#6B7280",  label: "Planifiée" },
@@ -75,14 +75,40 @@ function NouvelleModal({ etablissements, onClose, onSaved }) {
 // ── Modal Update statut ───────────────────────────────────────────────────────
 function StatutModal({ livraison, onClose, onSaved }) {
   const [statut, setStatut] = useState(livraison.statut);
+  const [medicamentNom, setMedicamentNom] = useState("");
+  const [quantiteLivree, setQuantiteLivree] = useState("");
+  const [stockWarn, setStockWarn] = useState(null);
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
     setSaving(true);
+    setStockWarn(null);
     try {
       const update = { statut };
-      if (statut === "livree") update.date_arrivee_reelle = new Date().toISOString();
+      if (statut === "livree") {
+        update.date_arrivee_reelle = new Date().toISOString();
+        const nom = medicamentNom.trim();
+        const qte = parseInt(quantiteLivree, 10);
+        if (nom) update.medicament_nom = nom;
+        if (!isNaN(qte) && qte > 0) update.quantite_livree = qte;
+      }
       await updateLivraison(livraison.id, update);
+
+      // Incrément stock destinataire via RPC SECURITY DEFINER
+      if (statut === "livree") {
+        const nom = medicamentNom.trim();
+        const qte = parseInt(quantiteLivree, 10);
+        if (nom && !isNaN(qte) && qte > 0) {
+          const result = await receiveLivraison(livraison.id, nom, qte);
+          if (result === "medicament_introuvable") {
+            setStockWarn(`Statut mis à jour, mais "${nom}" est introuvable dans l'inventaire du destinataire — stock non incrémenté.`);
+            setSaving(false);
+            onSaved(statut);
+            return;
+          }
+        }
+      }
+
       onSaved(statut);
       onClose();
     } catch (e) {
@@ -93,14 +119,46 @@ function StatutModal({ livraison, onClose, onSaved }) {
   };
 
   return (
-    <Modal title="Modifier le statut" onClose={onClose} width={380}>
+    <Modal title="Modifier le statut" onClose={onClose} width={420}>
       <Field label="Nouveau statut">
-        <select style={selectStyle} value={statut} onChange={(e) => setStatut(e.target.value)}>
+        <select style={selectStyle} value={statut} onChange={(e) => { setStatut(e.target.value); setStockWarn(null); }}>
           {Object.entries(statusStyle).map(([key, val]) => (
             <option key={key} value={key}>{val.label}</option>
           ))}
         </select>
       </Field>
+
+      {statut === "livree" && (
+        <>
+          <div style={{ margin: "12px 0 8px", padding: "10px 14px", backgroundColor: "#F0F4FB", borderRadius: 8, fontSize: 12, color: "#374151" }}>
+            Renseignez le médicament livré pour incrémenter automatiquement le stock de l'établissement destinataire.
+          </div>
+          <Field label="Médicament livré (nom exact)">
+            <input
+              style={inputStyle}
+              value={medicamentNom}
+              onChange={(e) => setMedicamentNom(e.target.value)}
+              placeholder="Ex: Paracétamol 500mg"
+            />
+          </Field>
+          <Field label="Quantité livrée">
+            <input
+              style={inputStyle}
+              type="number"
+              min="1"
+              value={quantiteLivree}
+              onChange={(e) => setQuantiteLivree(e.target.value)}
+              placeholder="Ex: 200"
+            />
+          </Field>
+          {stockWarn && (
+            <div style={{ padding: "10px 14px", backgroundColor: "#FFFBEB", border: "1.5px solid #FCD34D", borderRadius: 8, fontSize: 12, color: "#92400E", marginTop: 8 }}>
+              {stockWarn}
+            </div>
+          )}
+        </>
+      )}
+
       <ModalFooter onCancel={onClose} onSubmit={handleSave} submitLabel="Mettre à jour" saving={saving} />
     </Modal>
   );
