@@ -1,70 +1,122 @@
-# Getting Started with Create React App
+# MedOS — Intelligence Médicale Africaine
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Plateforme de gestion médicale multi-rôles conçue pour les établissements de santé d'Afrique centrale. MedOS couvre l'ensemble de la chaîne : pharmacie, hôpital, distributeur et autorité sanitaire, dans une interface unifiée et imprimable.
 
-## Available Scripts
+---
 
-In the project directory, you can run:
+## Fonctionnalités principales
 
-### `npm start`
+- **Pharmacie** — Inventaire, caisse, ordonnances, fournisseurs, rapports, alertes de stock
+- **Hôpital** — Dossiers patients, ordonnances médicales, comptes rendus, fournisseurs, rapports
+- **Distributeur** — Entrepôt, prévisions IA, gestion des commandes fabricants
+- **Autorité sanitaire** — Tableau de bord ODD, registre des acteurs, rapports réglementaires
+- **Documents imprimables** — Moteur MedOSDocument : ordonnances, fiches patients, bons de commande, rapports, journal de caisse
+- **Alertes et SMS** — Notifications internes et liens SMS pour rappels patients
+- **Paramètres multi-rôles** — Gestion des permissions par rôle et par établissement
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+---
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## Stack technique
 
-### `npm test`
+| Couche | Technologie |
+|---|---|
+| Frontend | React 18 (Create React App) |
+| Base de données | Supabase (PostgreSQL + Auth + Realtime) |
+| IA / Previsions | Groq API (LLaMA) |
+| Emails transactionnels | Resend |
+| Impression | window.open() + window.print() avec CSS @media print |
+| Styles | CSS-in-JS inline |
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+---
 
-### `npm run build`
+## Installation locale
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+### Prerequis
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+- Node.js >= 18
+- npm >= 9
+- Un projet Supabase actif
+- Cles API Groq et Resend
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+### Etapes
 
-### `npm run eject`
+```bash
+# 1. Cloner le depot
+git clone https://github.com/<votre-username>/medos.git
+cd medos
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+# 2. Installer les dependances
+npm install
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+# 3. Configurer les variables d'environnement
+cp .env.example .env
+# Remplir .env avec vos valeurs (voir section ci-dessous)
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+# 4. Lancer en developpement
+npm start
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+# 5. Build de production
+npm run build
+```
 
-## Learn More
+---
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+## Variables d'environnement
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+Creer un fichier `.env` a la racine du projet avec les variables suivantes.
+**Ne jamais commiter ce fichier — il est dans .gitignore.**
 
-### Code Splitting
+```env
+# Supabase
+REACT_APP_SUPABASE_URL=
+REACT_APP_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_KEY=
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+# Groq (previsions IA)
+REACT_APP_GROQ_API_KEY=
 
-### Analyzing the Bundle Size
+# Resend (emails transactionnels)
+RESEND_API_KEY=
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+Un fichier `.env.example` avec les noms de variables (sans valeurs) est fourni pour reference.
 
-### Making a Progressive Web App
+---
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+## Structure du projet
 
-### Advanced Configuration
+```
+src/
+  components/       Composants partages (Layout, modals, etc.)
+  context/          AuthContext (authentification Supabase)
+  hooks/            Hooks Supabase (donnees, mutations)
+  pages/
+    pharmacie/      Pages du role Pharmacie
+    hopital/        Pages du role Hopital
+    distributeur/   Pages du role Distributeur
+    autorite/       Pages du role Autorite sanitaire
+  utils/
+    MedOSDocument.js  Moteur d'impression unifie
+supabase/
+  migrations/       Migrations SQL Supabase
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+---
 
-### Deployment
+## Roles et acces
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+| Role | Acces |
+|---|---|
+| Pharmacien / Gerant | Inventaire, caisse, ordonnances, fournisseurs, rapports |
+| Medecin / Infirmiere | Patients, ordonnances, comptes rendus |
+| Administrateur hopital | Toutes les pages hopital |
+| Distributeur | Entrepot, previsions, commandes |
+| Autorite sanitaire | Tableau de bord ODD, acteurs, rapports |
 
-### `npm run build` fails to minify
+Les permissions par role sont configurables dans **Parametres**.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+---
+
+## Licence
+
+Projet prive — tous droits reserves.
