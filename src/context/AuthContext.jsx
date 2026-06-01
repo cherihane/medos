@@ -59,6 +59,7 @@ export const roleConfig = {
       { path: "/hopital/dashboard", label: "Dashboard", icon: "dashboard" },
       { path: "/hopital/stock", label: "Stock", icon: "inventaire" },
       { path: "/hopital/fournisseurs", label: "Fournisseurs", icon: "fournisseurs" },
+      { path: "/hopital/patients",    label: "Patients",      icon: "patients"    },
       { path: "/hopital/predictions", label: "Prédictions IA", icon: "predictions" },
       { path: "/hopital/scanner", label: "Scanner", icon: "scanner" },
       { path: "/hopital/assistant", label: "Assistant IA", icon: "assistant" },
