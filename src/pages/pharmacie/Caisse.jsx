@@ -5,6 +5,7 @@ import { useToast } from "../../hooks/useToast";
 import { useMedicaments } from "../../hooks/useSupabaseData";
 import { insertVentes, decrementStock, insertJournalCaisse, fetchJournalJour } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
+import { openDocument, tableHTML, kpiHTML, etabFromAuth } from "../../utils/MedOSDocument";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 function todayISO() {
@@ -28,6 +29,47 @@ const MODE_LABELS = {
   carte: "Carte",
   assurance: "Assurance",
 };
+
+// ─── Impression journal du gérant ─────────────────────────────────────────────
+function printJournal(journal, date, auth) {
+  const etab = etabFromAuth(auth);
+  const totalEncaisse = journal.reduce((s, r) => s + (r.montant_total ?? 0), 0);
+  const totalEspeces  = journal.filter((r) => r.mode_paiement === "especes").reduce((s, r) => s + (r.montant_total ?? 0), 0);
+  const totalMonnaie  = journal.reduce((s, r) => s + (r.monnaie_rendue ?? 0), 0);
+  const rows = journal.map((r) => {
+    const heure  = new Date(r.created_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+    const detail = Array.isArray(r.detail) ? r.detail.map((d) => `${d.nom} ×${d.qty}`).join(", ") : "—";
+    return [
+      `<span style="font-family:monospace;font-size:11px">${shortId(r.id)}</span>`,
+      heure,
+      MODE_LABELS[r.mode_paiement] ?? r.mode_paiement ?? "—",
+      `<strong>${(r.montant_total ?? 0).toLocaleString("fr-FR")} FCFA</strong>`,
+      detail,
+    ];
+  });
+  openDocument({
+    titre: "Journal de caisse",
+    sousTitre: `Journée du ${new Date(date).toLocaleDateString("fr-FR")} — ${journal.length} transaction${journal.length !== 1 ? "s" : ""}`,
+    etablissement: etab,
+    sections: [
+      {
+        titre: "Récapitulatif de la journée",
+        html: kpiHTML([
+          { label: "Total encaissé",    value: `${totalEncaisse.toLocaleString("fr-FR")} FCFA`, color: "#10B981" },
+          { label: "Dont espèces",      value: `${totalEspeces.toLocaleString("fr-FR")} FCFA`,  color: "#3B82F6" },
+          { label: "Monnaie rendue",    value: `${totalMonnaie.toLocaleString("fr-FR")} FCFA`,  color: "#F59E0B" },
+          { label: "Transactions",      value: String(journal.length),                           color: "#8B5CF6" },
+        ]),
+      },
+      {
+        titre: "Détail des transactions",
+        html: rows.length === 0
+          ? `<div style="padding:16px;color:#9CA3AF;font-size:13px">Aucune transaction enregistrée pour cette journée.</div>`
+          : tableHTML(["Réf.", "Heure", "Mode", "Montant", "Articles"], rows),
+      },
+    ],
+  });
+}
 
 // ─── Export CSV ───────────────────────────────────────────────────────────────
 function exportCSV(journal, date) {
@@ -408,18 +450,32 @@ function OngletJournal({ refreshKey }) {
         <button onClick={load} style={{ padding: "8px 16px", backgroundColor: "#3B82F6", color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
           Actualiser
         </button>
-        <button
-          onClick={() => exportCSV(journal, date)}
-          disabled={journal.length === 0}
-          style={{
-            padding: "8px 16px", backgroundColor: journal.length === 0 ? "#E5E7EB" : "#0A1628",
-            color: journal.length === 0 ? "#9CA3AF" : "white",
-            border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600,
-            cursor: journal.length === 0 ? "not-allowed" : "pointer", marginLeft: "auto",
-          }}
-        >
-          Exporter CSV
-        </button>
+        <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
+          <button
+            onClick={() => printJournal(journal, date, auth)}
+            disabled={journal.length === 0}
+            style={{
+              padding: "8px 16px", backgroundColor: journal.length === 0 ? "#E5E7EB" : "#10B981",
+              color: journal.length === 0 ? "#9CA3AF" : "white",
+              border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600,
+              cursor: journal.length === 0 ? "not-allowed" : "pointer",
+            }}
+          >
+            Imprimer le journal
+          </button>
+          <button
+            onClick={() => exportCSV(journal, date)}
+            disabled={journal.length === 0}
+            style={{
+              padding: "8px 16px", backgroundColor: journal.length === 0 ? "#E5E7EB" : "#0A1628",
+              color: journal.length === 0 ? "#9CA3AF" : "white",
+              border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600,
+              cursor: journal.length === 0 ? "not-allowed" : "pointer",
+            }}
+          >
+            Exporter CSV
+          </button>
+        </div>
       </div>
 
       {/* Alerte écart caisse */}

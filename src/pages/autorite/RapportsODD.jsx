@@ -3,6 +3,8 @@ import Layout from "../../components/Layout";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useKpiAutorite, useMedicaments, useEtablissements, useAlertes } from "../../hooks/useSupabaseData";
+import { useAuth } from "../../context/AuthContext";
+import { openDocument, tableHTML, kpiHTML, etabFromAuth } from "../../utils/MedOSDocument";
 
 const oddData = [
   { goal: "ODD 3.3", label: "Maladies infectieuses", progress: 67, target: 80 },
@@ -12,6 +14,8 @@ const oddData = [
 ];
 
 export default function RapportsODD() {
+  const { auth } = useAuth();
+  const etab = etabFromAuth(auth);
   const { data: kpi } = useKpiAutorite();
   const { data: medicaments } = useMedicaments();
   const { data: etablissements } = useEtablissements();
@@ -21,52 +25,65 @@ export default function RapportsODD() {
 
   const genererPDF = (rapportNom) => {
     setGenerating(rapportNom);
-    // Build a simple text report and trigger browser print/download
-    const date = new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" });
-    const content = `
-RAPPORT MedOS — ${rapportNom}
-Généré le ${date}
 
-=== DONNÉES EN TEMPS RÉEL ===
+    const oddRows = oddData.map((o) => {
+      const ok = o.progress >= o.target;
+      const bar = `<div style="width:100%;height:8px;background:#E5E7EB;border-radius:4px;position:relative">
+        <div style="height:100%;width:${o.progress}%;background:${ok ? "#10B981" : "#8B5CF6"};border-radius:4px"></div>
+      </div>`;
+      return [
+        `<strong>${o.goal}</strong>`,
+        o.label,
+        `<span style="color:${ok ? "#10B981" : "#D97706"};font-weight:700">${o.progress}%</span>`,
+        `${o.target}%`,
+        bar,
+      ];
+    });
 
-Structures actives       : ${kpi?.structuresActives ?? "—"}
-Médicaments tracés       : ${kpi?.medicamentsTraces ?? "—"}
-Lots enregistrés         : ${kpi?.lots ?? "—"}
-Alertes pharmacovig.     : ${kpi?.alertesPharmacovig ?? "—"}
+    const medRows = medicaments.slice(0, 20).map((m) => [
+      m.nom ?? "—",
+      String(m.stock_actuel ?? 0),
+      String(m.stock_minimum ?? 0),
+      (m.stock_actuel ?? 0) < (m.stock_minimum ?? 0)
+        ? `<span style="color:#DC2626;font-weight:700">RUPTURE</span>`
+        : `<span style="color:#16A34A">OK</span>`,
+    ]);
 
-=== MÉDICAMENTS (${medicaments.length}) ===
-${medicaments.slice(0, 20).map((m) => `  - ${m.nom} | Stock: ${m.stock_actuel ?? 0} | Min: ${m.stock_minimum ?? 0}`).join("\n")}
-${medicaments.length > 20 ? `  ... et ${medicaments.length - 20} autres` : ""}
+    const etabRows = etablissements.slice(0, 15).map((e) => [e.nom ?? "—", e.type ?? "—", e.ville ?? "—"]);
 
-=== ÉTABLISSEMENTS (${etablissements.length}) ===
-${etablissements.slice(0, 10).map((e) => `  - ${e.nom} (${e.type}) — ${e.ville}`).join("\n")}
-${etablissements.length > 10 ? `  ... et ${etablissements.length - 10} autres` : ""}
+    openDocument({
+      titre: rapportNom,
+      sousTitre: `Rapport ODD — Système National de Gestion Pharmaceutique`,
+      etablissement: etab,
+      sections: [
+        {
+          titre: "Données nationales en temps réel",
+          html: kpiHTML([
+            { label: "Structures actives",    value: kpi?.structuresActives ?? "—",   color: "#10B981" },
+            { label: "Médicaments tracés",    value: kpi?.medicamentsTraces ?? "—",   color: "#3B82F6" },
+            { label: "Lots enregistrés",      value: kpi?.lots ?? "—",                color: "#8B5CF6" },
+            { label: "Alertes pharmacovig.", value: kpi?.alertesPharmacovig ?? "—",  color: "#F59E0B" },
+          ]),
+        },
+        {
+          titre: "Indicateurs ODD Santé",
+          html: tableHTML(["Objectif", "Description", "Progression", "Cible 2030", "Avancement"], oddRows),
+        },
+        ...(medRows.length > 0 ? [{
+          titre: `Médicaments (${medicaments.length} au total, 20 premiers affichés)`,
+          html: tableHTML(["Médicament", "Stock actuel", "Stock minimum", "Statut"], medRows, { alignRight: [1, 2] }),
+        }] : []),
+        ...(etabRows.length > 0 ? [{
+          titre: `Établissements (${etablissements.length} au total)`,
+          html: tableHTML(["Nom", "Type", "Ville"], etabRows),
+        }] : []),
+      ],
+    });
 
-=== ALERTES ACTIVES (${alertes.length}) ===
-${alertes.slice(0, 10).map((a) => `  [${a.severite.toUpperCase()}] ${a.titre}`).join("\n")}
-${alertes.length > 10 ? `  ... et ${alertes.length - 10} autres` : ""}
-
-=== INDICATEURS ODD ===
-ODD 3.3 Maladies infectieuses         : 67% / cible 80%
-ODD 3.4 Maladies non transmissibles   : 54% / cible 70%
-ODD 3.8 Couverture santé universelle  : 72% / cible 90%
-ODD 3.b Accès médicaments essentiels  : 78% / cible 85%
-
----
-Rapport généré par MedOS — Système National de Gestion Pharmaceutique
-    `.trim();
-
-    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `MedOS_${rapportNom.replace(/\s+/g, "_")}_${date.replace(/\s+/g, "_")}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
     setTimeout(() => {
       setGenerating(null);
-      success(`Rapport "${rapportNom}" téléchargé`);
-    }, 400);
+      success(`Rapport "${rapportNom}" ouvert`);
+    }, 300);
   };
 
   return (

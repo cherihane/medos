@@ -8,6 +8,7 @@ import { usePatients, useMedicaments } from "../../hooks/useSupabaseData";
 import { insertPatient, insertOrdonnance } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../supabaseClient";
+import { openDocument, tableHTML, infoGridHTML, alertBannerHTML, signatureRowHTML, etabFromAuth } from "../../utils/MedOSDocument";
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 const ACCENT = "#10B981";
@@ -63,87 +64,104 @@ function hasAllergies(patient) {
 }
 
 // ── Impression ordonnance ─────────────────────────────────────────────────────
-function printOrdonnance({ ordonnance, patient, hopitalNom, medecinNom, lignes, instr }) {
-  const win = window.open("", "_blank", "width=820,height=700");
-  if (!win) return;
-  const exp = ordonnance.date_expiration ? fmtDate(ordonnance.date_expiration) : null;
-  const lignesHTML = lignes.map((l) => `
-    <tr>
-      <td style="padding:9px 14px;border-bottom:1px solid #E5E7EB;font-weight:600;color:#0A1628">${l.nom}</td>
-      <td style="padding:9px 14px;border-bottom:1px solid #E5E7EB;color:#374151">${l.posologie}</td>
-      <td style="padding:9px 14px;border-bottom:1px solid #E5E7EB;color:#374151">${l.duree || "—"}</td>
-    </tr>`).join("");
+function printOrdonnance({ ordonnance, patient, hopitalNom, medecinNom, lignes, instr, auth }) {
+  const etab = etabFromAuth(auth) ?? { nom: hopitalNom, ville: "", type: "Hôpital" };
+  const ref  = ordonnance.reference ?? "—";
+  const emis = fmtDate(ordonnance.date_emission);
+  const exp  = ordonnance.date_expiration ? `Expire le ${fmtDate(ordonnance.date_expiration)}` : null;
 
-  win.document.write(`<!DOCTYPE html>
-<html lang="fr">
-<head>
-<meta charset="UTF-8">
-<title>Ordonnance — ${patient.prenom} ${patient.nom}</title>
-<style>
-  @media print { body{margin:0} .no-print{display:none!important} }
-  *{box-sizing:border-box}
-  body{font-family:'Segoe UI',Arial,sans-serif;color:#0A1628;margin:0;padding:44px 52px;background:#fff}
-  .hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:22px;border-bottom:2.5px solid #10B981;margin-bottom:28px}
-  .logo{font-size:30px;font-weight:900;color:#10B981;letter-spacing:-0.5px}
-  .logo span{color:#0A1628}
-  .hopital-info{text-align:right;font-size:12px;color:#6B7280;line-height:1.7}
-  .hopital-nom{font-size:14px;font-weight:700;color:#0A1628;margin-bottom:2px}
-  .ref-line{display:flex;justify-content:space-between;font-size:12px;color:#6B7280;margin-bottom:20px}
-  .section-title{font-size:10px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px}
-  .info-grid{background:#F8FAFC;border-radius:8px;padding:14px 18px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:18px}
-  .info-label{font-size:10px;color:#9CA3AF;margin-bottom:2px}
-  .info-value{font-size:13px;font-weight:600;color:#0A1628}
-  .medecin-row{background:#ECFDF5;border-radius:8px;padding:14px 18px;display:flex;gap:32px;margin-bottom:18px}
-  table{width:100%;border-collapse:collapse;margin-bottom:12px}
-  thead th{background:#0A1628;color:#fff;padding:10px 14px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
-  .instructions{background:#FFFBEB;border-left:3px solid #F59E0B;padding:10px 14px;border-radius:0 6px 6px 0;font-size:12px;color:#374151;margin-top:0}
-  .footer{margin-top:52px;display:grid;grid-template-columns:1fr 1fr;gap:48px}
-  .sign-box{border-top:1.5px solid #0A1628;padding-top:8px;font-size:11px;color:#6B7280}
-  .print-btn{position:fixed;top:14px;right:14px;padding:8px 18px;background:#10B981;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer}
-  .allergy-bar{margin-top:8px;padding:7px 12px;background:#FEF2F2;border-radius:6px;font-size:11px;color:#DC2626;font-weight:700}
-</style>
-</head>
-<body>
-<button class="print-btn no-print" onclick="window.print()">Imprimer</button>
-<div class="hdr">
-  <div>
-    <div class="logo">Med<span>OS</span></div>
-    <div style="font-size:11px;color:#6B7280;margin-top:4px">Plateforme de santé numérique</div>
-  </div>
-  <div class="hopital-info">
-    <div class="hopital-nom">${hopitalNom}</div>
-    <div>Ordonnance médicale</div>
-    ${exp ? `<div style="color:#EF4444;font-weight:600;margin-top:3px">Expire le ${exp}</div>` : ""}
-  </div>
-</div>
-<div class="ref-line">
-  <span>Réf. <strong style="font-family:monospace;color:#0A1628">${ordonnance.reference ?? "—"}</strong></span>
-  <span>Émise le <strong>${fmtDate(ordonnance.date_emission)}</strong></span>
-</div>
-<div class="section-title">Patient</div>
-<div class="info-grid">
-  <div><div class="info-label">Nom complet</div><div class="info-value">${patient.prenom} ${patient.nom}</div></div>
-  <div><div class="info-label">Date de naissance</div><div class="info-value">${fmtDate(patient.date_naissance)} (${age(patient.date_naissance)})</div></div>
-  <div><div class="info-label">N° Dossier</div><div class="info-value" style="font-family:monospace">${patient.numero_dossier ?? "—"}</div></div>
-</div>
-${patient.allergies?.length > 0 ? `<div class="allergy-bar">Contre-indications : ${patient.allergies.join(", ")}</div><br>` : ""}
-<div class="section-title" style="margin-top:4px">Médecin prescripteur</div>
-<div class="medecin-row">
-  <div><div class="info-label">Nom</div><div class="info-value">${medecinNom ?? ordonnance.medecin_nom ?? "—"}</div></div>
-  <div><div class="info-label">Établissement</div><div class="info-value">${hopitalNom}</div></div>
-</div>
-<div class="section-title">Médicaments prescrits</div>
-<table>
-  <thead><tr><th>Médicament</th><th>Posologie</th><th>Durée</th></tr></thead>
-  <tbody>${lignesHTML}</tbody>
-</table>
-${instr ? `<div class="instructions"><strong>Instructions :</strong> ${instr}</div>` : ""}
-<div class="footer">
-  <div class="sign-box">Date et signature du médecin</div>
-  <div class="sign-box">Cachet de l'établissement</div>
-</div>
-</body></html>`);
-  win.document.close();
+  openDocument({
+    titre: "Ordonnance médicale",
+    sousTitre: `Réf. ${ref} — Émise le ${emis}${exp ? ` · ${exp}` : ""}`,
+    etablissement: etab,
+    sections: [
+      {
+        titre: "Patient",
+        html:
+          infoGridHTML([
+            { label: "Nom complet",       value: `${patient.prenom} ${patient.nom}` },
+            { label: "Date de naissance", value: `${fmtDate(patient.date_naissance)} (${age(patient.date_naissance)})` },
+            { label: "N° Dossier",        value: `<span style="font-family:monospace">${patient.numero_dossier ?? "—"}</span>` },
+          ]) +
+          (patient.allergies?.length > 0
+            ? alertBannerHTML(`Contre-indications : ${patient.allergies.join(", ")}`, "danger")
+            : ""),
+      },
+      {
+        titre: "Médecin prescripteur",
+        html: infoGridHTML([
+          { label: "Médecin",         value: medecinNom ?? ordonnance.medecin_nom ?? "—" },
+          { label: "Établissement",   value: hopitalNom },
+        ], 2),
+      },
+      {
+        titre: "Médicaments prescrits",
+        html:
+          tableHTML(["Médicament", "Posologie", "Durée"], lignes.map((l) => [l.nom, l.posologie, l.duree || "—"])) +
+          (instr ? `<div style="margin-top:10px;padding:10px 14px;background:#FFFBEB;border-left:3px solid #F59E0B;border-radius:0 6px 6px 0;font-size:12px;color:#374151"><strong>Instructions :</strong> ${instr}</div>` : ""),
+      },
+      { titre: "", html: signatureRowHTML(["Date et signature du médecin", "Cachet de l'établissement"]) },
+    ],
+  });
+}
+
+// ── Impression fiche patient ──────────────────────────────────────────────────
+function printFichePatient({ patient, ordonnances, comptes, auth }) {
+  const etab = etabFromAuth(auth);
+  openDocument({
+    titre: "Dossier patient",
+    sousTitre: `N° ${patient.numero_dossier ?? "—"} — Édité le ${new Date().toLocaleDateString("fr-FR")}`,
+    etablissement: etab,
+    sections: [
+      {
+        titre: "Informations personnelles",
+        html: infoGridHTML([
+          { label: "Nom complet",       value: `${patient.prenom} ${patient.nom}` },
+          { label: "Date de naissance", value: `${fmtDate(patient.date_naissance)} (${age(patient.date_naissance)})` },
+          { label: "Sexe",              value: patient.genre === "M" ? "Masculin" : patient.genre === "F" ? "Féminin" : patient.genre ?? "—" },
+          { label: "Groupe sanguin",    value: patient.groupe_sanguin ?? "—" },
+          { label: "Téléphone",         value: patient.telephone ?? "—" },
+          { label: "Adresse",           value: patient.adresse ?? "—" },
+          { label: "Service",           value: patient.service ?? "Médecine générale" },
+          { label: "Statut",            value: patient.statut === "hospitalise" ? "Hospitalisé" : "Ambulatoire" },
+          { label: "Médecin référent",  value: patient.medecin_referent ? `Dr. ${patient.medecin_referent}` : "—" },
+          { label: "Dernière visite",   value: fmtDate(patient.derniere_visite) },
+        ]),
+      },
+      ...(patient.allergies?.length > 0 ? [{
+        titre: "Allergies et contre-indications",
+        html: alertBannerHTML(`Contre-indications : ${patient.allergies.join(", ")}`, "danger"),
+      }] : []),
+      ...(patient.antecedents?.length > 0 ? [{
+        titre: "Antécédents médicaux",
+        html: `<div style="padding:12px 16px;background:#F8FAFC;border-radius:8px;font-size:13px;color:#374151">${patient.antecedents.join(" · ")}</div>`,
+      }] : []),
+      ...(ordonnances.length > 0 ? [{
+        titre: `Ordonnances (${ordonnances.length})`,
+        html: tableHTML(
+          ["Réf.", "Date émission", "Médecin", "Statut"],
+          ordonnances.map((o) => [
+            `<span style="font-family:monospace">${o.reference ?? "—"}</span>`,
+            fmtDate(o.date_emission),
+            o.medecin_nom ?? "—",
+            o.statut?.replace("_", " ") ?? "—",
+          ])
+        ),
+      }] : []),
+      ...(comptes.length > 0 ? [{
+        titre: `Comptes rendus (${comptes.length})`,
+        html: tableHTML(
+          ["Date", "Médecin", "Motif", "Diagnostic"],
+          comptes.map((c) => [
+            fmtDate(c.date_consultation),
+            `Dr. ${c.medecin}`,
+            c.motif ?? "—",
+            (c.diagnostic ?? "—").slice(0, 80) + ((c.diagnostic?.length ?? 0) > 80 ? "…" : ""),
+          ])
+        ),
+      }] : []),
+    ],
+  });
 }
 
 // ── Envoi SMS ─────────────────────────────────────────────────────────────────
@@ -473,7 +491,7 @@ const STATUT_ORD = {
   expiree: { bg: "#F3F4F6", color: "#9CA3AF" },
 };
 
-function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medicaments, onClose, onPatientUpdated }) {
+function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medicaments, onClose, onPatientUpdated, auth }) {
   const [onglet, setOnglet]           = useState("infos");
   const [ordonnances, setOrdonnances] = useState([]);
   const [comptes, setComptes]         = useState([]);
@@ -667,7 +685,7 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
                       {/* Actions ordonnance */}
                       <div style={{ padding: "8px 14px", borderTop: "1px solid #F3F4F6", background: "white", display: "flex", gap: 8 }}>
                         <button
-                          onClick={() => printOrdonnance({ ordonnance: o, patient, hopitalNom: hopitalNom ?? "Hôpital", medecinNom, lignes, instr })}
+                          onClick={() => printOrdonnance({ ordonnance: o, patient, hopitalNom: hopitalNom ?? "Hôpital", medecinNom, lignes, instr, auth })}
                           style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", background: "#0A1628", color: "white", border: "none", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
                           Imprimer l'ordonnance
@@ -764,6 +782,7 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
           {/* Actions */}
           <div style={{ padding: "14px 26px", borderTop: "1px solid #F3F4F6", display: "flex", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
             <button onClick={onClose} style={{ padding: "9px 16px", background: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 9, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>Fermer</button>
+            <button onClick={() => printFichePatient({ patient, ordonnances, comptes, auth })} style={{ padding: "9px 16px", background: "#1D4ED8", color: "white", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Imprimer la fiche</button>
             <button onClick={() => { setShowCR(true); setOnglet("comptes"); }} style={{ padding: "9px 16px", background: "#0A1628", color: "white", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
               Nouveau compte rendu
@@ -920,7 +939,7 @@ export default function PatientsHopital() {
       {toast && <div style={{ position: "fixed", top: 20, right: 20, background: ACCENT, color: "white", padding: "12px 20px", borderRadius: 10, fontWeight: 600, fontSize: 13, zIndex: 2000, boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}>{toast}</div>}
 
       {showNouv && <ModalNouveauPatient etablissement_id={etablissement_id} medecinNom={medecinNom} onClose={() => setShowNouv(false)} onSaved={() => { setShowNouv(false); refetch(); showToast("Patient enregistré."); }} />}
-      {fichePatient && <FichePatient patient={fichePatient} etablissement_id={etablissement_id} medecinNom={medecinNom} hopitalNom={hopitalNom} medicaments={medicaments} onClose={() => setFichePatient(null)} onPatientUpdated={(msg) => { refetch(); showToast(msg); }} />}
+      {fichePatient && <FichePatient patient={fichePatient} etablissement_id={etablissement_id} medecinNom={medecinNom} hopitalNom={hopitalNom} medicaments={medicaments} onClose={() => setFichePatient(null)} onPatientUpdated={(msg) => { refetch(); showToast(msg); }} auth={auth} />}
 
       {/* KPI */}
       <div style={{ display: "flex", gap: 14, marginBottom: 20, flexWrap: "wrap" }}>

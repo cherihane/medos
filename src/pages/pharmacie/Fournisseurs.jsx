@@ -6,6 +6,40 @@ import { useToast } from "../../hooks/useToast";
 import { useFournisseurs, useCommandesRealtime, useMedicaments } from "../../hooks/useSupabaseData";
 import { insertCommande, insertFournisseur, updateFournisseur } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
+import { openDocument, tableHTML, infoGridHTML, etabFromAuth } from "../../utils/MedOSDocument";
+
+function printBonCommandeFournisseur({ fournisseur, medicamentNom, quantite, dateLivraison, notes, montantTotal, auth }) {
+  const etab = etabFromAuth(auth);
+  const dateFr = new Date().toLocaleDateString("fr-FR");
+  openDocument({
+    titre: "Bon de commande fournisseur",
+    sousTitre: `Émis le ${dateFr}`,
+    etablissement: etab,
+    sections: [
+      {
+        titre: "Fournisseur",
+        html: infoGridHTML([
+          { label: "Nom", value: fournisseur.nom },
+          { label: "Téléphone", value: fournisseur.telephone ?? "—" },
+          { label: "Email", value: fournisseur.email ?? "—" },
+          { label: "Ville", value: fournisseur.ville ?? "—" },
+        ]),
+      },
+      {
+        titre: "Détails de la commande",
+        html: infoGridHTML([
+          { label: "Date de livraison souhaitée", value: dateLivraison ? new Date(dateLivraison).toLocaleDateString("fr-FR") : "Non précisée" },
+          { label: "Montant total estimé", value: montantTotal > 0 ? `${montantTotal.toLocaleString("fr-FR")} FCFA` : "—" },
+          { label: "Notes", value: notes || "Aucune" },
+        ], 3),
+      },
+      {
+        titre: "Médicaments commandés",
+        html: tableHTML(["Médicament", "Quantité"], [[medicamentNom, String(quantite)]]),
+      },
+    ],
+  });
+}
 
 // ── Statuts commandes ─────────────────────────────────────────────────────────
 const STATUT_STYLE = {
@@ -156,7 +190,7 @@ function FournisseurModal({ initial, onClose, onSaved }) {
 }
 
 // ── Modal Passer commande ─────────────────────────────────────────────────────
-function CommandeModal({ fournisseur, etablissement_id, onClose, onSaved }) {
+function CommandeModal({ fournisseur, etablissement_id, auth, onClose, onSaved }) {
   const { data: medicaments, loading: loadingMeds } = useMedicaments();
   const [medicamentId, setMedicamentId]   = useState("");
   const [quantite, setQuantite]           = useState("");
@@ -283,7 +317,20 @@ function CommandeModal({ fournisseur, etablissement_id, onClose, onSaved }) {
         />
       </Field>
 
-      <ModalFooter onCancel={onClose} onSubmit={handleSave} submitLabel="Passer la commande" saving={saving} />
+      <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", padding: "16px 0 0" }}>
+        <button onClick={onClose} style={{ padding: "9px 18px", background: "white", border: "1.5px solid #E5E7EB", borderRadius: 9, fontSize: 13, color: "#6B7280", cursor: "pointer" }}>Annuler</button>
+        {selectedMed && qty > 0 && (
+          <button
+            onClick={() => printBonCommandeFournisseur({ fournisseur, medicamentNom: selectedMed.nom, quantite: qty, dateLivraison, notes, montantTotal, auth })}
+            style={{ padding: "9px 16px", background: "#F8FAFC", color: "#374151", border: "1.5px solid #E5E7EB", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+          >
+            Imprimer
+          </button>
+        )}
+        <button onClick={handleSave} disabled={saving} style={{ padding: "9px 18px", background: saving ? "#E5E7EB" : "#10B981", color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer" }}>
+          {saving ? "Envoi…" : "Passer la commande"}
+        </button>
+      </div>
     </Modal>
   );
 }
@@ -353,6 +400,7 @@ export default function Fournisseurs() {
         <CommandeModal
           fournisseur={commandModal}
           etablissement_id={etablissement_id}
+          auth={auth}
           onClose={() => setCommandModal(null)}
           onSaved={() => success(`Commande envoyée chez ${commandModal.nom}`)}
         />
