@@ -21,12 +21,15 @@ CREATE TABLE IF NOT EXISTS public.clotures_caisse (
 
 ALTER TABLE public.clotures_caisse ENABLE ROW LEVEL SECURITY;
 
--- Seul l'établissement propriétaire peut lire/écrire ses clôtures
+-- Seul l'établissement propriétaire peut lire/écrire ses clôtures.
+-- ARRAY(SELECT ...) convertit la set-returning function en tableau scalaire :
+-- seule forme acceptée dans les expressions de politique RLS par Supabase/Postgres.
+DROP POLICY IF EXISTS "clotures_caisse_own" ON public.clotures_caisse;
 CREATE POLICY "clotures_caisse_own"
   ON public.clotures_caisse
   FOR ALL TO authenticated
-  USING  (etablissement_id = ANY(mes_etablissements()))
-  WITH CHECK (etablissement_id = ANY(mes_etablissements()));
+  USING  (etablissement_id = ANY(ARRAY(SELECT public.mes_etablissements())))
+  WITH CHECK (etablissement_id = ANY(ARRAY(SELECT public.mes_etablissements())));
 
 -- ── 2. Colonnes optionnelles sur livraisons (réception) ──────────────────────
 ALTER TABLE public.livraisons
