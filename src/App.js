@@ -4,6 +4,7 @@ import { NotificationsProvider } from "./context/NotificationsContext";
 
 // Auth
 import Login from "./pages/Login";
+import Inscription from "./pages/Inscription";
 
 // Pharmacie
 import PhDashboard from "./pages/pharmacie/Dashboard";
@@ -59,6 +60,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={auth ? <Navigate to={auth.dashboardPath} replace /> : <Login />} />
+      <Route path="/inscription" element={<Inscription />} />
 
       {/* Pharmacie */}
       <Route path="/pharmacie/dashboard" element={<ProtectedRoute requiredRole="pharmacie"><PhDashboard /></ProtectedRoute>} />
