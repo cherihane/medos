@@ -39,34 +39,28 @@ ALTER TABLE public.livraisons
 -- ── 3. Fonction SECURITY DEFINER — réception livraison → incrément stock ─────
 -- Le distributeur ne peut pas écrire directement dans le stock du destinataire
 -- (RLS par établissement). Cette fonction tourne en SECURITY DEFINER pour
--- contourner les RLS côté serveur de façon contrôlée.
+-- contourner le RLS côté serveur de façon contrôlée.
+-- Signature directe : pas de jointure sur livraisons, l'appelant passe
+-- l'établissement destinataire explicitement.
+
+DROP FUNCTION IF EXISTS public.receive_livraison(UUID, TEXT, INTEGER);
 
 CREATE OR REPLACE FUNCTION public.receive_livraison(
-  p_livraison_id   UUID,
-  p_medicament_nom TEXT,
-  p_quantite       INTEGER
+  p_medicament_nom             TEXT,
+  p_quantite                   INTEGER,
+  p_etablissement_destinataire UUID
 ) RETURNS TEXT
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_etab_id  UUID;
-  v_med_id   UUID;
+  v_med_id UUID;
 BEGIN
-  -- Récupère l'établissement destinataire depuis la livraison
-  SELECT etablissement_id INTO v_etab_id
-  FROM public.livraisons
-  WHERE id = p_livraison_id;
-
-  IF v_etab_id IS NULL THEN
-    RETURN 'livraison_introuvable';
-  END IF;
-
-  -- Cherche le médicament par nom dans l'établissement destinataire
+  -- Recherche insensible à la casse dans l'établissement destinataire
   SELECT id INTO v_med_id
   FROM public.medicaments
-  WHERE etablissement_id = v_etab_id
+  WHERE etablissement_id = p_etablissement_destinataire
     AND LOWER(nom) = LOWER(p_medicament_nom)
   LIMIT 1;
 
@@ -82,7 +76,7 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.receive_livraison(UUID, TEXT, INTEGER) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.receive_livraison(TEXT, INTEGER, UUID) TO authenticated;
 
 -- ── 4. Index utiles ───────────────────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_clotures_caisse_etab_date

@@ -152,12 +152,12 @@ export async function fetchClotureCaisse(etablissement_id, dateISO) {
 // ─── Réception livraison → incrément stock destinataire (SECURITY DEFINER) ───
 // Le distributeur ne peut pas écrire directement dans le stock d'un autre
 // établissement. La RPC tourne côté Supabase avec des droits étendus.
-export async function receiveLivraison(livraisonId, medicamentNom, quantite) {
+export async function receiveLivraison(medicamentNom, quantite, etablissementDestinataire) {
   const { data, error } = await supabase.rpc("receive_livraison", {
-    p_livraison_id:   livraisonId,
-    p_medicament_nom: medicamentNom,
-    p_quantite:       quantite,
+    p_medicament_nom:             medicamentNom,
+    p_quantite:                   quantite,
+    p_etablissement_destinataire: etablissementDestinataire,
   });
   if (error) throw new Error(`receive_livraison: ${error.message}`);
-  return data; // "ok" | "medicament_introuvable" | "livraison_introuvable"
+  return data; // "ok" | "medicament_introuvable"
 }
