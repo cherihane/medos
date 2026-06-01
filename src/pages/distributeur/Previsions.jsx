@@ -1,29 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
 import Layout from "../../components/Layout";
 import PredictionsIA from "../../components/PredictionsIA";
-import { useKpiDistributeur } from "../../hooks/useSupabaseData";
+import { useKpiDistributeur, useCommandes, useMedicamentsCritiques } from "../../hooks/useSupabaseData";
 import { insertCommande } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../supabaseClient";
 import { openDocument, tableHTML, infoGridHTML, etabFromAuth } from "../../utils/MedOSDocument";
 
-const forecastData = [
-  { mois: "Jan", reel: 22400000, prevision: 23000000 },
-  { mois: "Fév", prevision: 25000000 },
-  { mois: "Mar", prevision: 28000000 },
-  { mois: "Avr", prevision: 26500000 },
-  { mois: "Mai", prevision: 31000000 },
-  { mois: "Jun", prevision: 29000000 },
-];
-
-const prodData = [
-  { name: "Paracétamol", actuel: 12450, prevu: 15000 },
-  { name: "Amoxicilline", actuel: 8200,  prevu: 10000 },
-  { name: "Ibuprofène",   actuel: 6800,  prevu: 7500 },
-  { name: "Vitamine C",   actuel: 18000, prevu: 20000 },
-  { name: "Metformine",   actuel: 4200,  prevu: 6000 },
-];
+const MOIS_LABELS = ["Jan", "Fev", "Mar", "Avr", "Mai", "Jun", "Jul", "Aou", "Sep", "Oct", "Nov", "Dec"];
 
 const inputStyle = {
   width: "100%", padding: "9px 13px", border: "1.5px solid #E5E7EB",
@@ -335,23 +320,57 @@ function AgirModal({ action, onClose, onSaved, etablissement_id, distributeurNom
 export default function Previsions() {
   const { auth } = useAuth();
   const { data: kpi, loading: loadKpi } = useKpiDistributeur();
+  const { data: commandes, loading: loadCmd } = useCommandes();
+  const { data: critiques, loading: loadCrit } = useMedicamentsCritiques(5);
   const [agirAction, setAgirAction] = useState(null);
   const [toast, setToast] = useState(null);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3500); };
+
+  // CA par mois (6 derniers mois depuis commandes)
+  const forecastData = useMemo(() => {
+    const now = new Date();
+    const mois = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      mois.push({ mois: MOIS_LABELS[d.getMonth()], year: d.getFullYear(), month: d.getMonth(), reel: 0 });
+    }
+    commandes.forEach((c) => {
+      const d = new Date(c.date_commande ?? c.created_at ?? "");
+      if (isNaN(d)) return;
+      const m = mois.find((x) => x.year === d.getFullYear() && x.month === d.getMonth());
+      if (m) m.reel += Number(c.montant_total ?? 0);
+    });
+    return mois;
+  }, [commandes]);
+
+  // Volume par medicament critique (actuel vs minimum comme "prevu")
+  const prodData = useMemo(
+    () => critiques.map((m) => ({
+      name: m.nom?.length > 14 ? m.nom.slice(0, 14) + "…" : (m.nom ?? "—"),
+      actuel: m.stock_actuel ?? 0,
+      prevu:  m.stock_minimum ?? 0,
+    })),
+    [critiques]
+  );
+
+  // Actions basees sur medicaments critiques
+  const actionsRecommandees = useMemo(
+    () => critiques.map((m) => ({
+      action:     `Commander ${m.nom}`,
+      medicament: m.nom ?? "—",
+      quantite:   Math.max((m.stock_minimum ?? 100) - (m.stock_actuel ?? 0), 100),
+      motif:      `Stock actuel ${m.stock_actuel ?? 0} — minimum requis ${m.stock_minimum ?? 0}`,
+      urgence:    (m.stock_actuel ?? 0) === 0 ? "haute" : "normale",
+    })),
+    [critiques]
+  );
 
   const kpiCards = [
     { label: "Chiffre d'affaires total", value: loadKpi ? "…" : `${((kpi?.ca ?? 0) / 1000000).toFixed(1)}M FCFA`, color: "#F59E0B" },
     { label: "Commandes actives",         value: loadKpi ? "…" : kpi?.commandesActives ?? 0,                        color: "#10B981" },
     { label: "Clients actifs",            value: loadKpi ? "…" : kpi?.clients ?? 0,                                 color: "#3B82F6" },
     { label: "Livraisons en cours",       value: loadKpi ? "…" : kpi?.livraisonsEnCours ?? 0,                       color: "#8B5CF6" },
-  ];
-
-    const actionsRecommandees = [
-    { action: "Commander Paracétamol 1g",     medicament: "Paracétamol 1g",   quantite: 5000, motif: "Demande prévue +24% en février",  urgence: "haute"   },
-    { action: "Commander Metformine 500mg",   medicament: "Metformine 500mg", quantite: 3000, motif: "Demande +42% sur 3 mois",          urgence: "haute"   },
-    { action: "Réduire stock Ibuprofène",     medicament: "Ibuprofène 400mg", quantite: 500,  motif: "Surstock prévu de 18%",            urgence: "normale" },
-    { action: "Renégocier tarifs Vitamine C", medicament: "Vitamine C 500mg", quantite: 8000, motif: "Volume x1.5 prévu sur 6 mois",    urgence: "faible"  },
   ];
 
   return (
@@ -383,18 +402,23 @@ export default function Previsions() {
       </div>
 
       <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 20, minWidth: 0 }}>
-        <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Prévisions CA — 6 prochains mois (FCFA)</h3>
-        <div style={{ width: "100%", height: 240 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={forecastData}>
-              <XAxis dataKey="mois" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `${(v / 1000000).toFixed(0)}M`} />
-              <Tooltip formatter={(v) => `${(v / 1000000).toFixed(1)}M FCFA`} />
-              <Line type="monotone" dataKey="reel" stroke="#F59E0B" strokeWidth={2.5} dot={{ r: 5, fill: "#F59E0B" }} name="Réel" />
-              <Line type="monotone" dataKey="prevision" stroke="#D97706" strokeWidth={2} strokeDasharray="7 4" dot={{ r: 4 }} name="Prévision IA" />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+        <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>CA commandes — 6 derniers mois (FCFA)</h3>
+        {loadCmd ? (
+          <div style={{ height: 240, display: "flex", alignItems: "center", justifyContent: "center", color: "#9CA3AF", fontSize: 14 }}>Chargement…</div>
+        ) : commandes.length === 0 ? (
+          <div style={{ height: 240, display: "flex", alignItems: "center", justifyContent: "center", color: "#9CA3AF", fontSize: 14 }}>Aucune commande enregistree.</div>
+        ) : (
+          <div style={{ width: "100%", height: 240 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={forecastData}>
+                <XAxis dataKey="mois" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `${(v / 1000000).toFixed(0)}M`} />
+                <Tooltip formatter={(v) => `${(v / 1000000).toFixed(1)}M FCFA`} />
+                <Line type="monotone" dataKey="reel" stroke="#F59E0B" strokeWidth={2.5} dot={{ r: 5, fill: "#F59E0B" }} name="Reel" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </div>
 
       <div style={{ marginBottom: 20 }}>
@@ -403,22 +427,35 @@ export default function Previsions() {
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
         <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", minWidth: 0 }}>
-          <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Volume prévu vs actuel (unités)</h3>
-          <div style={{ width: "100%", height: 220 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={prodData} layout="vertical">
-                <XAxis type="number" tick={{ fontSize: 11 }} />
-                <YAxis dataKey="name" type="category" width={90} tick={{ fontSize: 11 }} />
-                <Tooltip />
-                <Bar dataKey="actuel" fill="#F59E0B" radius={[0, 4, 4, 0]} name="Actuel" />
-                <Bar dataKey="prevu" fill="#FDE68A" radius={[0, 4, 4, 0]} name="Prévu" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Stock actuel vs minimum (unites)</h3>
+          {loadCrit ? (
+            <div style={{ height: 220, display: "flex", alignItems: "center", justifyContent: "center", color: "#9CA3AF", fontSize: 14 }}>Chargement…</div>
+          ) : prodData.length === 0 ? (
+            <div style={{ height: 220, display: "flex", alignItems: "center", justifyContent: "center", color: "#9CA3AF", fontSize: 14 }}>Aucun medicament critique.</div>
+          ) : (
+            <div style={{ width: "100%", height: 220 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={prodData} layout="vertical">
+                  <XAxis type="number" tick={{ fontSize: 11 }} />
+                  <YAxis dataKey="name" type="category" width={90} tick={{ fontSize: 11 }} />
+                  <Tooltip />
+                  <Bar dataKey="actuel" fill="#F59E0B" radius={[0, 4, 4, 0]} name="Actuel" />
+                  <Bar dataKey="prevu"  fill="#FDE68A" radius={[0, 4, 4, 0]} name="Minimum requis" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </div>
 
         <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Actions recommandées</h3>
+          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Actions recommandees</h3>
+          {loadCrit ? (
+            <div style={{ color: "#9CA3AF", fontSize: 13 }}>Chargement…</div>
+          ) : actionsRecommandees.length === 0 ? (
+            <div style={{ padding: "32px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>
+              Aucune action requise. Les stocks sont dans les normes.
+            </div>
+          ) : null}
           {actionsRecommandees.map((a, i) => (
             <div key={i} style={{ padding: "12px 14px", backgroundColor: a.urgence === "haute" ? "#FEF2F2" : a.urgence === "normale" ? "#FFFBEB" : "#F0F9FF", borderRadius: 10, marginBottom: 10 }}>
               <div style={{ fontWeight: 700, fontSize: 13, color: "#0A1628", marginBottom: 3 }}>{a.action}</div>
