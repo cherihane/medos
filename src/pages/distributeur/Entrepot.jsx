@@ -13,6 +13,36 @@ import { useToast } from "../../hooks/useToast";
 import { useMedicaments } from "../../hooks/useSupabaseData";
 import { insertLot, incrementStock, insertCommande } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
+import { openDocument, tableHTML, infoGridHTML, etabFromAuth } from "../../utils/MedOSDocument";
+
+function printBonCommandeFabricant({ header, lignes, etab }) {
+  const dateFr = new Date().toLocaleDateString("fr-FR");
+  const totalQty = lignes.reduce((s, l) => s + (l.quantite || 0), 0);
+  openDocument({
+    titre: "Bon de commande fabricant",
+    sousTitre: `Émis le ${dateFr} — ${lignes.length} référence${lignes.length !== 1 ? "s" : ""} · ${totalQty.toLocaleString("fr-FR")} unités`,
+    etablissement: etab,
+    sections: [
+      {
+        titre: "Destinataire",
+        html: infoGridHTML([
+          { label: "Fabricant", value: header.fabricant || "—" },
+          { label: "Email", value: header.email_fabricant || "—" },
+          { label: "Date de livraison souhaitée", value: header.date_livraison ? new Date(header.date_livraison).toLocaleDateString("fr-FR") : "Non précisée" },
+          { label: "Instructions", value: header.notes || "Aucune" },
+        ]),
+      },
+      {
+        titre: "Médicaments commandés",
+        html: tableHTML(
+          ["Médicament", "Quantité"],
+          lignes.map((l) => [l.medicamentNom || l.nom || "—", `${(l.quantite || 0).toLocaleString("fr-FR")} unités`]),
+          { alignRight: [1] }
+        ),
+      },
+    ],
+  });
+}
 
 // ── Resend ────────────────────────────────────────────────────────────────────
 const RESEND_KEY = "re_iUaDVQFG_LAX2mHCRxm6rf216167mGdJY";
@@ -275,7 +305,7 @@ function ModalReception({ medicaments, onClose, onSuccess }) {
 // ── Modal Nouvelle commande fabricant (bon de commande multi-médicaments) ──────
 const LIGNE_VIDE = () => ({ id: Date.now() + Math.random(), medicament_id: "", quantite: "" });
 
-function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id, onClose, onSuccess }) {
+function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id, auth, onClose, onSuccess }) {
   const [header, setHeader] = useState({ email_fabricant: "", fabricant: "", date_livraison: "", notes: "" });
   const [lignes, setLignes] = useState([LIGNE_VIDE()]);
   const [saving, setSaving] = useState(false);
@@ -450,6 +480,20 @@ function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id
             <button onClick={onClose} style={{ flex: 1, padding: "11px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 10, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>
               Annuler
             </button>
+            <button
+              onClick={() => {
+                const lignesValides = lignes.filter((l) => l.medicament_id && parseInt(l.quantite, 10) > 0);
+                if (lignesValides.length === 0) return;
+                const lignesPrint = lignesValides.map((l) => {
+                  const med = medicaments.find((m) => m.id === l.medicament_id);
+                  return { medicamentNom: med?.nom ?? "—", quantite: parseInt(l.quantite, 10) };
+                });
+                printBonCommandeFabricant({ header, lignes: lignesPrint, etab: etabFromAuth(auth) });
+              }}
+              style={{ padding: "11px 16px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+            >
+              Imprimer
+            </button>
             <button onClick={handleSubmit} disabled={saving}
               style={{ flex: 2, padding: "11px", backgroundColor: saving ? "#E5E7EB" : ACCENT, color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
               {saving
@@ -506,6 +550,7 @@ export default function Entrepot() {
           medicaments={medicaments}
           distributeurNom={auth?.structure ?? "MedDistrib International"}
           etablissement_id={auth?.etablissement_id ?? null}
+          auth={auth}
           onClose={() => setShowCommande(false)}
           onSuccess={(msg) => { setShowCommande(false); success(msg); }}
         />

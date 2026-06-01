@@ -1,76 +1,86 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import Layout from "../../components/Layout";
 import { useMedicaments, useAlertes, usePatients } from "../../hooks/useSupabaseData";
+import { useAuth } from "../../context/AuthContext";
+import { openDocument, tableHTML, alertBannerHTML, etabFromAuth } from "../../utils/MedOSDocument";
 
-function downloadTxt(filename, lines) {
-  const content = "﻿" + lines.join("\n");
-  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = filename; a.click();
-  URL.revokeObjectURL(url);
-}
-
-function exportRapport(type, { medicaments, alertes, patients }) {
-  const date = new Date().toLocaleDateString("fr-FR");
-  const sep = "─".repeat(70);
+function exportRapport(type, { medicaments, alertes, patients }, etab) {
+  const dateFr = new Date().toLocaleDateString("fr-FR");
 
   if (type === "Inventaire complet médicaments") {
-    downloadTxt(`inventaire-medicaments-${date.replace(/\//g,"-")}.txt`, [
-      "MEDOS — INVENTAIRE COMPLET MEDICAMENTS",
-      `Pharmacie Lumière — Exporté le ${date}`,
-      sep,
-      `${"Nom".padEnd(30)} | ${"Categorie".padEnd(16)} | ${"Stock".padStart(8)} | ${"Min".padStart(6)} | Statut`,
-      sep,
-      ...medicaments.map((m) => {
-        const statut = (m.stock_actuel ?? 0) < (m.stock_minimum ?? 0) ? "RUPTURE" : "OK";
-        return `${(m.nom ?? "").slice(0, 30).padEnd(30)} | ${(m.categorie ?? "").slice(0,16).padEnd(16)} | ${String(m.stock_actuel ?? 0).padStart(8)} | ${String(m.stock_minimum ?? 0).padStart(6)} | ${statut}`;
-      }),
-      sep,
-      `Total : ${medicaments.length} produits`,
-    ]);
+    const rows = medicaments.map((m) => {
+      const rupture = (m.stock_actuel ?? 0) < (m.stock_minimum ?? 0);
+      const badge = rupture
+        ? `<span style="padding:2px 7px;background:#FEF2F2;color:#DC2626;border-radius:4px;font-weight:700;font-size:10px">RUPTURE</span>`
+        : `<span style="padding:2px 7px;background:#DCFCE7;color:#16A34A;border-radius:4px;font-size:10px">OK</span>`;
+      return [m.nom ?? "—", m.categorie ?? "—", String(m.stock_actuel ?? 0), String(m.stock_minimum ?? 0), badge];
+    });
+    openDocument({
+      titre: "Inventaire complet médicaments",
+      sousTitre: `Exporté le ${dateFr} — ${medicaments.length} produit${medicaments.length !== 1 ? "s" : ""} référencés`,
+      etablissement: etab,
+      sections: [{ titre: "Tableau de l'inventaire", html: tableHTML(["Médicament", "Catégorie", "Stock actuel", "Stock minimum", "Statut"], rows, { alignRight: [2, 3] }) }],
+    });
+
   } else if (type === "État des stocks critiques") {
     const rupt = medicaments.filter((m) => (m.stock_actuel ?? 0) < (m.stock_minimum ?? 0));
-    downloadTxt(`stocks-critiques-${date.replace(/\//g,"-")}.txt`, [
-      "MEDOS — STOCKS CRITIQUES",
-      `Pharmacie Lumière — Exporté le ${date}`,
-      sep,
-      ...rupt.length === 0 ? ["Aucune rupture de stock."] : [
-        `${"Nom".padEnd(30)} | ${"Stock".padStart(8)} | ${"Minimum".padStart(8)}`,
-        sep,
-        ...rupt.map((m) => `${(m.nom ?? "").slice(0,30).padEnd(30)} | ${String(m.stock_actuel ?? 0).padStart(8)} | ${String(m.stock_minimum ?? 0).padStart(8)}`),
-      ],
-      sep,
-      `${rupt.length} produit(s) en rupture`,
+    const rows = rupt.map((m) => [
+      m.nom ?? "—", m.categorie ?? "—",
+      `<strong style="color:#DC2626">${m.stock_actuel ?? 0}</strong>`,
+      String(m.stock_minimum ?? 0),
+      String((m.stock_minimum ?? 0) - (m.stock_actuel ?? 0)),
     ]);
+    openDocument({
+      titre: "État des stocks critiques",
+      sousTitre: `Exporté le ${dateFr} — ${rupt.length} produit${rupt.length !== 1 ? "s" : ""} en rupture`,
+      etablissement: etab,
+      sections: [{
+        titre: "Produits en rupture de stock",
+        html: rupt.length === 0
+          ? alertBannerHTML("Aucune rupture de stock détectée.", "success")
+          : tableHTML(["Médicament", "Catégorie", "Stock actuel", "Stock minimum", "Manquant"], rows, { alignRight: [2, 3, 4] }),
+      }],
+    });
+
   } else if (type === "Registre patients") {
-    downloadTxt(`registre-patients-${date.replace(/\//g,"-")}.txt`, [
-      "MEDOS — REGISTRE PATIENTS",
-      `Pharmacie Lumière — Exporté le ${date}`,
-      sep,
-      `${"Nom".padEnd(28)} | ${"Prenom".padEnd(18)} | ${"Telephone".padEnd(14)}`,
-      sep,
-      ...patients.map((p) => `${(p.nom ?? "").slice(0,28).padEnd(28)} | ${(p.prenom ?? "").slice(0,18).padEnd(18)} | ${(p.telephone ?? "").padEnd(14)}`),
-      sep,
-      `Total : ${patients.length} patients`,
+    const rows = patients.map((p) => [
+      (p.nom ?? "—").toUpperCase(), p.prenom ?? "—",
+      p.telephone ?? "—", p.groupe_sanguin ?? "—",
+      p.derniere_visite ? new Date(p.derniere_visite).toLocaleDateString("fr-FR") : "—",
     ]);
+    openDocument({
+      titre: "Registre patients",
+      sousTitre: `Exporté le ${dateFr} — ${patients.length} patient${patients.length !== 1 ? "s" : ""} enregistrés`,
+      etablissement: etab,
+      sections: [{ titre: "Liste des patients", html: tableHTML(["Nom", "Prénom", "Téléphone", "Gr. sanguin", "Dernière visite"], rows) }],
+    });
+
   } else if (type === "Tableau de bord alertes") {
-    downloadTxt(`alertes-${date.replace(/\//g,"-")}.txt`, [
-      "MEDOS — TABLEAU DE BORD ALERTES",
-      `Pharmacie Lumière — Exporté le ${date}`,
-      sep,
-      `${"Type".padEnd(20)} | ${"Severite".padEnd(12)} | Message`,
-      sep,
-      ...alertes.map((a) => `${(a.type ?? "").slice(0,20).padEnd(20)} | ${(a.severite ?? "").padEnd(12)} | ${(a.message ?? a.titre ?? "").slice(0,50)}`),
-      sep,
-      `Total : ${alertes.length} alertes`,
-    ]);
+    const SEV_COLOR = { critique: "#DC2626", haute: "#D97706", moyenne: "#2563EB", faible: "#6B7280" };
+    const rows = alertes.map((a) => {
+      const c = SEV_COLOR[a.severite] ?? "#6B7280";
+      const badge = `<span style="padding:2px 7px;background:${c}20;color:${c};border-radius:4px;font-weight:700;font-size:10px">${(a.severite ?? "").toUpperCase()}</span>`;
+      return [badge, a.type ?? "—", a.titre ?? a.message ?? "—"];
+    });
+    openDocument({
+      titre: "Tableau de bord alertes",
+      sousTitre: `Exporté le ${dateFr} — ${alertes.length} alerte${alertes.length !== 1 ? "s" : ""} active${alertes.length !== 1 ? "s" : ""}`,
+      etablissement: etab,
+      sections: [{
+        titre: "Alertes actives",
+        html: rows.length === 0
+          ? alertBannerHTML("Aucune alerte active.", "success")
+          : tableHTML(["Sévérité", "Type", "Message"], rows),
+      }],
+    });
   }
 }
 
 const COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#8B5CF6", "#EF4444", "#EC4899"];
 
 export default function Rapports() {
+  const { auth } = useAuth();
+  const etab = etabFromAuth(auth);
   const { data: medicaments, loading: loadMed } = useMedicaments();
   const { data: alertes, loading: loadAlt } = useAlertes(50);
   const { data: patients, loading: loadPat } = usePatients();
@@ -213,7 +223,7 @@ export default function Rapports() {
                 <div style={{ fontSize: 13, fontWeight: 600, color: "#0A1628" }}>{r.name}</div>
                 <div style={{ fontSize: 11, color: "#9CA3AF" }}>{r.date} · {r.pages}</div>
               </div>
-              <button onClick={() => exportRapport(r.name, { medicaments, alertes, patients })} style={{ padding: "6px 14px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>
+              <button onClick={() => exportRapport(r.name, { medicaments, alertes, patients }, etab)} style={{ padding: "6px 14px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>
                 Exporter
               </button>
             </div>

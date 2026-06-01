@@ -1,5 +1,7 @@
 import { useState } from "react";
 import Layout from "../../components/Layout";
+import { useAuth } from "../../context/AuthContext";
+import { openDocument, tableHTML, etabFromAuth } from "../../utils/MedOSDocument";
 
 const acteurs = [
   { nom: "Pharmacie Lumière", type: "Pharmacie", ville: "Abidjan", licence: "PH-CI-2019-0421", statut: "conforme", dernierControle: "2024-01-10", score: 94 },
@@ -61,32 +63,29 @@ function InspectionModal({ acteur, onClose }) {
   );
 }
 
-function exportRegistreTxt(acteurs) {
-  const date = new Date().toLocaleDateString("fr-FR");
-  const sep = "─".repeat(70);
-  const lines = [
-    "MEDOS — REGISTRE DES ACTEURS PHARMACEUTIQUES",
-    `Exporté le ${date}`,
-    sep,
-    "",
-    ...acteurs.map((a) =>
-      `${a.nom.padEnd(32)} | ${a.type.padEnd(14)} | ${a.ville.padEnd(12)} | ${a.licence.padEnd(18)} | Score: ${String(a.score).padStart(3)}% | ${a.statut}`
-    ),
-    "",
-    sep,
-    `Total : ${acteurs.length} acteurs`,
-  ];
-  const content = "﻿" + lines.join("\n");
-  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `registre-acteurs-${date.replace(/\//g, "-")}.txt`;
-  a.click();
-  URL.revokeObjectURL(url);
+function exportRegistre(liste, etab) {
+  const SEV = { conforme: "#16A34A", alerte: "#D97706", suspendu: "#DC2626" };
+  const dateFr = new Date().toLocaleDateString("fr-FR");
+  const rows = liste.map((a) => {
+    const c = SEV[a.statut] ?? "#6B7280";
+    const scoreBadge = `<span style="font-weight:700;color:${a.score >= 85 ? "#16A34A" : a.score >= 60 ? "#D97706" : "#DC2626"}">${a.score}%</span>`;
+    const statutBadge = `<span style="padding:2px 8px;border-radius:4px;background:${c}20;color:${c};font-weight:700;font-size:10px">${a.statut}</span>`;
+    return [a.nom, a.type, a.ville, a.licence, a.dernierControle, scoreBadge, statutBadge];
+  });
+  openDocument({
+    titre: "Registre des acteurs pharmaceutiques",
+    sousTitre: `Exporté le ${dateFr} — ${liste.length} établissement${liste.length !== 1 ? "s" : ""} enregistrés`,
+    etablissement: etab,
+    sections: [{
+      titre: "Répertoire complet",
+      html: tableHTML(["Nom", "Type", "Ville", "N° Licence", "Dernier contrôle", "Score", "Statut"], rows),
+    }],
+  });
 }
 
 export default function Acteurs() {
+  const { auth } = useAuth();
+  const etab = etabFromAuth(auth);
   const [inspected, setInspected] = useState(null);
 
   return (
@@ -109,7 +108,7 @@ export default function Acteurs() {
       <div style={{ backgroundColor: "white", borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
         <div style={{ padding: "16px 20px", borderBottom: "1px solid #E5E7EB", display: "flex", justifyContent: "space-between" }}>
           <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#0A1628" }}>Registre des acteurs</h3>
-          <button onClick={() => exportRegistreTxt(acteurs)} style={{ padding: "7px 14px", backgroundColor: "#8B5CF6", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+          <button onClick={() => exportRegistre(acteurs, etab)} style={{ padding: "7px 14px", backgroundColor: "#8B5CF6", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
             Exporter le registre
           </button>
         </div>

@@ -6,6 +6,7 @@ import { useKpiDistributeur } from "../../hooks/useSupabaseData";
 import { insertCommande } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../supabaseClient";
+import { openDocument, tableHTML, infoGridHTML, etabFromAuth } from "../../utils/MedOSDocument";
 
 const forecastData = [
   { mois: "Jan", reel: 22400000, prevision: 23000000 },
@@ -111,7 +112,7 @@ async function sendCommandeEmail({ emailFabricant, fabricant, medicament, quanti
 }
 
 // ─── Modal Agir ───────────────────────────────────────────────────────────────
-function AgirModal({ action, onClose, onSaved, etablissement_id, distributeurNom }) {
+function AgirModal({ action, onClose, onSaved, etablissement_id, distributeurNom, auth }) {
   const [fabricant, setFabricant]         = useState("");
   const [fabricants, setFabricants]       = useState([]);
   const [loadingFab, setLoadingFab]       = useState(true);
@@ -296,6 +297,33 @@ function AgirModal({ action, onClose, onSaved, etablissement_id, distributeurNom
             <button onClick={onClose} style={{ padding: "9px 18px", backgroundColor: "white", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 13, color: "#6B7280", cursor: "pointer" }}>
               Annuler
             </button>
+            <button
+              onClick={() => {
+                const etab = etabFromAuth(auth);
+                openDocument({
+                  titre: "Bon de commande fabricant",
+                  sousTitre: `Prévision IA — Émis le ${new Date().toLocaleDateString("fr-FR")}`,
+                  etablissement: etab,
+                  sections: [
+                    { titre: "Destinataire", html: infoGridHTML([
+                      { label: "Fabricant", value: fabricant || "—" },
+                      { label: "Email", value: emailFabricant || "—" },
+                    ]) },
+                    { titre: "Commande", html: tableHTML(
+                      ["Médicament", "Quantité"],
+                      lignes.filter((l) => l.medicament_id && parseInt(l.quantite, 10) > 0).map((l) => {
+                        const nom = l.nom || action?.medicament || "—";
+                        return [nom, `${parseInt(l.quantite, 10).toLocaleString("fr-FR")} unités`];
+                      }),
+                      { alignRight: [1] }
+                    ) },
+                  ],
+                });
+              }}
+              style={{ padding: "9px 16px", backgroundColor: "#F8FAFC", color: "#374151", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+            >
+              Imprimer
+            </button>
             <button onClick={handleSave} disabled={saving} style={{ padding: "9px 18px", backgroundColor: saving ? "#E5E7EB" : "#F59E0B", color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer" }}>
               {saving ? "Envoi en cours…" : "Envoyer la commande"}
             </button>
@@ -342,6 +370,7 @@ export default function Previsions() {
           action={agirAction}
           etablissement_id={auth?.etablissement_id ?? null}
           distributeurNom={auth?.structure ?? "MedDistrib International"}
+          auth={auth}
           onClose={() => setAgirAction(null)}
           onSaved={(msg) => { showToast(msg); }}
         />
