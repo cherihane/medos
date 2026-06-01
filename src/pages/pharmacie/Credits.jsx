@@ -49,6 +49,7 @@ function Skeleton() {
 function PaiementModal({ commande, onClose, onSaved }) {
   const [mode, setMode] = useState("virement");
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState(null);
 
   const handleSave = async () => {
     setSaving(true);
@@ -60,7 +61,7 @@ function PaiementModal({ commande, onClose, onSaved }) {
       onSaved();
       onClose();
     } catch (e) {
-      alert("Erreur : " + e.message);
+      setFormError("Erreur : " + e.message);
     } finally {
       setSaving(false);
     }
@@ -83,6 +84,11 @@ function PaiementModal({ commande, onClose, onSaved }) {
           <option value="mobile_money">Mobile Money</option>
         </select>
       </Field>
+      {formError && (
+        <div style={{ padding: "10px 14px", backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, fontSize: 13, color: "#DC2626" }}>
+          {formError}
+        </div>
+      )}
       <ModalFooter onCancel={onClose} onSubmit={handleSave} submitLabel="Confirmer le paiement" saving={saving} />
     </Modal>
   );

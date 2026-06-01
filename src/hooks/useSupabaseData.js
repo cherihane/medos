@@ -64,15 +64,16 @@ export function usePatientsPaginated(search = "", pageSize = 20) {
 
 // Counts globaux patients pour KPI hôpital
 export function usePatientsStats() {
-  const [stats, setStats] = useState({ total: 0, hospitalise: 0, ambulatoire: 0, loading: true });
+  const [stats, setStats] = useState({ total: 0, hospitalise: 0, ambulatoire: 0, avecAllergies: 0, loading: true });
   useEffect(() => {
     Promise.all([
       supabase.from("patients").select("id", { count: "exact", head: true }),
       supabase.from("patients").select("id", { count: "exact", head: true }).eq("statut", "hospitalise"),
-    ]).then(([tot, hosp]) => {
+      supabase.from("patients").select("id", { count: "exact", head: true }).not("allergies", "is", null).neq("allergies", "{}"),
+    ]).then(([tot, hosp, allerg]) => {
       const t = tot.count ?? 0;
       const h = hosp.count ?? 0;
-      setStats({ total: t, hospitalise: h, ambulatoire: t - h, loading: false });
+      setStats({ total: t, hospitalise: h, ambulatoire: t - h, avecAllergies: allerg.count ?? 0, loading: false });
     });
   }, []);
   return stats;
@@ -179,7 +180,7 @@ function useQuery(fn, deps = []) {
 // ─── médicaments ─────────────────────────────────────────────────────────────
 export function useMedicaments() {
   return useQuery(() =>
-    supabase.from("medicaments").select("*").order("nom", { ascending: true })
+    supabase.from("medicaments").select("*").order("nom", { ascending: true }).limit(500)
   );
 }
 
@@ -209,7 +210,7 @@ export function useAlertes(limit = 20) {
 // ─── patients ─────────────────────────────────────────────────────────────────
 export function usePatients() {
   return useQuery(() =>
-    supabase.from("patients").select("*").order("nom", { ascending: true })
+    supabase.from("patients").select("*").order("nom", { ascending: true }).limit(500)
   );
 }
 
@@ -228,7 +229,7 @@ export function useEtablissements(type = null) {
 // ─── fournisseurs ─────────────────────────────────────────────────────────────
 export function useFournisseurs() {
   return useQuery(() =>
-    supabase.from("fournisseurs").select("*").order("nom", { ascending: true })
+    supabase.from("fournisseurs").select("*").order("nom", { ascending: true }).limit(500)
   );
 }
 
@@ -242,6 +243,7 @@ export function useOrdonnances() {
         patients ( prenom, nom )
       `)
       .order("date_emission", { ascending: false })
+      .limit(500)
   );
 }
 
@@ -256,7 +258,8 @@ export function useCommandes(etablissement_id = null) {
         etablissements ( nom, ville ),
         fournisseurs ( nom )
       `)
-      .order("date_commande", { ascending: false });
+      .order("date_commande", { ascending: false })
+      .limit(500);
     if (etablissement_id) q = q.eq("etablissement_id", etablissement_id);
     return q;
   }, [etablissement_id]);
@@ -274,6 +277,7 @@ export function useLivraisons() {
         fournisseurs ( nom )
       `)
       .order("created_at", { ascending: false })
+      .limit(500)
   );
 }
 
@@ -287,6 +291,7 @@ export function useLots() {
         medicaments ( nom, code )
       `)
       .order("date_expiration", { ascending: true })
+      .limit(500)
   );
 }
 
@@ -444,6 +449,7 @@ export function useContrefacons() {
       .select("*")
       .eq("type", "contrefacon")
       .order("created_at", { ascending: false })
+      .limit(500)
   );
 }
 

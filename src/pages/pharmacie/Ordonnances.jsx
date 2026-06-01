@@ -43,10 +43,11 @@ function NouvelleModal({ patients, onClose, onSaved }) {
     statut: "en_attente",
   });
   const [saving, setSaving] = useState(false);
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const [formError, setFormError] = useState(null);
+  const set = (k) => (e) => { setFormError(null); setForm((f) => ({ ...f, [k]: e.target.value })); };
 
   const handleSave = async () => {
-    if (!form.patient_id) return alert("Veuillez sélectionner un patient.");
+    if (!form.patient_id) { setFormError("Veuillez sélectionner un patient."); return; }
     setSaving(true);
     try {
       const ref = "ORD-" + Date.now().toString().slice(-8);
@@ -62,7 +63,7 @@ function NouvelleModal({ patients, onClose, onSaved }) {
       onSaved();
       onClose();
     } catch (e) {
-      alert("Erreur : " + e.message);
+      setFormError("Erreur : " + e.message);
     } finally {
       setSaving(false);
     }
@@ -97,6 +98,11 @@ function NouvelleModal({ patients, onClose, onSaved }) {
           placeholder="Médicaments, posologie, durée…"
         />
       </Field>
+      {formError && (
+        <div style={{ padding: "10px 14px", backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, fontSize: 13, color: "#DC2626" }}>
+          {formError}
+        </div>
+      )}
       <ModalFooter onCancel={onClose} onSubmit={handleSave} submitLabel="Créer l'ordonnance" saving={saving} />
     </Modal>
   );

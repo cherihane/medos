@@ -166,9 +166,9 @@ function printFichePatient({ patient, ordonnances, comptes, auth }) {
 }
 
 // ── Envoi SMS ─────────────────────────────────────────────────────────────────
-function envoyerSMSOrdonnance(patient, lignes) {
+function envoyerSMSOrdonnance(patient, lignes, onError) {
   const tel = (patient.telephone ?? "").replace(/\s/g, "");
-  if (!tel) { alert("Aucun numéro de téléphone enregistré pour ce patient."); return; }
+  if (!tel) { onError && onError("Aucun numéro de téléphone enregistré pour ce patient."); return; }
   const corps = [
     `Ordonnance MedOS — ${patient.prenom} ${patient.nom}`,
     ...lignes.map((l) => `- ${l.nom} : ${l.posologie}${l.duree ? ` (${l.duree})` : ""}`),
@@ -177,9 +177,9 @@ function envoyerSMSOrdonnance(patient, lignes) {
   window.open(`sms:${tel}?body=${encodeURIComponent(corps)}`);
 }
 
-function envoyerSMSRendezVous(patient, dateRdv, medecinNom, hopitalNom) {
+function envoyerSMSRendezVous(patient, dateRdv, medecinNom, hopitalNom, onError) {
   const tel = (patient.telephone ?? "").replace(/\s/g, "");
-  if (!tel) { alert("Aucun numéro de téléphone enregistré pour ce patient."); return; }
+  if (!tel) { onError && onError("Aucun numéro de téléphone enregistré pour ce patient."); return; }
   const corps = [
     `Rappel MedOS — Rendez-vous medical`,
     `Patient : ${patient.prenom} ${patient.nom}`,
@@ -500,6 +500,7 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
   const [showOrd, setShowOrd]         = useState(false);
   const [showCR, setShowCR]           = useState(false);
   const [detailCR, setDetailCR]       = useState(null);
+  const [smsError, setSmsError]       = useState(null);
 
   const charger = useCallback(async () => {
     setLoading(true);
@@ -614,6 +615,11 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
 
           {/* Contenu */}
           <div style={{ overflowY: "auto", flexGrow: 1, padding: "20px 26px" }}>
+            {smsError && (
+              <div style={{ marginBottom: 12, padding: "10px 14px", backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, fontSize: 13, color: "#DC2626" }}>
+                {smsError}
+              </div>
+            )}
 
             {/* ── Informations ── */}
             {onglet === "infos" && (
@@ -693,7 +699,7 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
                         </button>
                         {patient.telephone && (
                           <button
-                            onClick={() => envoyerSMSOrdonnance(patient, lignes)}
+                            onClick={() => { setSmsError(null); envoyerSMSOrdonnance(patient, lignes, setSmsError); }}
                             style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", background: "white", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
                             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                             Envoyer par SMS
@@ -731,7 +737,7 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
                         </button>
                         {c.prochain_rdv && patient.telephone && (
                           <button
-                            onClick={() => envoyerSMSRendezVous(patient, c.prochain_rdv, c.medecin, hopitalNom ?? "Hôpital")}
+                            onClick={() => { setSmsError(null); envoyerSMSRendezVous(patient, c.prochain_rdv, c.medecin, hopitalNom ?? "Hôpital", setSmsError); }}
                             style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 12px", background: "white", border: "1px solid #E5E7EB", borderRadius: 6, fontSize: 11, color: "#374151", cursor: "pointer", fontWeight: 600 }}>
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                             SMS rappel RDV
@@ -949,7 +955,7 @@ export default function PatientsHopital() {
           { label: "Total patients",    value: patientStats.loading ? "…" : patientStats.total,        color: ACCENT },
           { label: "Hospitalisés",      value: patientStats.loading ? "…" : patientStats.hospitalise,  color: "#EF4444" },
           { label: "Ambulatoires",      value: patientStats.loading ? "…" : patientStats.ambulatoire,  color: "#3B82F6" },
-          { label: "Alertes allergies", value: loading ? "…" : patients.filter(hasAllergies).length,   color: "#DC2626" },
+          { label: "Alertes allergies", value: patientStats.loading ? "…" : patientStats.avecAllergies, color: "#DC2626" },
         ].map((k) => (
           <div key={k.label} style={{ flex: 1, minWidth: 130, background: "white", borderRadius: 14, padding: "15px 18px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", borderLeft: `4px solid ${k.color}` }}>
             <div style={{ fontSize: 22, fontWeight: 800, color: k.color }}>{k.value}</div>

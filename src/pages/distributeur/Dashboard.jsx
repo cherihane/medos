@@ -33,6 +33,7 @@ function CommandesPanel() {
   const { data: commandes, loading } = useCommandesRealtime();
   const [updating, setUpdating] = useState(null);
   const [newIds, setNewIds] = useState(new Set());
+  const [actionError, setActionError] = useState(null);
 
   // Détecte les nouvelles lignes arrivées via Realtime (hors chargement initial).
   // On utilise un ref pour mémoriser les IDs déjà vus sans provoquer de re-render.
@@ -65,10 +66,11 @@ function CommandesPanel() {
 
   const handleAction = async (id, statut) => {
     setUpdating(id);
+    setActionError(null);
     try {
       await updateCommande(id, { statut });
     } catch (e) {
-      alert("Erreur : " + e.message);
+      setActionError("Erreur : " + e.message);
     } finally {
       setUpdating(null);
     }
@@ -84,6 +86,11 @@ function CommandesPanel() {
         </span>
       </div>
 
+      {actionError && (
+        <div style={{ padding: "10px 14px", backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, fontSize: 13, color: "#DC2626", marginBottom: 8 }}>
+          {actionError}
+        </div>
+      )}
       {loading && [1, 2, 3].map((i) => (
         <div key={i} style={{ height: 56, backgroundColor: "#F8FAFC", borderRadius: 8, marginBottom: 8, animation: "pulse 1.5s ease-in-out infinite" }} />
       ))}
