@@ -3,6 +3,32 @@ import { supabase } from "../supabaseClient";
 
 const AuthContext = createContext(null);
 
+// Chemins autorisés par role_interne. Absent = compte principal → tout est visible.
+// /parametres est toujours inclus pour tous les rôles internes.
+const NAV_INTERNE = {
+  pharmacie: {
+    gerant:      null, // accès complet
+    pharmacien:  ["/pharmacie/dashboard", "/pharmacie/inventaire", "/pharmacie/ordonnances", "/pharmacie/patients", "/pharmacie/scanner", "/parametres"],
+    caissier:    ["/pharmacie/caisse", "/pharmacie/scanner", "/parametres"],
+  },
+  hopital: {
+    directeur:            null,
+    medecin:              ["/hopital/dashboard", "/hopital/assistant", "/hopital/alertes", "/parametres"],
+    infirmiere:           ["/hopital/dashboard", "/hopital/alertes", "/parametres"],
+    pharmacien_hospitalier: ["/hopital/stock", "/hopital/scanner", "/hopital/alertes", "/parametres"],
+  },
+  distributeur: {
+    directeur:  null,
+    commercial: ["/distributeur/dashboard", "/distributeur/reseau-clients", "/distributeur/clients", "/distributeur/previsions", "/parametres"],
+    logistique: ["/distributeur/entrepot", "/distributeur/livraisons", "/distributeur/tracabilite", "/parametres"],
+  },
+  autorite: {
+    ministre:   null,
+    inspecteur: null,
+    analyste:   null,
+  },
+};
+
 export const roleConfig = {
   pharmacie: {
     label: "Pharmacie",
@@ -87,7 +113,22 @@ export function AuthProvider({ children }) {
   const buildAuthBase = (user) => {
     const role = user?.user_metadata?.role;
     if (!role || !roleConfig[role]) return null;
-    return { role, ...roleConfig[role], user, etablissement_id: null };
+    const role_interne = user?.user_metadata?.role_interne ?? null;
+    const config = roleConfig[role];
+
+    // Filtrer nav selon role_interne (null = compte principal, accès complet)
+    const allowedPaths = role_interne
+      ? (NAV_INTERNE[role]?.[role_interne] ?? null)
+      : null;
+    const nav = allowedPaths
+      ? config.nav.filter((item) => allowedPaths.includes(item.path))
+      : config.nav;
+
+    // dashboardPath = premier item de nav autorisé (hors /parametres)
+    const firstNav = nav.find((item) => item.path !== "/parametres");
+    const dashboardPath = firstNav ? firstNav.path : config.dashboardPath;
+
+    return { role, role_interne, ...config, nav, dashboardPath, user, etablissement_id: null };
   };
 
   // Étape 2 — enrichissement en arrière-plan avec etablissement_id
