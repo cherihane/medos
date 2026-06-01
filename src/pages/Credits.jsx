@@ -1,88 +1,151 @@
+import { useMemo } from "react";
 import Layout from "../components/Layout";
-import { credits } from "../data/staticData";
+import { useCommandes } from "../hooks/useSupabaseData";
 
-const statusStyle = {
-  normal: { bg: "#DCFCE7", color: "#16A34A" },
-  alerte: { bg: "#FFFBEB", color: "#F59E0B" },
-  critique: { bg: "#FEF2F2", color: "#EF4444" },
+const STATUT_STYLE = {
+  livree:     { bg: "#DCFCE7", color: "#16A34A", label: "Livree" },
+  en_transit: { bg: "#DBEAFE", color: "#2563EB", label: "En transit" },
+  confirmee:  { bg: "#EDE9FE", color: "#7C3AED", label: "Confirmee" },
+  envoyee:    { bg: "#FEF9C3", color: "#A16207", label: "Envoyee" },
+  brouillon:  { bg: "#F3F4F6", color: "#6B7280", label: "Brouillon" },
+  annulee:    { bg: "#FEE2E2", color: "#DC2626", label: "Annulee" },
 };
 
+function fmtDate(iso) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function fmtMontant(v) {
+  if (v == null) return "—";
+  return `${Number(v).toLocaleString("fr-FR")} FCFA`;
+}
+
 export default function Credits() {
+  const { data: commandes, loading } = useCommandes();
+
+  // Commandes non soldees (exclure livree et annulee) = encours credit
+  const enCours = useMemo(
+    () => commandes.filter((c) => !["livree", "annulee"].includes(c.statut)),
+    [commandes]
+  );
+
+  const totalEncours = useMemo(
+    () => enCours.reduce((s, c) => s + Number(c.montant_total ?? 0), 0),
+    [enCours]
+  );
+
+  const enAlerte = useMemo(
+    () => enCours.filter((c) =>
+      c.date_livraison_prevue && new Date(c.date_livraison_prevue) < new Date()
+    ).length,
+    [enCours]
+  );
+
+  const stats = [
+    { label: "Encours total",      value: fmtMontant(totalEncours),  color: "#3B82F6" },
+    { label: "Commandes actives",  value: enCours.length,            color: "#8B5CF6" },
+    { label: "En retard",          value: enAlerte,                  color: "#F59E0B" },
+    { label: "Total commandes",    value: commandes.length,          color: "#10B981" },
+  ];
+
   return (
-    <Layout title="Comptes Crédit">
-      {/* Summary */}
+    <Layout title="Commandes et Credits">
       <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
-        {[
-          { label: "Encours total", value: "9 670 000 FCFA", icon: "💰", color: "#3B82F6" },
-          { label: "Limite globale", value: "13 000 000 FCFA", icon: "📊", color: "#8B5CF6" },
-          { label: "Comptes en alerte", value: "2", icon: "⚠️", color: "#F59E0B" },
-          { label: "Taux d'utilisation", value: "74%", icon: "📈", color: "#10B981" },
-        ].map((k) => (
-          <div key={k.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
-            <div style={{ fontSize: 22 }}>{k.icon}</div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: "#0A1628", marginTop: 6 }}>{k.value}</div>
-            <div style={{ fontSize: 12, color: "#6B7280" }}>{k.label}</div>
+        {stats.map((s) => (
+          <div key={s.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${s.color}` }}>
+            <div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{loading ? "…" : s.value}</div>
+            <div style={{ fontSize: 12, color: "#6B7280", marginTop: 4 }}>{s.label}</div>
           </div>
         ))}
       </div>
 
-      {/* Credit accounts */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        {credits.map((c) => {
-          const s = statusStyle[c.status];
-          const pct = Math.round((c.encours / c.limite) * 100);
-          return (
-            <div key={c.id} style={{ backgroundColor: "white", borderRadius: 16, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: 16, color: "#0A1628", marginBottom: 2 }}>{c.client}</div>
-                  <div style={{ fontSize: 12, color: "#9CA3AF" }}>{c.id} · {c.transactions} transactions</div>
+      {loading ? (
+        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "48px", textAlign: "center", color: "#9CA3AF", fontSize: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          Chargement des commandes…
+        </div>
+      ) : commandes.length === 0 ? (
+        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "64px 24px", textAlign: "center", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <div style={{ fontSize: 48, marginBottom: 16, color: "#D1D5DB" }}>
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg>
+          </div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: "#374151", marginBottom: 8 }}>
+            Aucune commande enregistree
+          </div>
+          <div style={{ fontSize: 13, color: "#9CA3AF", marginBottom: 20 }}>
+            Les commandes passees aupres des fournisseurs apparaitront ici.
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {commandes.map((c) => {
+            const s = STATUT_STYLE[c.statut] ?? STATUT_STYLE.brouillon;
+            const enRetard = c.date_livraison_prevue && new Date(c.date_livraison_prevue) < new Date() && c.statut !== "livree";
+            return (
+              <div
+                key={c.id}
+                style={{
+                  backgroundColor: "white",
+                  borderRadius: 14,
+                  padding: "20px 24px",
+                  boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+                  borderLeft: enRetard ? "4px solid #F59E0B" : "4px solid transparent",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: 15, color: "#0A1628", marginBottom: 2 }}>
+                      {c.etablissements?.nom ?? "Client inconnu"}
+                    </div>
+                    <div style={{ fontSize: 12, color: "#9CA3AF" }}>
+                      {c.reference ?? "—"}
+                      {c.fournisseurs?.nom ? ` · via ${c.fournisseurs.nom}` : ""}
+                      {c.etablissements?.ville ? ` · ${c.etablissements.ville}` : ""}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    {enRetard && (
+                      <span style={{ padding: "3px 10px", borderRadius: 10, fontSize: 11, fontWeight: 700, backgroundColor: "#FFFBEB", color: "#D97706" }}>
+                        En retard
+                      </span>
+                    )}
+                    <span style={{ padding: "4px 12px", borderRadius: 12, fontSize: 12, fontWeight: 700, backgroundColor: s.bg, color: s.color }}>
+                      {s.label}
+                    </span>
+                  </div>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontSize: 13, color: "#6B7280" }}>Échéance : <strong>{c.echeance}</strong></span>
-                  <span style={{ padding: "4px 12px", borderRadius: 12, fontSize: 12, fontWeight: 700, backgroundColor: s.bg, color: s.color }}>
-                    {c.status}
-                  </span>
+
+                <div style={{ display: "flex", gap: 24, fontSize: 13 }}>
+                  <div>
+                    <div style={{ color: "#9CA3AF", fontSize: 11, marginBottom: 2 }}>Montant</div>
+                    <div style={{ fontWeight: 800, color: "#0A1628", fontSize: 15 }}>
+                      {fmtMontant(c.montant_total)}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ color: "#9CA3AF", fontSize: 11, marginBottom: 2 }}>Date commande</div>
+                    <div style={{ fontWeight: 600, color: "#374151" }}>{fmtDate(c.date_commande)}</div>
+                  </div>
+                  {c.date_livraison_prevue && (
+                    <div>
+                      <div style={{ color: "#9CA3AF", fontSize: 11, marginBottom: 2 }}>Livraison prevue</div>
+                      <div style={{ fontWeight: 600, color: enRetard ? "#F59E0B" : "#374151" }}>
+                        {fmtDate(c.date_livraison_prevue)}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
 
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 14 }}>
-                <span style={{ color: "#6B7280" }}>Encours</span>
-                <div>
-                  <span style={{ fontWeight: 800, color: "#0A1628" }}>{c.encours.toLocaleString()} FCFA</span>
-                  <span style={{ color: "#9CA3AF", fontSize: 12 }}> / {c.limite.toLocaleString()} FCFA</span>
-                </div>
-              </div>
-
-              <div style={{ height: 10, backgroundColor: "#E5E7EB", borderRadius: 6, marginBottom: 6 }}>
-                <div style={{
-                  height: "100%", width: `${pct}%`, borderRadius: 6,
-                  backgroundColor: pct >= 99 ? "#EF4444" : pct >= 80 ? "#F59E0B" : "#10B981",
-                  transition: "width 0.3s"
-                }} />
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#9CA3AF", marginBottom: 16 }}>
-                <span>{pct}% utilisé</span>
-                <span>Disponible : {(c.limite - c.encours).toLocaleString()} FCFA</span>
-              </div>
-
-              <div style={{ display: "flex", gap: 10 }}>
-                <button style={{ padding: "8px 16px", backgroundColor: "#EFF6FF", color: "#2563EB", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-                  Voir transactions
-                </button>
-                <button style={{ padding: "8px 16px", backgroundColor: "#DCFCE7", color: "#16A34A", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-                  Enregistrer paiement
-                </button>
-                {c.status !== "normal" && (
-                  <button style={{ padding: "8px 16px", backgroundColor: "#FFFBEB", color: "#D97706", border: "1px solid #FCD34D", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-                    Envoyer relance
-                  </button>
+                {c.notes && (
+                  <div style={{ marginTop: 10, fontSize: 12, color: "#6B7280", fontStyle: "italic" }}>
+                    {c.notes}
+                  </div>
                 )}
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </Layout>
   );
 }
