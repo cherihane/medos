@@ -1,6 +1,41 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import Layout from "../../components/Layout";
 
+function downloadTxt(filename, lines) {
+  const content = "﻿" + lines.join("\n");
+  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+const rapportsStatiques = [
+  { name: "Rapport de dispensation — Janvier 2024", type: "Dispensations", date: "01/02/2024",
+    lignes: ["Période : Janvier 2024", "Dispensations totales : 1 240", "Coût total : 18 400 000 FCFA", "Taux de disponibilité : 91.3%", "Patients servis : 892"] },
+  { name: "Rapport de coûts médicamenteux — Q4 2023", type: "Finances", date: "15/01/2024",
+    lignes: ["Période : Q4 2023 (Oct-Déc)", "Coût total médicaments : 54 200 000 FCFA", "Budget alloué : 60 000 000 FCFA", "Taux d'utilisation : 90.3%", "Écart favorable : 5 800 000 FCFA"] },
+  { name: "Rapport de disponibilité — 2023", type: "Stock", date: "10/01/2024",
+    lignes: ["Année : 2023", "Taux de disponibilité moyen : 89.7%", "Ruptures enregistrées : 14", "Durée moyenne de rupture : 3.2 jours", "Médicaments essentiels disponibles : 97.1%"] },
+];
+
+function exportRapportHopital(rapport) {
+  const date = new Date().toLocaleDateString("fr-FR");
+  const sep = "─".repeat(70);
+  const filename = `${rapport.type.toLowerCase()}-hopital-${rapport.date.replace(/\//g,"-")}.txt`;
+  downloadTxt(filename, [
+    `MEDOS — HOPITAL CENTRAL ABIDJAN`,
+    `${rapport.name}`,
+    `Généré le ${date}`,
+    sep,
+    "",
+    ...rapport.lignes,
+    "",
+    sep,
+    "Document généré par MedOS — Plateforme de santé numérique",
+  ]);
+}
+
 const monthlyData = [
   { mois: "Août", dispensations: 1120 },
   { mois: "Sep", dispensations: 1340 },
@@ -44,15 +79,30 @@ export default function Rapports() {
       <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Rapports disponibles</h3>
-          <button style={{ padding: "7px 16px", backgroundColor: "#10B981", color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+          <button onClick={() => {
+            const date = new Date().toLocaleDateString("fr-FR");
+            downloadTxt(`rapport-global-hopital-${date.replace(/\//g,"-")}.txt`, [
+              "MEDOS — RAPPORT GLOBAL HOPITAL CENTRAL ABIDJAN",
+              `Généré le ${date}`,
+              "─".repeat(70),
+              "",
+              "INDICATEURS DU MOIS",
+              `Dispensations       : 1 240`,
+              `Coût médicaments    : 18 400 000 FCFA`,
+              `Taux disponibilité  : 91.3%`,
+              `Patients servis     : 892`,
+              "",
+              "DISPENSATIONS MENSUELLES (6 derniers mois)",
+              ...monthlyData.map((m) => `  ${m.mois.padEnd(6)} : ${m.dispensations} dispensations`),
+              "",
+              "─".repeat(70),
+              "Document généré par MedOS — Plateforme de santé numérique",
+            ]);
+          }} style={{ padding: "7px 16px", backgroundColor: "#10B981", color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
             Générer rapport
           </button>
         </div>
-        {[
-          { name: "Rapport de dispensation — Janvier 2024", type: "Dispensations", date: "01/02/2024" },
-          { name: "Rapport de coûts médicamenteux — Q4 2023", type: "Finances", date: "15/01/2024" },
-          { name: "Rapport de disponibilité — 2023", type: "Stock", date: "10/01/2024" },
-        ].map((r) => (
+        {rapportsStatiques.map((r) => (
           <div key={r.name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid #F3F4F6" }}>
             <div>
               <div style={{ fontWeight: 600, fontSize: 13, color: "#0A1628" }}>{r.name}</div>
@@ -60,7 +110,7 @@ export default function Rapports() {
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <span style={{ padding: "3px 10px", backgroundColor: "#DCFCE7", color: "#16A34A", borderRadius: 8, fontSize: 11, fontWeight: 600 }}>{r.type}</span>
-              <button style={{ padding: "6px 14px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>
+              <button onClick={() => exportRapportHopital(r)} style={{ padding: "6px 14px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>
                 Télécharger
               </button>
             </div>
