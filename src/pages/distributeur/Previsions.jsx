@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
 import Layout from "../../components/Layout";
 import PredictionsIA from "../../components/PredictionsIA";
-import { useKpiDistributeur, useFournisseurs } from "../../hooks/useSupabaseData";
+import { useKpiDistributeur } from "../../hooks/useSupabaseData";
 import { insertCommande } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
+import { supabase } from "../../supabaseClient";
 
 const forecastData = [
   { mois: "Jan", reel: 22400000, prevision: 23000000 },
@@ -30,8 +31,10 @@ const inputStyle = {
 };
 
 // ─── Modal Agir ───────────────────────────────────────────────────────────────
-function AgirModal({ action, onClose, onSaved, fournisseurs, etablissement_id }) {
-  const [fournisseurId, setFournisseurId] = useState("");
+function AgirModal({ action, onClose, onSaved, etablissement_id }) {
+  const [fabricant, setFabricant]         = useState("");
+  const [fabricants, setFabricants]       = useState([]);
+  const [loadingFab, setLoadingFab]       = useState(true);
   const [quantite, setQuantite]           = useState(String(action.quantite ?? 500));
   const [dateLivraison, setDateLivraison] = useState("");
   const [notes, setNotes]                 = useState("");
@@ -40,22 +43,57 @@ function AgirModal({ action, onClose, onSaved, fournisseurs, etablissement_id })
 
   const urgenceBg = action.urgence === "haute" ? "#FEF2F2" : action.urgence === "normale" ? "#FFFBEB" : "#F0F9FF";
 
+  // Charger les fabricants distincts depuis lots → medicaments
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoadingFab(true);
+      try {
+        // Cherche le médicament par nom (correspondance partielle sur le début)
+        const { data: meds } = await supabase
+          .from("medicaments")
+          .select("id")
+          .ilike("nom", `${action.medicament.split(" ")[0]}%`);
+
+        const ids = (meds ?? []).map((m) => m.id);
+
+        let liste = [];
+        if (ids.length > 0) {
+          const { data: lots } = await supabase
+            .from("lots")
+            .select("fabricant")
+            .in("medicament_id", ids)
+            .not("fabricant", "is", null);
+          // Dédoublonner
+          liste = [...new Set((lots ?? []).map((l) => l.fabricant).filter(Boolean))].sort();
+        }
+
+        if (!cancelled) setFabricants(liste);
+      } catch {
+        // silencieux — la liste restera vide
+      } finally {
+        if (!cancelled) setLoadingFab(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [action.medicament]);
+
   const handleSave = async () => {
     setErreur(null);
-    if (!fournisseurId) { setErreur("Sélectionnez un fournisseur."); return; }
+    if (!fabricant.trim()) { setErreur("Sélectionnez ou saisissez un fabricant."); return; }
     const qty = parseInt(quantite, 10);
     if (!qty || qty <= 0) { setErreur("Quantité invalide."); return; }
     setSaving(true);
     try {
       const notesFinales = [
         `Médicament : ${action.medicament}`,
+        `Fabricant : ${fabricant.trim()}`,
         `Quantité commandée : ${qty} unités`,
         `Prévision IA : ${action.motif}`,
         notes.trim() ? `Instructions : ${notes.trim()}` : null,
       ].filter(Boolean).join(" | ");
 
       await insertCommande({
-        fournisseur_id:        fournisseurId,
         statut:                "brouillon",
         date_commande:         new Date().toISOString(),
         date_livraison_prevue: dateLivraison || null,
@@ -78,7 +116,7 @@ function AgirModal({ action, onClose, onSaved, fournisseurs, etablissement_id })
         {/* En-tête */}
         <div style={{ padding: "20px 24px 0", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
-            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Passer une commande fournisseur</h3>
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Passer une commande fabricant</h3>
             <div style={{ fontSize: 12, color: "#6B7280", marginTop: 3 }}>{action.action}</div>
           </div>
           <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9CA3AF", flexShrink: 0 }}>×</button>
@@ -100,17 +138,26 @@ function AgirModal({ action, onClose, onSaved, fournisseurs, etablissement_id })
             />
           </div>
 
-          {/* Fournisseur */}
+          {/* Fabricant */}
           <div style={{ marginBottom: 12 }}>
             <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>
-              Fournisseur <span style={{ color: "#EF4444" }}>*</span>
+              Fabricant <span style={{ color: "#EF4444" }}>*</span>
             </label>
-            <select style={{ ...inputStyle, cursor: "pointer" }} value={fournisseurId} onChange={(e) => setFournisseurId(e.target.value)}>
-              <option value="">— Sélectionner un fournisseur —</option>
-              {fournisseurs.map((f) => (
-                <option key={f.id} value={f.id}>{f.nom}{f.pays ? ` — ${f.pays}` : ""}</option>
-              ))}
-            </select>
+            {loadingFab ? (
+              <div style={{ ...inputStyle, backgroundColor: "#F8FAFC", color: "#9CA3AF" }}>Chargement…</div>
+            ) : fabricants.length > 0 ? (
+              <select style={{ ...inputStyle, cursor: "pointer" }} value={fabricant} onChange={(e) => setFabricant(e.target.value)}>
+                <option value="">— Sélectionner un fabricant —</option>
+                {fabricants.map((f) => <option key={f} value={f}>{f}</option>)}
+              </select>
+            ) : (
+              <input
+                style={inputStyle}
+                value={fabricant}
+                onChange={(e) => setFabricant(e.target.value)}
+                placeholder="Nom du fabricant (aucun lot enregistré pour ce médicament)"
+              />
+            )}
           </div>
 
           {/* Quantité + Date */}
@@ -157,7 +204,6 @@ function AgirModal({ action, onClose, onSaved, fournisseurs, etablissement_id })
 export default function Previsions() {
   const { auth } = useAuth();
   const { data: kpi, loading: loadKpi } = useKpiDistributeur();
-  const { data: fournisseurs } = useFournisseurs();
   const [agirAction, setAgirAction] = useState(null);
   const [toast, setToast] = useState(null);
 
@@ -188,7 +234,6 @@ export default function Previsions() {
       {agirAction && (
         <AgirModal
           action={agirAction}
-          fournisseurs={fournisseurs}
           etablissement_id={auth?.etablissement_id ?? null}
           onClose={() => setAgirAction(null)}
           onSaved={(msg) => { showToast(msg); }}
