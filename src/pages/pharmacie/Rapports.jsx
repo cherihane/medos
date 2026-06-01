@@ -2,6 +2,72 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pi
 import Layout from "../../components/Layout";
 import { useMedicaments, useAlertes, usePatients } from "../../hooks/useSupabaseData";
 
+function downloadTxt(filename, lines) {
+  const content = "﻿" + lines.join("\n");
+  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportRapport(type, { medicaments, alertes, patients }) {
+  const date = new Date().toLocaleDateString("fr-FR");
+  const sep = "─".repeat(70);
+
+  if (type === "Inventaire complet médicaments") {
+    downloadTxt(`inventaire-medicaments-${date.replace(/\//g,"-")}.txt`, [
+      "MEDOS — INVENTAIRE COMPLET MEDICAMENTS",
+      `Pharmacie Lumière — Exporté le ${date}`,
+      sep,
+      `${"Nom".padEnd(30)} | ${"Categorie".padEnd(16)} | ${"Stock".padStart(8)} | ${"Min".padStart(6)} | Statut`,
+      sep,
+      ...medicaments.map((m) => {
+        const statut = (m.stock_actuel ?? 0) < (m.stock_minimum ?? 0) ? "RUPTURE" : "OK";
+        return `${(m.nom ?? "").slice(0, 30).padEnd(30)} | ${(m.categorie ?? "").slice(0,16).padEnd(16)} | ${String(m.stock_actuel ?? 0).padStart(8)} | ${String(m.stock_minimum ?? 0).padStart(6)} | ${statut}`;
+      }),
+      sep,
+      `Total : ${medicaments.length} produits`,
+    ]);
+  } else if (type === "État des stocks critiques") {
+    const rupt = medicaments.filter((m) => (m.stock_actuel ?? 0) < (m.stock_minimum ?? 0));
+    downloadTxt(`stocks-critiques-${date.replace(/\//g,"-")}.txt`, [
+      "MEDOS — STOCKS CRITIQUES",
+      `Pharmacie Lumière — Exporté le ${date}`,
+      sep,
+      ...rupt.length === 0 ? ["Aucune rupture de stock."] : [
+        `${"Nom".padEnd(30)} | ${"Stock".padStart(8)} | ${"Minimum".padStart(8)}`,
+        sep,
+        ...rupt.map((m) => `${(m.nom ?? "").slice(0,30).padEnd(30)} | ${String(m.stock_actuel ?? 0).padStart(8)} | ${String(m.stock_minimum ?? 0).padStart(8)}`),
+      ],
+      sep,
+      `${rupt.length} produit(s) en rupture`,
+    ]);
+  } else if (type === "Registre patients") {
+    downloadTxt(`registre-patients-${date.replace(/\//g,"-")}.txt`, [
+      "MEDOS — REGISTRE PATIENTS",
+      `Pharmacie Lumière — Exporté le ${date}`,
+      sep,
+      `${"Nom".padEnd(28)} | ${"Prenom".padEnd(18)} | ${"Telephone".padEnd(14)}`,
+      sep,
+      ...patients.map((p) => `${(p.nom ?? "").slice(0,28).padEnd(28)} | ${(p.prenom ?? "").slice(0,18).padEnd(18)} | ${(p.telephone ?? "").padEnd(14)}`),
+      sep,
+      `Total : ${patients.length} patients`,
+    ]);
+  } else if (type === "Tableau de bord alertes") {
+    downloadTxt(`alertes-${date.replace(/\//g,"-")}.txt`, [
+      "MEDOS — TABLEAU DE BORD ALERTES",
+      `Pharmacie Lumière — Exporté le ${date}`,
+      sep,
+      `${"Type".padEnd(20)} | ${"Severite".padEnd(12)} | Message`,
+      sep,
+      ...alertes.map((a) => `${(a.type ?? "").slice(0,20).padEnd(20)} | ${(a.severite ?? "").padEnd(12)} | ${(a.message ?? a.titre ?? "").slice(0,50)}`),
+      sep,
+      `Total : ${alertes.length} alertes`,
+    ]);
+  }
+}
+
 const COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#8B5CF6", "#EF4444", "#EC4899"];
 
 export default function Rapports() {
@@ -147,7 +213,7 @@ export default function Rapports() {
                 <div style={{ fontSize: 13, fontWeight: 600, color: "#0A1628" }}>{r.name}</div>
                 <div style={{ fontSize: 11, color: "#9CA3AF" }}>{r.date} · {r.pages}</div>
               </div>
-              <button style={{ padding: "6px 14px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>
+              <button onClick={() => exportRapport(r.name, { medicaments, alertes, patients })} style={{ padding: "6px 14px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>
                 Exporter
               </button>
             </div>

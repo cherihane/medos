@@ -1,3 +1,4 @@
+import { useState } from "react";
 import Layout from "../../components/Layout";
 
 const endpoints = [
@@ -18,9 +19,63 @@ const methodColor = {
   DELETE: { bg: "#FEF2F2", color: "#EF4444" },
 };
 
+function generateKey() {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const segment = (n) => Array.from({ length: n }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+  return `mk_live_${segment(8)}-${segment(4)}-${segment(4)}-${segment(12)}`;
+}
+
+function CleModal({ onClose }) {
+  const [cle] = useState(() => generateKey());
+  const [copie, setCopie] = useState(false);
+
+  const handleCopier = () => {
+    navigator.clipboard.writeText(cle).then(() => {
+      setCopie(true);
+      setTimeout(() => setCopie(false), 2000);
+    });
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+      <div style={{ backgroundColor: "white", borderRadius: 16, width: 500, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+        <div style={{ padding: "20px 24px 0", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Nouvelle clé API générée</h3>
+            <div style={{ fontSize: 12, color: "#6B7280", marginTop: 3 }}>Copiez cette clé maintenant — elle ne sera plus affichée.</div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9CA3AF" }}>×</button>
+        </div>
+        <div style={{ padding: "18px 24px" }}>
+          <div style={{ backgroundColor: "#0A1628", borderRadius: 10, padding: "14px 16px", marginBottom: 14, display: "flex", alignItems: "center", gap: 12 }}>
+            <code style={{ fontSize: 12, color: "#10B981", fontFamily: "monospace", flex: 1, wordBreak: "break-all" }}>{cle}</code>
+            <button
+              onClick={handleCopier}
+              style={{ padding: "6px 12px", backgroundColor: copie ? "#10B981" : "#8B5CF6", color: "white", border: "none", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}
+            >
+              {copie ? "Copié" : "Copier"}
+            </button>
+          </div>
+          <div style={{ padding: "10px 14px", backgroundColor: "#FFFBEB", borderRadius: 8, fontSize: 12, color: "#92400E", marginBottom: 16 }}>
+            Cette clé donne accès à tous les endpoints API MedOS. Conservez-la en lieu sûr et ne la partagez pas.
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <button onClick={onClose} style={{ padding: "9px 20px", backgroundColor: "#8B5CF6", color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+              Fermer
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function API() {
+  const [showCle, setShowCle] = useState(false);
+
   return (
     <Layout title="API" subtitle="Documentation et accès à l'API nationale MedOS">
+      {showCle && <CleModal onClose={() => setShowCle(false)} />}
       <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
         {[
           { label: "Endpoints actifs", value: "34", color: "#8B5CF6" },
@@ -71,7 +126,7 @@ export default function API() {
                 -H "X-Structure-ID: SN-1248"
               </code>
             </div>
-            <button style={{ width: "100%", padding: "10px", backgroundColor: "#8B5CF6", color: "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+            <button onClick={() => setShowCle(true)} style={{ width: "100%", padding: "10px", backgroundColor: "#8B5CF6", color: "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
               Générer une clé API
             </button>
           </div>

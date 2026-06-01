@@ -1,3 +1,4 @@
+import { useState } from "react";
 import Layout from "../../components/Layout";
 
 const acteurs = [
@@ -15,9 +16,82 @@ const statutStyle = {
   suspendu: { bg: "#FEF2F2", color: "#EF4444" },
 };
 
+// ─── Modal Inspection ────────────────────────────────────────────────────────
+function InspectionModal({ acteur, onClose }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+      <div style={{ backgroundColor: "white", borderRadius: 16, width: 520, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+        <div style={{ padding: "20px 24px 0", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Fiche d'inspection</h3>
+            <div style={{ fontSize: 12, color: "#6B7280", marginTop: 3 }}>{acteur.nom}</div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9CA3AF" }}>×</button>
+        </div>
+        <div style={{ padding: "18px 24px" }}>
+          {[
+            ["Nom", acteur.nom],
+            ["Type", acteur.type],
+            ["Ville", acteur.ville],
+            ["N° Licence", acteur.licence],
+            ["Dernier contrôle", acteur.dernierControle],
+            ["Statut", acteur.statut],
+            ["Score de conformité", `${acteur.score} / 100`],
+          ].map(([label, val]) => (
+            <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "9px 0", borderBottom: "1px solid #F3F4F6" }}>
+              <span style={{ fontSize: 13, color: "#6B7280" }}>{label}</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#0A1628", textTransform: label === "Statut" ? "capitalize" : "none" }}>{val}</span>
+            </div>
+          ))}
+          <div style={{ marginTop: 16, padding: "12px 14px", backgroundColor: acteur.statut === "conforme" ? "#DCFCE7" : acteur.statut === "alerte" ? "#FFFBEB" : "#FEF2F2", borderRadius: 8, fontSize: 12, color: "#374151" }}>
+            <strong>Observation :</strong> {
+              acteur.statut === "conforme" ? "Établissement conforme aux normes réglementaires en vigueur." :
+              acteur.statut === "alerte" ? "Des irrégularités ont été relevées lors du dernier contrôle. Une inspection de suivi est recommandée." :
+              "Licence suspendue suite aux manquements graves constatés lors du dernier contrôle."
+            }
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+            <button onClick={onClose} style={{ padding: "9px 20px", backgroundColor: "#8B5CF6", color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+              Fermer
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function exportRegistreTxt(acteurs) {
+  const date = new Date().toLocaleDateString("fr-FR");
+  const sep = "─".repeat(70);
+  const lines = [
+    "MEDOS — REGISTRE DES ACTEURS PHARMACEUTIQUES",
+    `Exporté le ${date}`,
+    sep,
+    "",
+    ...acteurs.map((a) =>
+      `${a.nom.padEnd(32)} | ${a.type.padEnd(14)} | ${a.ville.padEnd(12)} | ${a.licence.padEnd(18)} | Score: ${String(a.score).padStart(3)}% | ${a.statut}`
+    ),
+    "",
+    sep,
+    `Total : ${acteurs.length} acteurs`,
+  ];
+  const content = "﻿" + lines.join("\n");
+  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `registre-acteurs-${date.replace(/\//g, "-")}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function Acteurs() {
+  const [inspected, setInspected] = useState(null);
+
   return (
     <Layout title="Acteurs" subtitle="Répertoire et conformité des acteurs pharmaceutiques">
+      {inspected && <InspectionModal acteur={inspected} onClose={() => setInspected(null)} />}
       <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
         {[
           { label: "Acteurs enregistrés", value: "1 248", color: "#8B5CF6" },
@@ -35,7 +109,7 @@ export default function Acteurs() {
       <div style={{ backgroundColor: "white", borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
         <div style={{ padding: "16px 20px", borderBottom: "1px solid #E5E7EB", display: "flex", justifyContent: "space-between" }}>
           <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#0A1628" }}>Registre des acteurs</h3>
-          <button style={{ padding: "7px 14px", backgroundColor: "#8B5CF6", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+          <button onClick={() => exportRegistreTxt(acteurs)} style={{ padding: "7px 14px", backgroundColor: "#8B5CF6", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
             Exporter le registre
           </button>
         </div>
@@ -71,7 +145,7 @@ export default function Acteurs() {
                     <span style={{ padding: "3px 10px", backgroundColor: s.bg, color: s.color, borderRadius: 10, fontSize: 11, fontWeight: 700 }}>{a.statut}</span>
                   </td>
                   <td style={{ padding: "13px 16px" }}>
-                    <button style={{ padding: "4px 12px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
+                    <button onClick={() => setInspected(a)} style={{ padding: "4px 12px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
                       Inspecter
                     </button>
                   </td>
