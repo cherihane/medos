@@ -311,10 +311,7 @@ function AgirModal({ action, onClose, onSaved, etablissement_id, distributeurNom
                     ]) },
                     { titre: "Commande", html: tableHTML(
                       ["Médicament", "Quantité"],
-                      lignes.filter((l) => l.medicament_id && parseInt(l.quantite, 10) > 0).map((l) => {
-                        const nom = l.nom || action?.medicament || "—";
-                        return [nom, `${parseInt(l.quantite, 10).toLocaleString("fr-FR")} unités`];
-                      }),
+                      [[action?.medicament || "—", `${parseInt(quantite, 10).toLocaleString("fr-FR")} unités`]],
                       { alignRight: [1] }
                     ) },
                   ],
