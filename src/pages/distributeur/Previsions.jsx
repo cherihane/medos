@@ -30,11 +30,92 @@ const inputStyle = {
   color: "#0A1628", backgroundColor: "white",
 };
 
+const RESEND_KEY  = "re_iUaDVQFG_LAX2mHCRxm6rf216167mGdJY";
+
+async function sendCommandeEmail({ emailFabricant, fabricant, medicament, quantite, dateLivraison, notes, distributeur }) {
+  const dateStr = dateLivraison
+    ? new Date(dateLivraison).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })
+    : "Non précisée";
+  const now = new Date().toLocaleString("fr-FR", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
+  const html = `
+<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb">
+  <div style="background:#F59E0B;padding:28px 32px">
+    <h1 style="color:white;margin:0;font-size:20px;font-weight:700">Commande de médicaments</h1>
+    <p style="color:rgba(255,255,255,0.88);margin:6px 0 0;font-size:13px">MedOS — Plateforme de distribution médicale</p>
+  </div>
+
+  <div style="padding:28px 32px">
+    <p style="font-size:14px;color:#374151;margin:0 0 20px">Bonjour,</p>
+    <p style="font-size:14px;color:#374151;margin:0 0 20px">
+      Le distributeur <strong>${distributeur}</strong> vous adresse une commande via la plateforme MedOS.
+      Veuillez en prendre note et confirmer la disponibilité dans les meilleurs délais.
+    </p>
+
+    <div style="background:#F8FAFC;border-radius:10px;padding:20px;margin-bottom:20px">
+      <h2 style="font-size:14px;font-weight:700;color:#0A1628;margin:0 0 14px">Détails de la commande</h2>
+      <table style="width:100%;border-collapse:collapse">
+        <tr>
+          <td style="padding:9px 0;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:13px;width:46%">Médicament</td>
+          <td style="padding:9px 0;border-bottom:1px solid #e5e7eb;font-weight:700;font-size:13px;color:#0A1628">${medicament}</td>
+        </tr>
+        <tr>
+          <td style="padding:9px 0;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:13px">Fabricant destinataire</td>
+          <td style="padding:9px 0;border-bottom:1px solid #e5e7eb;font-weight:700;font-size:13px;color:#0A1628">${fabricant}</td>
+        </tr>
+        <tr>
+          <td style="padding:9px 0;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:13px">Quantité commandée</td>
+          <td style="padding:9px 0;border-bottom:1px solid #e5e7eb;font-weight:700;font-size:13px;color:#0A1628">${quantite} unités</td>
+        </tr>
+        <tr>
+          <td style="padding:9px 0;border-bottom:${notes ? "1px solid #e5e7eb" : "none"};color:#6b7280;font-size:13px">Date de livraison souhaitée</td>
+          <td style="padding:9px 0;border-bottom:${notes ? "1px solid #e5e7eb" : "none"};font-weight:700;font-size:13px;color:#0A1628">${dateStr}</td>
+        </tr>
+        ${notes ? `
+        <tr>
+          <td style="padding:9px 0;color:#6b7280;font-size:13px">Instructions particulières</td>
+          <td style="padding:9px 0;font-size:13px;color:#374151">${notes}</td>
+        </tr>` : ""}
+      </table>
+    </div>
+
+    <div style="background:#FFFBEB;border-left:4px solid #F59E0B;border-radius:6px;padding:12px 16px;margin-bottom:24px">
+      <p style="font-size:12px;color:#92400E;margin:0">
+        Cette commande a été générée automatiquement par MedOS suite à une prévision de la demande.
+        Merci de répondre directement à cet email ou de contacter le distributeur pour confirmer.
+      </p>
+    </div>
+
+    <p style="font-size:13px;color:#6b7280;margin:0">
+      Commande émise le ${now}
+    </p>
+  </div>
+
+  <div style="background:#F8FAFC;padding:16px 32px;border-top:1px solid #e5e7eb;text-align:center">
+    <p style="font-size:12px;color:#9CA3AF;margin:0">
+      MedOS — Plateforme de distribution médicale &nbsp;·&nbsp; Côte d'Ivoire
+    </p>
+  </div>
+</div>`;
+
+  await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from:    "MedOS Distribution <onboarding@resend.dev>",
+      to:      [emailFabricant],
+      subject: `Commande MedOS — ${medicament} (${quantite} unités)`,
+      html,
+    }),
+  });
+}
+
 // ─── Modal Agir ───────────────────────────────────────────────────────────────
-function AgirModal({ action, onClose, onSaved, etablissement_id }) {
+function AgirModal({ action, onClose, onSaved, etablissement_id, distributeurNom }) {
   const [fabricant, setFabricant]         = useState("");
   const [fabricants, setFabricants]       = useState([]);
   const [loadingFab, setLoadingFab]       = useState(true);
+  const [emailFabricant, setEmailFabricant] = useState("");
   const [quantite, setQuantite]           = useState(String(action.quantite ?? 500));
   const [dateLivraison, setDateLivraison] = useState("");
   const [notes, setNotes]                 = useState("");
@@ -49,14 +130,12 @@ function AgirModal({ action, onClose, onSaved, etablissement_id }) {
     (async () => {
       setLoadingFab(true);
       try {
-        // Cherche le médicament par nom (correspondance partielle sur le début)
         const { data: meds } = await supabase
           .from("medicaments")
           .select("id")
           .ilike("nom", `${action.medicament.split(" ")[0]}%`);
 
         const ids = (meds ?? []).map((m) => m.id);
-
         let liste = [];
         if (ids.length > 0) {
           const { data: lots } = await supabase
@@ -64,13 +143,11 @@ function AgirModal({ action, onClose, onSaved, etablissement_id }) {
             .select("fabricant")
             .in("medicament_id", ids)
             .not("fabricant", "is", null);
-          // Dédoublonner
           liste = [...new Set((lots ?? []).map((l) => l.fabricant).filter(Boolean))].sort();
         }
-
         if (!cancelled) setFabricants(liste);
       } catch {
-        // silencieux — la liste restera vide
+        // silencieux
       } finally {
         if (!cancelled) setLoadingFab(false);
       }
@@ -81,6 +158,7 @@ function AgirModal({ action, onClose, onSaved, etablissement_id }) {
   const handleSave = async () => {
     setErreur(null);
     if (!fabricant.trim()) { setErreur("Sélectionnez ou saisissez un fabricant."); return; }
+    if (!emailFabricant.trim() || !emailFabricant.includes("@")) { setErreur("Email du fabricant invalide."); return; }
     const qty = parseInt(quantite, 10);
     if (!qty || qty <= 0) { setErreur("Quantité invalide."); return; }
     setSaving(true);
@@ -88,20 +166,33 @@ function AgirModal({ action, onClose, onSaved, etablissement_id }) {
       const notesFinales = [
         `Médicament : ${action.medicament}`,
         `Fabricant : ${fabricant.trim()}`,
+        `Email fabricant : ${emailFabricant.trim()}`,
         `Quantité commandée : ${qty} unités`,
+        `Livraison souhaitée : ${dateLivraison || "Non précisée"}`,
         `Prévision IA : ${action.motif}`,
         notes.trim() ? `Instructions : ${notes.trim()}` : null,
       ].filter(Boolean).join(" | ");
 
       await insertCommande({
-        statut:                "brouillon",
+        statut:                "envoyee",
         date_commande:         new Date().toISOString(),
         date_livraison_prevue: dateLivraison || null,
         montant_total:         0,
         notes:                 notesFinales,
         ...(etablissement_id ? { etablissement_id } : {}),
       });
-      onSaved(`Commande ${action.medicament} créée en brouillon.`);
+
+      await sendCommandeEmail({
+        emailFabricant: emailFabricant.trim(),
+        fabricant:      fabricant.trim(),
+        medicament:     action.medicament,
+        quantite:       qty,
+        dateLivraison,
+        notes:          notes.trim(),
+        distributeur:   distributeurNom,
+      });
+
+      onSaved(`Commande envoyée à ${fabricant.trim()} (${emailFabricant.trim()}).`);
       onClose();
     } catch (e) {
       setErreur("Erreur : " + e.message);
@@ -155,9 +246,24 @@ function AgirModal({ action, onClose, onSaved, etablissement_id }) {
                 style={inputStyle}
                 value={fabricant}
                 onChange={(e) => setFabricant(e.target.value)}
-                placeholder="Nom du fabricant (aucun lot enregistré pour ce médicament)"
+                placeholder="Nom du fabricant"
               />
             )}
+          </div>
+
+          {/* Email fabricant */}
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>
+              Email du fabricant <span style={{ color: "#EF4444" }}>*</span>
+              <span style={{ fontSize: 10, color: "#6B7280", fontWeight: 400, marginLeft: 6 }}>— un email de commande lui sera envoyé automatiquement</span>
+            </label>
+            <input
+              style={inputStyle}
+              type="email"
+              value={emailFabricant}
+              onChange={(e) => setEmailFabricant(e.target.value)}
+              placeholder="commandes@fabricant.com"
+            />
           </div>
 
           {/* Quantité + Date */}
@@ -191,7 +297,7 @@ function AgirModal({ action, onClose, onSaved, etablissement_id }) {
               Annuler
             </button>
             <button onClick={handleSave} disabled={saving} style={{ padding: "9px 18px", backgroundColor: saving ? "#E5E7EB" : "#F59E0B", color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer" }}>
-              {saving ? "Création…" : "Créer la commande"}
+              {saving ? "Envoi en cours…" : "Envoyer la commande"}
             </button>
           </div>
         </div>
@@ -235,6 +341,7 @@ export default function Previsions() {
         <AgirModal
           action={agirAction}
           etablissement_id={auth?.etablissement_id ?? null}
+          distributeurNom={auth?.structure ?? "MedDistrib International"}
           onClose={() => setAgirAction(null)}
           onSaved={(msg) => { showToast(msg); }}
         />
