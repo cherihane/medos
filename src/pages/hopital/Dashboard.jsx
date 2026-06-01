@@ -3,13 +3,6 @@ import KpiCard from "../../components/KpiCard";
 import PredictionsIA from "../../components/PredictionsIA";
 import { useAlertes, useKpiHopital, usePatients } from "../../hooks/useSupabaseData";
 
-const OCCUPATION = [
-  { service: "Urgences",        pct: 94 },
-  { service: "Médecine interne", pct: 76 },
-  { service: "Pédiatrie",       pct: 58 },
-  { service: "Chirurgie",       pct: 82 },
-  { service: "Maternité",       pct: 67 },
-];
 
 function severiteStyle(severite) {
   switch (severite) {
@@ -69,15 +62,7 @@ function KpiSection() {
 function AlertesPanel() {
   const { data, loading, error } = useAlertes(8);
 
-  const fallback = [
-    { titre: "Chambre froide B : 7.2°C — Seuil dépassé", severite: "critique" },
-    { titre: "Salbutamol : rupture imminente (2 unités)", severite: "critique" },
-    { titre: "3 ordonnances non validées depuis + 24h",   severite: "alerte" },
-    { titre: "Service urgences : capacité à 94%",         severite: "alerte" },
-    { titre: "Mise à jour formulaire disponible",         severite: "info" },
-  ];
-
-  const alertes = (!loading && !error && data.length > 0) ? data : fallback;
+  const alertes = data;
   const isLive  = !loading && !error && data.length > 0;
 
   return (
@@ -94,6 +79,12 @@ function AlertesPanel() {
       </div>
 
       {loading && [1,2,3].map((i) => <Skeleton key={i} height={44} mb={8} />)}
+
+      {!loading && alertes.length === 0 && (
+        <div style={{ fontSize: 13, color: "#9CA3AF", textAlign: "center", padding: "20px 0" }}>
+          Aucune alerte active
+        </div>
+      )}
 
       {!loading && alertes.map((a, i) => {
         const { bg, border } = severiteStyle(a.severite);
@@ -175,20 +166,10 @@ function PatientsPanel() {
 
       {/* Occupation des services */}
       <h3 style={{ margin: "20px 0 14px", fontSize: 14, fontWeight: 700, color: "#0A1628" }}>Occupation des services</h3>
-      {OCCUPATION.map((s) => (
-        <div key={s.service} style={{ marginBottom: 10 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
-            <span style={{ color: "#374151", fontWeight: 500 }}>{s.service}</span>
-            <span style={{ fontWeight: 700, color: s.pct > 90 ? "#EF4444" : "#374151" }}>{s.pct}%</span>
-          </div>
-          <div style={{ height: 7, backgroundColor: "#E5E7EB", borderRadius: 4 }}>
-            <div style={{
-              height: "100%", width: `${s.pct}%`, borderRadius: 4,
-              backgroundColor: s.pct > 90 ? "#EF4444" : s.pct > 75 ? "#F59E0B" : "#10B981",
-            }} />
-          </div>
-        </div>
-      ))}
+      <div style={{ fontSize: 13, color: "#9CA3AF", textAlign: "center", padding: "16px 0" }}>
+        Aucune donnée d'occupation disponible.<br />
+        <span style={{ fontSize: 12 }}>Connectez un module de gestion des lits pour afficher les taux en temps réel.</span>
+      </div>
     </div>
   );
 }
