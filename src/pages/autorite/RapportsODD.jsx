@@ -18,15 +18,16 @@ export default function RapportsODD() {
   const [generating, setGenerating] = useState(null);
 
   // ODD 3.8 : couverture = etablissements actifs / total
+  // null si aucun etablissement => affiche "Donnees insuffisantes"
   const totalEtab  = etablissements.length;
   const actifsEtab = etablissements.filter((e) => e.actif).length;
-  const couverture38 = totalEtab > 0 ? Math.round((actifsEtab / totalEtab) * 100) : 0;
+  const couverture38 = totalEtab > 0 ? Math.round((actifsEtab / totalEtab) * 100) : null;
 
   const oddData = [
-    { goal: "ODD 3.3", label: "Maladies infectieuses",       progress: null, target: 80 },
-    { goal: "ODD 3.4", label: "Maladies non transmissibles", progress: null, target: 70 },
+    { goal: "ODD 3.3", label: "Maladies infectieuses",        progress: null,         target: 80 },
+    { goal: "ODD 3.4", label: "Maladies non transmissibles",  progress: null,         target: 70 },
     { goal: "ODD 3.8", label: "Couverture sante universelle", progress: couverture38, target: 90 },
-    { goal: "ODD 3.b", label: "Acces medicaments essentiels", progress: null, target: 85 },
+    { goal: "ODD 3.b", label: "Acces medicaments essentiels", progress: null,         target: 85 },
   ];
 
   const genererPDF = (rapportNom) => {
