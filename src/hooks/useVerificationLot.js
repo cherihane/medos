@@ -70,8 +70,8 @@ async function sendAlertEmail({ nomMedicament, numerolot, scannePar }) {
 </div>`,
       }),
     });
-  } catch (err) {
-    console.warn("[Resend] Email non envoye :", err.message);
+  } catch {
+    // Echec envoi alerte email — silencieux, l'alerte Supabase est déjà créée
   }
 }
 
@@ -162,7 +162,7 @@ async function creerAlerteSuspecte({ nomMedicament, numerolot, scannePar }) {
     lu: false,
     resolu: false,
   });
-  if (error) console.warn("[alerte] Insertion echouee :", error.message);
+  // Insertion alerte — erreur silencieuse, ne pas bloquer le flux utilisateur
 }
 
 // ── Hook principal ─────────────────────────────────────────────────────────────

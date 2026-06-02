@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth, roleConfig } from "../context/AuthContext";
 import PublicFooter from "../components/PublicFooter";
 import { useIsMobile } from "../hooks/useWindowSize";
+import { colors, radius, shadow, font, inputStyle, btnStyle } from "../theme";
 
 /**
  * Traduit les erreurs techniques Supabase/Auth en messages utilisateur lisibles.
@@ -32,8 +33,6 @@ function translateAuthError(message = "") {
     return "Impossible de contacter le serveur. Vérifiez votre connexion internet.";
   }
 
-  // Erreur generique — log technique en console, message neutre a l'utilisateur
-  console.error("[MedOS] Erreur d'authentification:", message);
   return "Une erreur s'est produite lors de la connexion. Veuillez réessayer.";
 }
 

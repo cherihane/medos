@@ -1,15 +1,16 @@
 import { useState } from "react";
 import Sidebar from "./Sidebar";
 import { useIsMobile } from "../hooks/useWindowSize";
+import { colors, sidebar, spacing } from "../theme";
 
-const SIDEBAR_WIDTH = 220;
+const SIDEBAR_WIDTH = sidebar.width;
 
 export default function Layout({ children, title, subtitle }) {
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", backgroundColor: "#F0F4FB" }}>
+    <div style={{ display: "flex", minHeight: "100vh", backgroundColor: colors.bg }}>
       <Sidebar
         mobileOpen={sidebarOpen}
         onMobileClose={() => setSidebarOpen(false)}

@@ -1,17 +1,20 @@
+import { useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import { useKpiAutorite, useAlertes, useEtablissements, useMedicaments } from "../../hooks/useSupabaseData";
+import { colors, radius, shadow, font } from "../../theme";
 
 export default function VueNationale() {
   const { data: kpi, loading: loadKpi } = useKpiAutorite();
   const { data: alertes, loading: loadAlt } = useAlertes(20);
   const { data: etabs, loading: loadEtabs } = useEtablissements();
   const { data: medicaments, loading: loadMed } = useMedicaments();
+  const navigate = useNavigate();
 
   const kpis = [
-    { label: "Structures actives",      value: loadKpi ? "…" : kpi?.structuresActives ?? 0,    color: "#10B981" },
-    { label: "Alertes pharmacovig.",    value: loadKpi ? "…" : kpi?.alertesPharmacovig ?? 0,   color: "#EF4444" },
-    { label: "Médicaments tracés",      value: loadKpi ? "…" : kpi?.medicamentsTraces ?? 0,    color: "#3B82F6" },
-    { label: "Lots enregistrés",        value: loadKpi ? "…" : kpi?.lots ?? 0,                 color: "#8B5CF6" },
+    { label: "Structures actives",   value: loadKpi ? "…" : kpi?.structuresActives ?? 0,   color: "#10B981", to: "/autorite/acteurs" },
+    { label: "Alertes pharmacovig.", value: loadKpi ? "…" : kpi?.alertesPharmacovig ?? 0,  color: "#EF4444", to: "/autorite/epidemiologie" },
+    { label: "Médicaments tracés",   value: loadKpi ? "…" : kpi?.medicamentsTraces ?? 0,   color: "#3B82F6", to: "/autorite/contrefacons" },
+    { label: "Lots enregistrés",     value: loadKpi ? "…" : kpi?.lots ?? 0,                color: "#8B5CF6", to: "/autorite/rapports-odd" },
   ];
 
   return (
@@ -19,7 +22,13 @@ export default function VueNationale() {
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
       <div className="kpi-row">
         {kpis.map((k) => (
-          <div key={k.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
+          <div
+            key={k.label}
+            onClick={() => navigate(k.to)}
+            style={{ backgroundColor: "white", borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}`, cursor: "pointer", transition: "box-shadow 0.15s" }}
+            onMouseEnter={(e) => e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.1)"}
+            onMouseLeave={(e) => e.currentTarget.style.boxShadow = "0 1px 4px rgba(0,0,0,0.06)"}
+          >
             <div style={{ fontSize: 26, fontWeight: 800, color: k.color }}>{k.value}</div>
             <div style={{ fontSize: 12, color: "#6B7280", marginTop: 4 }}>{k.label}</div>
           </div>

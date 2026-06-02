@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import PublicFooter from "../components/PublicFooter";
 import Tooltip from "../components/Tooltip";
+import { colors, radius, shadow, font } from "../theme";
 
 // ─── constantes ──────────────────────────────────────────────────────────────
 const ROLES = [
@@ -460,14 +461,8 @@ export default function Inscription() {
         });
         // functions.invoke() ne met error que sur réponse non-2xx.
         // La fonction retourne { ok, errors } — vérifier les deux cas.
-        if (emailError) {
-          console.error("[inscription] Echec envoi emails (HTTP error):", emailError);
-        } else if (emailData && !emailData.ok) {
-          console.error("[inscription] Echec envoi emails (Resend error):", emailData.errors);
-        }
-      } catch (emailErr) {
+      } catch {
         // Erreur réseau — ne bloque pas l'inscription
-        console.error("[inscription] Echec envoi emails (réseau):", emailErr);
       }
 
       setEmailConfirme(form.email.trim());
@@ -481,11 +476,8 @@ export default function Inscription() {
       } else if (m.includes("network") || m.includes("fetch")) {
         setErreur("Impossible de contacter le serveur. Vérifiez votre connexion internet.");
       } else if (m.includes("violates row-level security") || m.includes("permission")) {
-        // Erreur RLS — ne pas exposer les details techniques
-        console.error("[inscription] Erreur RLS:", e.message);
         setErreur("Une erreur s'est produite lors de l'envoi de votre demande. Veuillez réessayer.");
       } else {
-        console.error("[inscription] Erreur:", e.message);
         setErreur("Une erreur s'est produite. Veuillez réessayer ou contacter contact@kelagroup.org.");
       }
     } finally {

@@ -1,61 +1,90 @@
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { NotificationsProvider } from "./context/NotificationsContext";
 
-// Auth
-import Login from "./pages/Login";
-import Inscription from "./pages/Inscription";
-import Parametres from "./pages/Parametres";
-import MotDePasseOublie from "./pages/MotDePasseOublie";
-import ReinitialisationMotDePasse from "./pages/ReinitialisationMotDePasse";
+// ── Chargement différé de toutes les pages ────────────────────────────────────
 
-// Pages legales
-import CGU from "./pages/CGU";
-import Confidentialite from "./pages/Confidentialite";
-import APropos from "./pages/APropos";
+// Auth / public
+const Login                    = lazy(() => import("./pages/Login"));
+const Inscription              = lazy(() => import("./pages/Inscription"));
+const Parametres               = lazy(() => import("./pages/Parametres"));
+const MotDePasseOublie         = lazy(() => import("./pages/MotDePasseOublie"));
+const ReinitialisationMotDePasse = lazy(() => import("./pages/ReinitialisationMotDePasse"));
+
+// Pages légales
+const CGU             = lazy(() => import("./pages/CGU"));
+const Confidentialite = lazy(() => import("./pages/Confidentialite"));
+const APropos         = lazy(() => import("./pages/APropos"));
 
 // Pharmacie
-import PhDashboard from "./pages/pharmacie/Dashboard";
-import PhCaisse from "./pages/pharmacie/Caisse";
-import PhInventaire from "./pages/pharmacie/Inventaire";
-import PhOrdonnances from "./pages/pharmacie/Ordonnances";
-import PhPatients from "./pages/pharmacie/Patients";
-import PhFournisseurs from "./pages/pharmacie/Fournisseurs";
-import PhCredits from "./pages/pharmacie/Credits";
-import PhRapports from "./pages/pharmacie/Rapports";
-import PhScanner from "./pages/pharmacie/Scanner";
+const PhDashboard    = lazy(() => import("./pages/pharmacie/Dashboard"));
+const PhCaisse       = lazy(() => import("./pages/pharmacie/Caisse"));
+const PhInventaire   = lazy(() => import("./pages/pharmacie/Inventaire"));
+const PhOrdonnances  = lazy(() => import("./pages/pharmacie/Ordonnances"));
+const PhPatients     = lazy(() => import("./pages/pharmacie/Patients"));
+const PhFournisseurs = lazy(() => import("./pages/pharmacie/Fournisseurs"));
+const PhCredits      = lazy(() => import("./pages/pharmacie/Credits"));
+const PhRapports     = lazy(() => import("./pages/pharmacie/Rapports"));
+const PhScanner      = lazy(() => import("./pages/pharmacie/Scanner"));
 
 // Hôpital
-import HoDashboard from "./pages/hopital/Dashboard";
-import HoStock from "./pages/hopital/Stock";
-import HoFournisseurs from "./pages/hopital/Fournisseurs";
-import HoPatients from "./pages/hopital/Patients";
-import HoPredictions from "./pages/hopital/Predictions";
-import HoScanner from "./pages/pharmacie/Scanner";
-import HoAssistant from "./pages/hopital/AssistantIA";
-import HoReseau from "./pages/hopital/Reseau";
-import HoAlertes from "./pages/hopital/Alertes";
-import HoRapports from "./pages/hopital/Rapports";
+const HoDashboard    = lazy(() => import("./pages/hopital/Dashboard"));
+const HoStock        = lazy(() => import("./pages/hopital/Stock"));
+const HoFournisseurs = lazy(() => import("./pages/hopital/Fournisseurs"));
+const HoPatients     = lazy(() => import("./pages/hopital/Patients"));
+const HoPredictions  = lazy(() => import("./pages/hopital/Predictions"));
+const HoAssistant    = lazy(() => import("./pages/hopital/AssistantIA"));
+const HoReseau       = lazy(() => import("./pages/hopital/Reseau"));
+const HoAlertes      = lazy(() => import("./pages/hopital/Alertes"));
+const HoRapports     = lazy(() => import("./pages/hopital/Rapports"));
 
 // Distributeur
-import DiDashboard from "./pages/distributeur/Dashboard";
-import DiReseauClients from "./pages/distributeur/ReseauClients";
-import DiPrevisions from "./pages/distributeur/Previsions";
-import DiLivraisons from "./pages/distributeur/Livraisons";
-import DiTracabilite from "./pages/distributeur/Tracabilite";
-import DiEntrepot from "./pages/distributeur/Entrepot";
-import DiClients from "./pages/distributeur/Clients";
-import DiAlertes from "./pages/distributeur/Alertes";
+const DiDashboard     = lazy(() => import("./pages/distributeur/Dashboard"));
+const DiReseauClients = lazy(() => import("./pages/distributeur/ReseauClients"));
+const DiPrevisions    = lazy(() => import("./pages/distributeur/Previsions"));
+const DiLivraisons    = lazy(() => import("./pages/distributeur/Livraisons"));
+const DiTracabilite   = lazy(() => import("./pages/distributeur/Tracabilite"));
+const DiEntrepot      = lazy(() => import("./pages/distributeur/Entrepot"));
+const DiClients       = lazy(() => import("./pages/distributeur/Clients"));
+const DiAlertes       = lazy(() => import("./pages/distributeur/Alertes"));
 
 // Autorité
-import AuVueNationale from "./pages/autorite/VueNationale";
-import AuCartographie from "./pages/autorite/Cartographie";
-import AuContrefacons from "./pages/autorite/Contrefacons";
-import AuEpidemiologie from "./pages/autorite/Epidemiologie";
-import AuActeurs from "./pages/autorite/Acteurs";
-import AuRapportsODD from "./pages/autorite/RapportsODD";
-import AuAPI from "./pages/autorite/API";
+const AuVueNationale  = lazy(() => import("./pages/autorite/VueNationale"));
+const AuCartographie  = lazy(() => import("./pages/autorite/Cartographie"));
+const AuContrefacons  = lazy(() => import("./pages/autorite/Contrefacons"));
+const AuEpidemiologie = lazy(() => import("./pages/autorite/Epidemiologie"));
+const AuActeurs       = lazy(() => import("./pages/autorite/Acteurs"));
+const AuRapportsODD   = lazy(() => import("./pages/autorite/RapportsODD"));
+const AuAPI           = lazy(() => import("./pages/autorite/API"));
 
+// ── Écran de chargement entre les chunks ─────────────────────────────────────
+function PageLoader() {
+  return (
+    <div style={{
+      minHeight: "100vh",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "#F8FAFC",
+      fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    }}>
+      <div style={{ textAlign: "center" }}>
+        <div style={{
+          width: 40, height: 40, borderRadius: "50%",
+          border: "3px solid #E5E7EB",
+          borderTopColor: "#3B82F6",
+          animation: "spin 0.7s linear infinite",
+          margin: "0 auto 14px",
+        }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        <div style={{ fontSize: 13, color: "#9CA3AF" }}>Chargement…</div>
+      </div>
+    </div>
+  );
+}
+
+// ── Route protégée ────────────────────────────────────────────────────────────
 function ProtectedRoute({ children, requiredRole }) {
   const { auth } = useAuth();
   if (!auth) return <Navigate to="/" replace />;
@@ -63,64 +92,67 @@ function ProtectedRoute({ children, requiredRole }) {
   return children;
 }
 
+// ── Routes de l'application ───────────────────────────────────────────────────
 function AppRoutes() {
   const { auth } = useAuth();
 
   return (
-    <Routes>
-      <Route path="/" element={auth ? <Navigate to={auth.dashboardPath} replace /> : <Login />} />
-      <Route path="/mot-de-passe-oublie" element={<MotDePasseOublie />} />
-      <Route path="/reinitialisation" element={<ReinitialisationMotDePasse />} />
-      <Route path="/inscription" element={<Inscription />} />
-      <Route path="/cgu"             element={<CGU />} />
-      <Route path="/confidentialite" element={<Confidentialite />} />
-      <Route path="/a-propos"        element={<APropos />} />
-      <Route path="/parametres" element={<ProtectedRoute><Parametres /></ProtectedRoute>} />
+    <Suspense fallback={<PageLoader />}>
+      <Routes>
+        <Route path="/" element={auth ? <Navigate to={auth.dashboardPath} replace /> : <Login />} />
+        <Route path="/mot-de-passe-oublie" element={<MotDePasseOublie />} />
+        <Route path="/reinitialisation" element={<ReinitialisationMotDePasse />} />
+        <Route path="/inscription" element={<Inscription />} />
+        <Route path="/cgu"             element={<CGU />} />
+        <Route path="/confidentialite" element={<Confidentialite />} />
+        <Route path="/a-propos"        element={<APropos />} />
+        <Route path="/parametres" element={<ProtectedRoute><Parametres /></ProtectedRoute>} />
 
-      {/* Pharmacie */}
-      <Route path="/pharmacie/dashboard" element={<ProtectedRoute requiredRole="pharmacie"><PhDashboard /></ProtectedRoute>} />
-      <Route path="/pharmacie/caisse" element={<ProtectedRoute requiredRole="pharmacie"><PhCaisse /></ProtectedRoute>} />
-      <Route path="/pharmacie/inventaire" element={<ProtectedRoute requiredRole="pharmacie"><PhInventaire /></ProtectedRoute>} />
-      <Route path="/pharmacie/ordonnances" element={<ProtectedRoute requiredRole="pharmacie"><PhOrdonnances /></ProtectedRoute>} />
-      <Route path="/pharmacie/patients" element={<ProtectedRoute requiredRole="pharmacie"><PhPatients /></ProtectedRoute>} />
-      <Route path="/pharmacie/fournisseurs" element={<ProtectedRoute requiredRole="pharmacie"><PhFournisseurs /></ProtectedRoute>} />
-      <Route path="/pharmacie/credits" element={<ProtectedRoute requiredRole="pharmacie"><PhCredits /></ProtectedRoute>} />
-      <Route path="/pharmacie/rapports" element={<ProtectedRoute requiredRole="pharmacie"><PhRapports /></ProtectedRoute>} />
-      <Route path="/pharmacie/scanner" element={<ProtectedRoute requiredRole="pharmacie"><PhScanner /></ProtectedRoute>} />
+        {/* Pharmacie */}
+        <Route path="/pharmacie/dashboard"   element={<ProtectedRoute requiredRole="pharmacie"><PhDashboard /></ProtectedRoute>} />
+        <Route path="/pharmacie/caisse"      element={<ProtectedRoute requiredRole="pharmacie"><PhCaisse /></ProtectedRoute>} />
+        <Route path="/pharmacie/inventaire"  element={<ProtectedRoute requiredRole="pharmacie"><PhInventaire /></ProtectedRoute>} />
+        <Route path="/pharmacie/ordonnances" element={<ProtectedRoute requiredRole="pharmacie"><PhOrdonnances /></ProtectedRoute>} />
+        <Route path="/pharmacie/patients"    element={<ProtectedRoute requiredRole="pharmacie"><PhPatients /></ProtectedRoute>} />
+        <Route path="/pharmacie/fournisseurs" element={<ProtectedRoute requiredRole="pharmacie"><PhFournisseurs /></ProtectedRoute>} />
+        <Route path="/pharmacie/credits"     element={<ProtectedRoute requiredRole="pharmacie"><PhCredits /></ProtectedRoute>} />
+        <Route path="/pharmacie/rapports"    element={<ProtectedRoute requiredRole="pharmacie"><PhRapports /></ProtectedRoute>} />
+        <Route path="/pharmacie/scanner"     element={<ProtectedRoute requiredRole="pharmacie"><PhScanner /></ProtectedRoute>} />
 
-      {/* Hôpital */}
-      <Route path="/hopital/dashboard" element={<ProtectedRoute requiredRole="hopital"><HoDashboard /></ProtectedRoute>} />
-      <Route path="/hopital/stock" element={<ProtectedRoute requiredRole="hopital"><HoStock /></ProtectedRoute>} />
-      <Route path="/hopital/fournisseurs" element={<ProtectedRoute requiredRole="hopital"><HoFournisseurs /></ProtectedRoute>} />
-      <Route path="/hopital/patients" element={<ProtectedRoute requiredRole="hopital"><HoPatients /></ProtectedRoute>} />
-      <Route path="/hopital/predictions" element={<ProtectedRoute requiredRole="hopital"><HoPredictions /></ProtectedRoute>} />
-      <Route path="/hopital/scanner" element={<ProtectedRoute requiredRole="hopital"><HoScanner /></ProtectedRoute>} />
-      <Route path="/hopital/assistant" element={<ProtectedRoute requiredRole="hopital"><HoAssistant /></ProtectedRoute>} />
-      <Route path="/hopital/reseau" element={<ProtectedRoute requiredRole="hopital"><HoReseau /></ProtectedRoute>} />
-      <Route path="/hopital/alertes" element={<ProtectedRoute requiredRole="hopital"><HoAlertes /></ProtectedRoute>} />
-      <Route path="/hopital/rapports" element={<ProtectedRoute requiredRole="hopital"><HoRapports /></ProtectedRoute>} />
+        {/* Hôpital */}
+        <Route path="/hopital/dashboard"    element={<ProtectedRoute requiredRole="hopital"><HoDashboard /></ProtectedRoute>} />
+        <Route path="/hopital/stock"        element={<ProtectedRoute requiredRole="hopital"><HoStock /></ProtectedRoute>} />
+        <Route path="/hopital/fournisseurs" element={<ProtectedRoute requiredRole="hopital"><HoFournisseurs /></ProtectedRoute>} />
+        <Route path="/hopital/patients"     element={<ProtectedRoute requiredRole="hopital"><HoPatients /></ProtectedRoute>} />
+        <Route path="/hopital/predictions"  element={<ProtectedRoute requiredRole="hopital"><HoPredictions /></ProtectedRoute>} />
+        <Route path="/hopital/scanner"      element={<ProtectedRoute requiredRole="hopital"><PhScanner /></ProtectedRoute>} />
+        <Route path="/hopital/assistant"    element={<ProtectedRoute requiredRole="hopital"><HoAssistant /></ProtectedRoute>} />
+        <Route path="/hopital/reseau"       element={<ProtectedRoute requiredRole="hopital"><HoReseau /></ProtectedRoute>} />
+        <Route path="/hopital/alertes"      element={<ProtectedRoute requiredRole="hopital"><HoAlertes /></ProtectedRoute>} />
+        <Route path="/hopital/rapports"     element={<ProtectedRoute requiredRole="hopital"><HoRapports /></ProtectedRoute>} />
 
-      {/* Distributeur */}
-      <Route path="/distributeur/dashboard" element={<ProtectedRoute requiredRole="distributeur"><DiDashboard /></ProtectedRoute>} />
-      <Route path="/distributeur/reseau-clients" element={<ProtectedRoute requiredRole="distributeur"><DiReseauClients /></ProtectedRoute>} />
-      <Route path="/distributeur/previsions" element={<ProtectedRoute requiredRole="distributeur"><DiPrevisions /></ProtectedRoute>} />
-      <Route path="/distributeur/livraisons" element={<ProtectedRoute requiredRole="distributeur"><DiLivraisons /></ProtectedRoute>} />
-      <Route path="/distributeur/tracabilite" element={<ProtectedRoute requiredRole="distributeur"><DiTracabilite /></ProtectedRoute>} />
-      <Route path="/distributeur/entrepot" element={<ProtectedRoute requiredRole="distributeur"><DiEntrepot /></ProtectedRoute>} />
-      <Route path="/distributeur/clients" element={<ProtectedRoute requiredRole="distributeur"><DiClients /></ProtectedRoute>} />
-      <Route path="/distributeur/alertes" element={<ProtectedRoute requiredRole="distributeur"><DiAlertes /></ProtectedRoute>} />
+        {/* Distributeur */}
+        <Route path="/distributeur/dashboard"      element={<ProtectedRoute requiredRole="distributeur"><DiDashboard /></ProtectedRoute>} />
+        <Route path="/distributeur/reseau-clients" element={<ProtectedRoute requiredRole="distributeur"><DiReseauClients /></ProtectedRoute>} />
+        <Route path="/distributeur/previsions"     element={<ProtectedRoute requiredRole="distributeur"><DiPrevisions /></ProtectedRoute>} />
+        <Route path="/distributeur/livraisons"     element={<ProtectedRoute requiredRole="distributeur"><DiLivraisons /></ProtectedRoute>} />
+        <Route path="/distributeur/tracabilite"    element={<ProtectedRoute requiredRole="distributeur"><DiTracabilite /></ProtectedRoute>} />
+        <Route path="/distributeur/entrepot"       element={<ProtectedRoute requiredRole="distributeur"><DiEntrepot /></ProtectedRoute>} />
+        <Route path="/distributeur/clients"        element={<ProtectedRoute requiredRole="distributeur"><DiClients /></ProtectedRoute>} />
+        <Route path="/distributeur/alertes"        element={<ProtectedRoute requiredRole="distributeur"><DiAlertes /></ProtectedRoute>} />
 
-      {/* Autorité */}
-      <Route path="/autorite/vue-nationale" element={<ProtectedRoute requiredRole="autorite"><AuVueNationale /></ProtectedRoute>} />
-      <Route path="/autorite/cartographie" element={<ProtectedRoute requiredRole="autorite"><AuCartographie /></ProtectedRoute>} />
-      <Route path="/autorite/contrefacons" element={<ProtectedRoute requiredRole="autorite"><AuContrefacons /></ProtectedRoute>} />
-      <Route path="/autorite/epidemiologie" element={<ProtectedRoute requiredRole="autorite"><AuEpidemiologie /></ProtectedRoute>} />
-      <Route path="/autorite/acteurs" element={<ProtectedRoute requiredRole="autorite"><AuActeurs /></ProtectedRoute>} />
-      <Route path="/autorite/rapports-odd" element={<ProtectedRoute requiredRole="autorite"><AuRapportsODD /></ProtectedRoute>} />
-      <Route path="/autorite/api" element={<ProtectedRoute requiredRole="autorite"><AuAPI /></ProtectedRoute>} />
+        {/* Autorité */}
+        <Route path="/autorite/vue-nationale"  element={<ProtectedRoute requiredRole="autorite"><AuVueNationale /></ProtectedRoute>} />
+        <Route path="/autorite/cartographie"   element={<ProtectedRoute requiredRole="autorite"><AuCartographie /></ProtectedRoute>} />
+        <Route path="/autorite/contrefacons"   element={<ProtectedRoute requiredRole="autorite"><AuContrefacons /></ProtectedRoute>} />
+        <Route path="/autorite/epidemiologie"  element={<ProtectedRoute requiredRole="autorite"><AuEpidemiologie /></ProtectedRoute>} />
+        <Route path="/autorite/acteurs"        element={<ProtectedRoute requiredRole="autorite"><AuActeurs /></ProtectedRoute>} />
+        <Route path="/autorite/rapports-odd"   element={<ProtectedRoute requiredRole="autorite"><AuRapportsODD /></ProtectedRoute>} />
+        <Route path="/autorite/api"            element={<ProtectedRoute requiredRole="autorite"><AuAPI /></ProtectedRoute>} />
 
-      <Route path="*" element={auth ? <Navigate to={auth.dashboardPath} replace /> : <Navigate to="/" replace />} />
-    </Routes>
+        <Route path="*" element={auth ? <Navigate to={auth.dashboardPath} replace /> : <Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
   );
 }
 

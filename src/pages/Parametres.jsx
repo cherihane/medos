@@ -4,6 +4,7 @@ import Toast from "../components/Toast";
 import { useToast } from "../hooks/useToast";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../supabaseClient";
+import { colors, radius, shadow, font } from "../theme";
 
 // ─── Pages disponibles par rôle ──────────────────────────────────────────────
 // Ces chemins correspondent exactement aux nav dans AuthContext.roleConfig.
