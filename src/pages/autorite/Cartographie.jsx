@@ -34,7 +34,7 @@ export default function Cartographie() {
   const typesUniques = [...new Set(etablissements.map((e) => e.type).filter(Boolean))].length;
 
   const kpis = [
-    { label: "Structures enregistrées", value: loading ? "…" : établissements.length, color: "#8B5CF6" },
+    { label: "Structures enregistrées", value: loading ? "…" : etablissements.length, color: "#8B5CF6" },
     { label: "Villes couvertes",        value: loading ? "…" : villes,                color: "#10B981" },
     { label: "Structures actives",      value: loading ? "…" : actifs,                color: "#3B82F6" },
     { label: "Types d'acteurs",         value: loading ? "…" : typesUniques,          color: "#F59E0B" },
@@ -76,7 +76,7 @@ export default function Cartographie() {
               ))}
               <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 8 }}>
                 <div style={{ fontSize: 22, fontWeight: 800, color: "#8B5CF6" }}>{etablissements.length}</div>
-                <div style={{ fontSize: 13, color: "#6B7280" }}>établissement{établissements.length > 1 ? "s" : ""} enregistre{établissements.length > 1 ? "s" : ""}</div>
+                <div style={{ fontSize: 13, color: "#6B7280" }}>établissement{etablissements.length > 1 ? "s" : ""} enregistre{etablissements.length > 1 ? "s" : ""}</div>
                 <div style={{ fontSize: 12, color: "#9CA3AF" }}>{villes} ville{villes > 1 ? "s" : ""}</div>
               </div>
               <div style={{ position: "absolute", bottom: 12, right: 12, fontSize: 11, color: "#9CA3AF", backgroundColor: "rgba(255,255,255,0.8)", padding: "4px 8px", borderRadius: 6 }}>
