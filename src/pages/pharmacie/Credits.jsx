@@ -122,7 +122,7 @@ export default function Credits() {
       )}
 
       {/* ── KPI ── */}
-      <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
+      <div className="kpi-row">
         {[
           { label: "Encours total",     value: loading ? "…" : `${totalEncours.toLocaleString()} FCFA`, color: "#3B82F6" },
           { label: "Commandes actives", value: loading ? "…" : actives.length,                          color: "#8B5CF6" },

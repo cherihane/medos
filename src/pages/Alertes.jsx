@@ -112,7 +112,7 @@ export default function Alertes() {
       </div>
 
       {/* Stats */}
-      <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+      <div className="kpi-row">
         {stats.map((s) => (
           <div
             key={s.label}

@@ -53,7 +53,7 @@ export default function Scanner() {
 
   return (
     <Layout title="Scanner — Traçabilité">
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+      <div className="dash-grid-2">
         {/* Scanner zone */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div style={{ backgroundColor: "white", borderRadius: 16, padding: "28px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", textAlign: "center" }}>

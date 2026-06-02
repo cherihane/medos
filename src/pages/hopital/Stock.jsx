@@ -159,7 +159,7 @@ export default function Stock() {
         </button>
       </div>
 
-      <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+      <div className="kpi-row">
         {[
           { label: "Total références",  value: loading ? "…" : medicaments.length, color: "#10B981" },
           { label: "Stock critique",    value: loading ? "…" : withStatut.filter(p => p.statut === "critique").length, color: "#EF4444" },
@@ -180,7 +180,7 @@ export default function Stock() {
       )}
 
       <div style={{ backgroundColor: "white", borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <div className="table-scroll"><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr style={{ backgroundColor: "#F8FAFC" }}>
               {["Produit", "DCI / Forme", "Stock actuel", "Stock min.", "Prix unitaire", "Catégorie", "Statut", "Actions"].map((h) => (
@@ -222,7 +222,7 @@ export default function Stock() {
               );
             })}
           </tbody>
-        </table>
+        </table></div>
       </div>
     </Layout>
   );

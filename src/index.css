@@ -17,7 +17,22 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
-/* ── Grilles KPI responsives ──────────────────────────────────────────────── */
+/* ── Ligne KPI — flex sur desktop, grille 2 cols sur tablette, 1 col mobile ── */
+.kpi-row {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+@media (min-width: 640px) {
+  .kpi-row { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+}
+
+@media (max-width: 639px) {
+  .kpi-row { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ── Grilles KPI (nombre fixe de colonnes) ────────────────────────────────── */
 .kpi-grid {
   display: grid;
   gap: 16px;
@@ -41,6 +56,50 @@ body {
   .kpi-grid-2 { grid-template-columns: 1fr; }
 }
 
+/* ── Grille dashboard 2 colonnes egales → 1 colonne mobile ───────────────── */
+.dash-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 767px) {
+  .dash-grid-2 { grid-template-columns: 1fr; }
+}
+
+/* ── Grille dashboard 2:1 (large | sidebar) → 1 colonne mobile ───────────── */
+.dash-grid-2-1 {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 767px) {
+  .dash-grid-2-1 { grid-template-columns: 1fr; }
+}
+
+/* ── Grille liste + détail fixe → 1 colonne mobile (détail masqué) ─────────── */
+.list-detail-grid {
+  display: grid;
+  gap: 20px;
+}
+
+/* ── Pages légales — padding réduit sur mobile ────────────────────────────── */
+.legal-header {
+  padding: 18px 32px;
+}
+
+.legal-content {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 48px 24px;
+}
+
+@media (max-width: 639px) {
+  .legal-header  { padding: 14px 16px; }
+  .legal-content { padding: 24px 16px; }
+}
+
 /* ── Modales responsives ──────────────────────────────────────────────────── */
 @media (max-width: 767px) {
   .modal-inner {
@@ -51,10 +110,25 @@ body {
 }
 
 /* ── Grilles de formulaires : 2 colonnes → 1 colonne sur mobile ───────────── */
+.form-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
 @media (max-width: 639px) {
-  .form-row-2 {
-    grid-template-columns: 1fr !important;
-  }
+  .form-row-2 { grid-template-columns: 1fr !important; }
+}
+
+/* ── Carte de rôle — grille 2x2 → 1 colonne sur mobile (Inscription) ──────── */
+.role-cards-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 639px) {
+  .role-cards-grid { grid-template-columns: 1fr; }
 }
 
 /* ── Print ────────────────────────────────────────────────────────────────── */

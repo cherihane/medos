@@ -2,6 +2,7 @@ import { useState } from "react";
 import Layout from "../../components/Layout";
 import { useEtablissements } from "../../hooks/useSupabaseData";
 import { supabase } from "../../supabaseClient";
+import { useIsMobile } from "../../hooks/useWindowSize";
 
 const inputStyle = {
   width: "100%", padding: "9px 13px", border: "1.5px solid #E5E7EB",
@@ -112,7 +113,7 @@ function NouveauClientModal({ onClose, onSaved, etabsMedOS }) {
                 <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Nom <span style={{ color: "#EF4444" }}>*</span></label>
                 <input style={inputStyle} value={form.nom} onChange={set("nom")} placeholder="Ex: Clinique Sainte-Marie" />
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+              <div className="form-row-2" style={{ marginBottom: 12 }}>
                 <div>
                   <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Ville <span style={{ color: "#EF4444" }}>*</span></label>
                   <input style={inputStyle} value={form.ville} onChange={set("ville")} placeholder="Ex: Abidjan" />
@@ -161,6 +162,8 @@ function NouveauClientModal({ onClose, onSaved, etabsMedOS }) {
 
 // ─── Page principale ──────────────────────────────────────────────────────────
 export default function ReseauClients() {
+  const isMobile = useIsMobile();
+
   const { data: etabs, loading, refetch } = useEtablissements();
   const [selected, setSelected] = useState(null);
   const [showModal, setShowModal] = useState(false);
@@ -189,7 +192,7 @@ export default function ReseauClients() {
         />
       )}
 
-      <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
+      <div className="kpi-row">
         {[
           { label: "Clients actifs",  value: loading ? "…" : etabs.filter(e => e.actif).length, color: "#F59E0B" },
           { label: "Hôpitaux",        value: loading ? "…" : etabs.filter(e => e.type === "hopital").length, color: "#10B981" },
@@ -203,7 +206,7 @@ export default function ReseauClients() {
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 360px", gap: 20 }}>
         <div style={{ backgroundColor: "white", borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
           <div style={{ padding: "16px 20px", borderBottom: "1px solid #E5E7EB", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#0A1628" }}>Tous les établissements ({loading ? "…" : etabs.length})</h3>

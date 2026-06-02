@@ -40,7 +40,7 @@ async function sendCommandeEmail({ emailFabricant, fabricant, medicament, quanti
 
     <div style="background:#F8FAFC;border-radius:10px;padding:20px;margin-bottom:20px">
       <h2 style="font-size:14px;font-weight:700;color:#0A1628;margin:0 0 14px">Détails de la commande</h2>
-      <table style="width:100%;border-collapse:collapse">
+      <div className="table-scroll"><table style="width:100%;border-collapse:collapse">
         <tr>
           <td style="padding:9px 0;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:13px;width:46%">Médicament</td>
           <td style="padding:9px 0;border-bottom:1px solid #e5e7eb;font-weight:700;font-size:13px;color:#0A1628">${medicament}</td>
@@ -62,7 +62,7 @@ async function sendCommandeEmail({ emailFabricant, fabricant, medicament, quanti
           <td style="padding:9px 0;color:#6b7280;font-size:13px">Instructions particulières</td>
           <td style="padding:9px 0;font-size:13px;color:#374151">${notes}</td>
         </tr>` : ""}
-      </table>
+      </table></div>
     </div>
 
     <div style="background:#FFFBEB;border-left:4px solid #F59E0B;border-radius:6px;padding:12px 16px;margin-bottom:24px">
@@ -253,7 +253,7 @@ function AgirModal({ action, onClose, onSaved, etablissement_id, distributeurNom
           </div>
 
           {/* Quantité + Date */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+          <div className="form-row-2" style={{ marginBottom: 12 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>
                 Quantité (unités) <span style={{ fontSize: 10, color: "#F59E0B", fontWeight: 500 }}>suggérée par IA</span>
@@ -392,7 +392,7 @@ export default function Previsions() {
         />
       )}
 
-      <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
+      <div className="kpi-row">
         {kpiCards.map((k) => (
           <div key={k.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "18px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
             <div style={{ fontSize: 22, fontWeight: 800, color: k.color }}>{k.value}</div>
@@ -425,7 +425,7 @@ export default function Previsions() {
         <PredictionsIA />
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+      <div className="dash-grid-2">
         <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", minWidth: 0 }}>
           <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Stock actuel vs minimum (unites)</h3>
           {loadCrit ? (

@@ -5,6 +5,7 @@ import Toast from "../../components/Toast";
 import Tooltip from "../../components/Tooltip";
 import { useToast } from "../../hooks/useToast";
 import { useVerificationLot } from "../../hooks/useVerificationLot";
+import { useIsMobile } from "../../hooks/useWindowSize";
 
 // ── Styles statuts ────────────────────────────────────────────────────────────
 const STATUTS = {
@@ -89,6 +90,8 @@ function ResultPanel({ result }) {
 
 // ── Composant principal ───────────────────────────────────────────────────────
 export default function Scanner({ profile = "pharmacie" }) {
+  const isMobile = useIsMobile();
+
   const { loading, result, error, verifier, reset } = useVerificationLot();
   const { toasts, success, error: toastError } = useToast();
 
@@ -176,7 +179,7 @@ export default function Scanner({ profile = "pharmacie" }) {
       <Toast toasts={toasts} />
       {showCamera && <QrScanner onScan={handleQrScan} onClose={() => setShowCamera(false)} />}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 400px", gap: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 400px", gap: 20 }}>
 
         {/* ── Colonne gauche : saisie + historique ── */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>

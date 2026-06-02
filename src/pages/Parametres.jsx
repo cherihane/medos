@@ -128,7 +128,7 @@ function Field({ label, required, children }) {
 }
 
 function Row({ children }) {
-  return <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>{children}</div>;
+  return <div className="form-row-2" style={{ gap: 14 }}>{children}</div>;
 }
 
 // ─── Composant checkboxes de permissions ─────────────────────────────────────

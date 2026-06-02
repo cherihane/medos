@@ -81,7 +81,7 @@ export default function Inventaire() {
       </div>
 
       {/* Stats */}
-      <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+      <div className="kpi-row">
         {stats.map((s) => (
           <div key={s.label} style={{ backgroundColor: "white", padding: "14px 20px", borderRadius: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${s.color}` }}>
             <div style={{ fontSize: 22, fontWeight: 800, color: s.color }}>{loading ? "…" : s.value}</div>
@@ -116,7 +116,7 @@ export default function Inventaire() {
             Aucun produit ne correspond aux filtres selectionnes.
           </div>
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <div className="table-scroll"><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ backgroundColor: "#F8FAFC" }}>
                 {["Code", "Produit", "Categorie", "Forme", "Stock actuel", "Stock min.", "Prix unitaire", "Statut"].map((h) => (
@@ -164,7 +164,7 @@ export default function Inventaire() {
                 );
               })}
             </tbody>
-          </table>
+          </table></div>
         )}
       </div>
     </Layout>

@@ -51,7 +51,7 @@ export default function Credits() {
 
   return (
     <Layout title="Commandes et Credits">
-      <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
+      <div className="kpi-row">
         {stats.map((s) => (
           <div key={s.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${s.color}` }}>
             <div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{loading ? "…" : s.value}</div>

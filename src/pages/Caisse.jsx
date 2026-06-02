@@ -1,8 +1,11 @@
 import { useState, useMemo } from "react";
 import Layout from "../components/Layout";
 import { useMedicaments } from "../hooks/useSupabaseData";
+import { useIsMobile } from "../hooks/useWindowSize";
 
 export default function Caisse() {
+  const isMobile = useIsMobile();
+
   const { data: medicaments, loading } = useMedicaments();
   const [cart, setCart]       = useState([]);
   const [search, setSearch]   = useState("");
@@ -54,7 +57,7 @@ export default function Caisse() {
 
   return (
     <Layout title="Caisse — Point de Vente">
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 20, height: "calc(100vh - 140px)" }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 360px", gap: 20, height: "calc(100vh - 140px)" }}>
         {/* Gauche : catalogue */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {/* Recherche */}
@@ -76,7 +79,7 @@ export default function Caisse() {
               ) : accesRapide.length === 0 ? (
                 <div style={{ color: "#9CA3AF", fontSize: 13 }}>Aucun médicament en stock.</div>
               ) : (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+                <div className="kpi-grid kpi-grid-4" style={{ gap: 10 }}>
                   {accesRapide.map((m) => (
                     <button
                       key={m.id}

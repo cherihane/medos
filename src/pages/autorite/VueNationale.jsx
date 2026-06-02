@@ -17,7 +17,7 @@ export default function VueNationale() {
   return (
     <Layout title="Vue Nationale" subtitle="Tableau de bord national — Autorité sanitaire RDC">
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
-      <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
+      <div className="kpi-row">
         {kpis.map((k) => (
           <div key={k.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
             <div style={{ fontSize: 26, fontWeight: 800, color: k.color }}>{k.value}</div>
@@ -26,7 +26,7 @@ export default function VueNationale() {
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+      <div className="dash-grid-2">
         <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
           <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Établissements enregistrés ({loadEtabs ? "…" : etabs.length})</h3>
           {loadEtabs && [1,2,3,4].map((i) => (

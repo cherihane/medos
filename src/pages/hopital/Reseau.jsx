@@ -10,7 +10,7 @@ import { insertCommande } from "../../hooks/useMutations";
 function EtabModal({ etab, onClose }) {
   return (
     <Modal title={etab.nom} onClose={onClose} width={460}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="form-row-2">
         {[
           { label: "Type",    value: etab.type || "—" },
           { label: "Ville",   value: etab.ville || "—" },
@@ -106,7 +106,7 @@ export default function Reseau() {
         />
       )}
 
-      <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
+      <div className="kpi-row">
         {[
           { label: "Établissements connectés", value: loading ? "…" : etablissements.length, color: "#10B981" },
           { label: "Hôpitaux",   value: loading ? "…" : etablissements.filter(e => e.type === "hopital").length, color: "#3B82F6" },

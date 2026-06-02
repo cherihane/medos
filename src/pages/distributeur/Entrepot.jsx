@@ -74,7 +74,7 @@ async function sendCommandeEmail({ emailFabricant, fabricant, lignes, dateLivrai
       Merci de confirmer la disponibilité dans les meilleurs délais.
     </p>
 
-    <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
+    <div className="table-scroll"><table style="width:100%;border-collapse:collapse;margin-bottom:20px">
       <tr style="background:#F8FAFC">
         <td style="padding:9px 0;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:12px;width:44%">Date de livraison souhaitée</td>
         <td style="padding:9px 0;border-bottom:1px solid #e5e7eb;font-weight:700;font-size:13px;color:#0A1628">${dateStr}</td>
@@ -83,10 +83,10 @@ async function sendCommandeEmail({ emailFabricant, fabricant, lignes, dateLivrai
         <td style="padding:9px 0;color:#6b7280;font-size:12px">Instructions particulières</td>
         <td style="padding:9px 0;font-size:13px;color:#374151">${notes}</td>
       </tr>` : ""}
-    </table>
+    </table></div>
 
     <h2 style="font-size:14px;font-weight:700;color:#0A1628;margin:0 0 10px">Médicaments commandés</h2>
-    <table style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin-bottom:20px">
+    <div className="table-scroll"><table style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin-bottom:20px">
       <thead>
         <tr style="background:#0A1628">
           <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;font-weight:700">Médicament</th>
@@ -99,7 +99,7 @@ async function sendCommandeEmail({ emailFabricant, fabricant, lignes, dateLivrai
           <td style="padding:10px 14px;font-size:13px;font-weight:700;color:#92400E;text-align:right">${totalQty.toLocaleString("fr-FR")} unités au total</td>
         </tr>
       </tbody>
-    </table>
+    </table></div>
 
     <div style="background:#FFFBEB;border-left:4px solid #F59E0B;border-radius:6px;padding:12px 16px;margin-bottom:24px">
       <p style="font-size:12px;color:#92400E;margin:0">
@@ -245,7 +245,7 @@ function ModalReception({ medicaments, onClose, onSuccess }) {
             </select>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div className="form-row-2">
             <div>
               <label style={labelStyle}>Fabricant <span style={{ color: "#EF4444" }}>*</span></label>
               <input value={form.fabricant} onChange={(e) => set("fabricant", e.target.value)}
@@ -258,7 +258,7 @@ function ModalReception({ medicaments, onClose, onSuccess }) {
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div className="form-row-2">
             <div>
               <label style={labelStyle}>Date de fabrication</label>
               <input type="date" value={form.date_fabrication} onChange={(e) => set("date_fabrication", e.target.value)}
@@ -386,7 +386,7 @@ function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id
           </div>
 
           {/* Champs en-tête */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+          <div className="form-row-2" style={{ marginBottom: 12 }}>
             <div>
               <label style={labelStyle}>Email du fabricant <span style={{ color: "#EF4444" }}>*</span></label>
               <input type="email" value={header.email_fabricant} onChange={(e) => setH("email_fabricant", e.target.value)}

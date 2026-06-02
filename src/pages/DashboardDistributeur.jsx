@@ -96,11 +96,11 @@ export default function DashboardDistributeur() {
 
   return (
     <Layout title="Dashboard Distributeur">
-      <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
+      <div className="kpi-row">
         {kpiCards.map((k) => <KpiCard key={k.label} {...k} />)}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+      <div className="dash-grid-2">
         {/* Reseau clients */}
         <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
           <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Reseau clients</h3>
@@ -182,7 +182,7 @@ export default function DashboardDistributeur() {
             Aucune commande enregistrée.
           </div>
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <div className="table-scroll"><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ backgroundColor: "#F8FAFC" }}>
                 {["N° Commande", "Client", "Ville", "Montant", "Date", "Statut"].map((h) => (
@@ -224,7 +224,7 @@ export default function DashboardDistributeur() {
                 );
               })}
             </tbody>
-          </table>
+          </table></div>
         )}
       </div>
     </Layout>

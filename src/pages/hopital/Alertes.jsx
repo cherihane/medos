@@ -80,7 +80,7 @@ export default function Alertes() {
         )}
       </div>
 
-      <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+      <div className="kpi-row">
         {[
           { label: "Critiques",    value: stats.loading ? "…" : stats.critique, color: "#EF4444", bg: "#FEF2F2" },
           { label: "Alertes",      value: stats.loading ? "…" : stats.alerte,   color: "#F59E0B", bg: "#FFFBEB" },

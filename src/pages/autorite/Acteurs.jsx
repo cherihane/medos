@@ -94,7 +94,7 @@ export default function Acteurs() {
     <Layout title="Acteurs" subtitle="Repertoire des acteurs pharmaceutiques">
       {inspected && <InspectionModal acteur={inspected} onClose={() => setInspected(null)} />}
 
-      <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
+      <div className="kpi-row">
         {kpis.map((k) => (
           <div key={k.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "18px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
             <div style={{ fontSize: 22, fontWeight: 800, color: k.color }}>{k.value}</div>
@@ -140,7 +140,7 @@ export default function Acteurs() {
             Aucun acteur ne correspond a la recherche.
           </div>
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <div className="table-scroll"><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ backgroundColor: "#F8FAFC" }}>
                 {["Nom", "Type", "Ville", "Pays", "Statut", "Actions"].map((h) => (
@@ -173,7 +173,7 @@ export default function Acteurs() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
       </div>
     </Layout>

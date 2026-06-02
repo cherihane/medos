@@ -33,7 +33,7 @@ export default function Predictions() {
   return (
     <Layout title="Prédictions IA" subtitle="Anticipation de la demande médicamenteuse par intelligence artificielle">
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
-      <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
+      <div className="kpi-row">
         {[
           { label: "Produits à surveiller", value: loading ? "…" : predictions.length,                                            color: "#10B981" },
           { label: "Critiques",             value: loading ? "…" : predictions.filter(p => p.risque === "critique").length,       color: "#EF4444" },
@@ -47,7 +47,7 @@ export default function Predictions() {
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+      <div className="dash-grid-2">
         <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
           <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Produits en tension — stock critique</h3>
           {loading && [1,2,3].map((i) => (

@@ -100,7 +100,7 @@ function Skeleton() {
           <div style={{ width: 80, height: 12, backgroundColor: "#F3F4F6", borderRadius: 6 }} />
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+      <div className="form-row-2" style={{ gap: 10, marginBottom: 14 }}>
         {[1, 2, 3, 4].map((i) => <div key={i} style={{ height: 52, backgroundColor: "#F8FAFC", borderRadius: 10 }} />)}
       </div>
       <div style={{ height: 48, backgroundColor: "#F8FAFC", borderRadius: 10 }} />
@@ -472,7 +472,7 @@ export default function Fournisseurs() {
       )}
 
       {/* Grille */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
+      <div className="dash-grid-2">
         {loading && [1, 2, 3, 4].map((i) => <Skeleton key={i} />)}
 
         {!loading && liste.length === 0 && (
@@ -506,7 +506,7 @@ export default function Fournisseurs() {
               </div>
 
               {/* Infos */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+              <div className="form-row-2" style={{ gap: 10, marginBottom: 14 }}>
                 {[
                   { label: "Délai livraison",      value: s.delai_livraison       || "—" },
                   { label: "Conditions paiement",  value: s.conditions_paiement   || "—" },

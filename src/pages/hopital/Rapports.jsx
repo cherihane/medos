@@ -76,7 +76,7 @@ export default function Rapports() {
 
   return (
     <Layout title="Rapports Hospitaliers" subtitle="Tableaux de bord et rapports de performance">
-      <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
+      <div className="kpi-row">
         {kpis.map((k) => (
           <div key={k.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "18px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
             <div style={{ fontSize: 22, fontWeight: 800, color: k.color }}>{k.value}</div>
@@ -119,7 +119,7 @@ export default function Rapports() {
         {loading ? (
           <div style={{ padding: "32px", textAlign: "center", color: "#9CA3AF", fontSize: 14 }}>Chargement…</div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+          <div className="dash-grid-2">
             <div style={{ padding: "16px", backgroundColor: "#F0FDF4", borderRadius: 10 }}>
               <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>Ordonnances ce mois</div>
               <div style={{ fontSize: 24, fontWeight: 800, color: "#10B981" }}>{ordMoisActuel.length}</div>

@@ -245,7 +245,7 @@ export default function Livraisons() {
       )}
 
       <div style={{ backgroundColor: "white", borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <div className="table-scroll"><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr style={{ backgroundColor: "#F8FAFC" }}>
               {["N° Suivi", "Destinataire", "Transporteur", "Départ", "Arrivée prévue", "Statut", "Actions"].map((h) => (
@@ -293,7 +293,7 @@ export default function Livraisons() {
               );
             })}
           </tbody>
-        </table>
+        </table></div>
         <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
       </div>
     </Layout>

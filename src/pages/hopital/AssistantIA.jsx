@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Layout from "../../components/Layout";
+import { useIsMobile } from "../../hooks/useWindowSize";
 
 const suggestions = [
   "Quels médicaments sont en rupture critique ?",
@@ -16,6 +17,8 @@ const initialMessages = [
 ];
 
 export default function AssistantIA() {
+  const isMobile = useIsMobile();
+
   const [messages, setMessages] = useState(initialMessages);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -43,7 +46,7 @@ export default function AssistantIA() {
 
   return (
     <Layout title="Assistant IA" subtitle="Intelligence artificielle au service de la gestion hospitalière">
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 280px", gap: 20, height: "calc(100vh - 160px)" }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 280px", gap: 20, height: "calc(100vh - 160px)" }}>
         {/* Chat */}
         <div style={{ backgroundColor: "white", borderRadius: 16, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", display: "flex", flexDirection: "column" }}>
           <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16, marginBottom: 20 }}>

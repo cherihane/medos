@@ -11,7 +11,7 @@ export default function CGU() {
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "#F8FAFC", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
       {/* Header */}
-      <div style={{ backgroundColor: "#0A1628", padding: "18px 32px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div className="legal-header" style={{ backgroundColor: "#0A1628", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <Link to="/" style={{ textDecoration: "none" }}>
           <span style={{ color: "#3B82F6", fontWeight: 900, fontSize: 20 }}>Med</span>
           <span style={{ color: "white",   fontWeight: 900, fontSize: 20 }}>OS</span>
@@ -19,7 +19,7 @@ export default function CGU() {
         <span style={{ color: "rgba(255,255,255,0.5)", fontSize: 12 }}>Documents legaux</span>
       </div>
 
-      <div style={{ maxWidth: 780, margin: "0 auto", padding: "48px 24px" }}>
+      <div className="legal-content">
         <div style={{ marginBottom: 36 }}>
           <h1 style={{ fontSize: 26, fontWeight: 800, color: "#0A1628", margin: "0 0 6px" }}>
             Conditions Generales d'Utilisation

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Layout from "../components/Layout";
 import { useOrdonnances } from "../hooks/useSupabaseData";
+import { useIsMobile } from "../hooks/useWindowSize";
 
 const STATUT_STYLE = {
   en_attente: { bg: "#DBEAFE", color: "#2563EB", label: "En attente" },
@@ -16,6 +17,8 @@ function fmtDate(iso) {
 }
 
 export default function Ordonnances() {
+  const isMobile = useIsMobile();
+
   const { data: ordonnances, loading } = useOrdonnances();
   const [selected, setSelected]        = useState(null);
   const [search, setSearch]            = useState("");
@@ -32,7 +35,7 @@ export default function Ordonnances() {
 
   return (
     <Layout title="Ordonnances">
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 380px", gap: 20 }}>
         {/* Liste */}
         <div style={{ backgroundColor: "white", borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
           <div style={{ padding: "16px 20px", borderBottom: "1px solid #E5E7EB", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
@@ -68,7 +71,7 @@ export default function Ordonnances() {
               Aucune ordonnance ne correspond a la recherche.
             </div>
           ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <div className="table-scroll"><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
                 <tr style={{ backgroundColor: "#F8FAFC" }}>
                   {["Reference", "Patient", "Medecin", "Date emission", "Statut"].map((h) => (
@@ -115,7 +118,7 @@ export default function Ordonnances() {
                   );
                 })}
               </tbody>
-            </table>
+            </table></div>
           )}
         </div>
 

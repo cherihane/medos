@@ -10,7 +10,7 @@ import { insertLivraison } from "../../hooks/useMutations";
 function FicheModal({ client, onClose }) {
   return (
     <Modal title={client.nom} onClose={onClose} width={460}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="form-row-2">
         {[
           { label: "Type",      value: client.type || "—" },
           { label: "Ville",     value: client.ville || "—" },
@@ -123,7 +123,7 @@ export default function Clients() {
             Établissements clients ({loading ? "…" : etabs.length})
           </h3>
         </div>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <div className="table-scroll"><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr style={{ backgroundColor: "#F8FAFC" }}>
               {["Client", "Ville", "Type", "Email", "Statut", "Actions"].map((h) => (
@@ -171,7 +171,7 @@ export default function Clients() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       </div>
     </Layout>
   );

@@ -6,6 +6,7 @@ import { useToast } from "../../hooks/useToast";
 import { usePatientsPaginated } from "../../hooks/useSupabaseData";
 import Pagination from "../../components/Pagination";
 import { insertPatient, updatePatient } from "../../hooks/useMutations";
+import { useIsMobile } from "../../hooks/useWindowSize";
 
 function calcAge(dateNaissance) {
   if (!dateNaissance) return "—";
@@ -118,6 +119,8 @@ function PatientModal({ patient, onClose, onSaved }) {
 }
 
 export default function Patients() {
+  const isMobile = useIsMobile();
+
   const [search, setSearch] = useState("");
   const { data: patients, loading, error, total, page, setPage, totalPages, refetch } = usePatientsPaginated(search);
   const { toasts, success } = useToast();
@@ -140,7 +143,7 @@ export default function Patients() {
         />
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 360px", gap: 20 }}>
         {/* ── Liste ── */}
         <div style={{ backgroundColor: "white", borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
           <div style={{ padding: "16px 20px", borderBottom: "1px solid #E5E7EB", display: "flex", justifyContent: "space-between", alignItems: "center" }}>

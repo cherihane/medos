@@ -69,7 +69,7 @@ function Field({ label, required, children, hint }) {
 }
 
 function Row({ children }) {
-  return <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>{children}</div>;
+  return <div className="form-row-2">{children}</div>;
 }
 
 function SectionTitle({ children }) {
@@ -87,7 +87,7 @@ function EtapeRole({ value, onChange }) {
       <p style={{ fontSize: 13, color: "#6B7280", marginBottom: 20 }}>
         Sélectionnez le type de votre structure de santé.
       </p>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="role-cards-grid">
         {ROLES.map((r) => (
           <button
             key={r.key}
