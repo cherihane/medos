@@ -143,7 +143,7 @@ export default function API() {
               <div style={{ color: "#9CA3AF", fontSize: 13 }}>Chargement…</div>
             ) : etablissements.length === 0 ? (
               <div style={{ padding: "20px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>
-                Aucune organisation enregistree.
+                Aucune organisation enregistrée.
               </div>
             ) : (
               etablissements.map((e) => (

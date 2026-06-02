@@ -164,7 +164,7 @@ export default function Patients() {
 
           {loading && [1, 2, 3, 4, 5].map((i) => <Skeleton key={i} />)}
           {error && !loading && (
-            <div style={{ padding: "20px", fontSize: 13, color: "#DC2626", textAlign: "center" }}>Erreur : {error.message}</div>
+            <div style={{ padding: "20px", fontSize: 13, color: "#DC2626", textAlign: "center" }}>Une erreur s'est produite. Veuillez réessayer.</div>
           )}
           {!loading && !error && patients.length === 0 && (
             <div style={{ padding: "40px 20px", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>

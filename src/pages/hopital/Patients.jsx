@@ -537,7 +537,7 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
   return (
     <>
       {showOrd && <ModalNouvelleOrdonnance patient={patient} etablissement_id={etablissement_id} medecinNom={medecinNom} medicaments={medicaments} onClose={() => setShowOrd(false)} onSaved={() => { setShowOrd(false); charger(); onPatientUpdated("Ordonnance créée."); }} />}
-      {showCR  && <ModalNouveauCompteRendu patient={patient} etablissement_id={etablissement_id} medecinNom={medecinNom} onClose={() => setShowCR(false)} onSaved={() => { setShowCR(false); charger(); onPatientUpdated("Compte rendu enregistré."); }} />}
+      {showCR  && <ModalNouveauCompteRendu patient={patient} établissement_id={établissement_id} medecinNom={medecinNom} onClose={() => setShowCR(false)} onSaved={() => { setShowCR(false); charger(); onPatientUpdated("Compte rendu enregistré."); }} />}
 
       {/* Détail compte rendu */}
       {detailCR && (
@@ -946,7 +946,7 @@ export default function PatientsHopital() {
 
       {toast && <div style={{ position: "fixed", top: 20, right: 20, background: ACCENT, color: "white", padding: "12px 20px", borderRadius: 10, fontWeight: 600, fontSize: 13, zIndex: 2000, boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}>{toast}</div>}
 
-      {showNouv && <ModalNouveauPatient etablissement_id={etablissement_id} medecinNom={medecinNom} onClose={() => setShowNouv(false)} onSaved={() => { setShowNouv(false); refetch(); showToast("Patient enregistré."); }} />}
+      {showNouv && <ModalNouveauPatient établissement_id={établissement_id} medecinNom={medecinNom} onClose={() => setShowNouv(false)} onSaved={() => { setShowNouv(false); refetch(); showToast("Patient enregistré."); }} />}
       {fichePatient && <FichePatient patient={fichePatient} etablissement_id={etablissement_id} medecinNom={medecinNom} hopitalNom={hopitalNom} medicaments={medicaments} onClose={() => setFichePatient(null)} onPatientUpdated={(msg) => { refetch(); showToast(msg); }} auth={auth} />}
 
       {/* KPI */}

@@ -406,7 +406,7 @@ export default function Previsions() {
         {loadCmd ? (
           <div style={{ height: 240, display: "flex", alignItems: "center", justifyContent: "center", color: "#9CA3AF", fontSize: 14 }}>Chargement…</div>
         ) : commandes.length === 0 ? (
-          <div style={{ height: 240, display: "flex", alignItems: "center", justifyContent: "center", color: "#9CA3AF", fontSize: 14 }}>Aucune commande enregistree.</div>
+          <div style={{ height: 240, display: "flex", alignItems: "center", justifyContent: "center", color: "#9CA3AF", fontSize: 14 }}>Aucune commande enregistrée.</div>
         ) : (
           <div style={{ width: "100%", height: 240 }}>
             <ResponsiveContainer width="100%" height="100%">
@@ -431,7 +431,7 @@ export default function Previsions() {
           {loadCrit ? (
             <div style={{ height: 220, display: "flex", alignItems: "center", justifyContent: "center", color: "#9CA3AF", fontSize: 14 }}>Chargement…</div>
           ) : prodData.length === 0 ? (
-            <div style={{ height: 220, display: "flex", alignItems: "center", justifyContent: "center", color: "#9CA3AF", fontSize: 14 }}>Aucun medicament critique.</div>
+            <div style={{ height: 220, display: "flex", alignItems: "center", justifyContent: "center", color: "#9CA3AF", fontSize: 14 }}>Aucun médicament critique.</div>
           ) : (
             <div style={{ width: "100%", height: 220 }}>
               <ResponsiveContainer width="100%" height="100%">

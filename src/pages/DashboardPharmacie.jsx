@@ -25,7 +25,7 @@ export default function DashboardPharmacie() {
       color: "#EF4444",
     },
     {
-      label: "Patients enregistres",
+      label: "Patients enregistrés",
       value: loadKpi ? "…" : kpi?.totalPatients ?? 0,
       color: "#8B5CF6",
     },
@@ -49,7 +49,7 @@ export default function DashboardPharmacie() {
             </div>
           ) : salesData.every((d) => d.ventes === 0) ? (
             <div style={{ height: 240, display: "flex", alignItems: "center", justifyContent: "center", color: "#9CA3AF", fontSize: 13 }}>
-              Aucune vente enregistree sur les 7 derniers jours.
+              Aucune vente enregistrée sur les 7 derniers jours.
             </div>
           ) : (
             <div style={{ width: "100%", height: 240 }}>

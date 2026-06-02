@@ -1,6 +1,8 @@
 import { useState } from "react";
 import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
+import Tooltip from "../../components/Tooltip";
+import ErrorRetry from "../../components/ErrorRetry";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useOrdonnancesPaginated, usePatients } from "../../hooks/useSupabaseData";
@@ -90,12 +92,20 @@ function NouvelleModal({ patients, onClose, onSaved }) {
           <input style={inputStyle} type="date" value={form.date_expiration} onChange={set("date_expiration")} />
         </Field>
       </Row>
-      <Field label="Notes / médicaments prescrits">
+      <Field label={
+        <span style={{ display: "inline-flex", alignItems: "center" }}>
+          Notes / médicaments prescrits
+          <Tooltip
+            text="Posologie : indiquez le médicament, la dose unitaire, la fréquence et la durée. Exemple : Amoxicilline 500 mg — 1 cp × 3 fois/j pendant 7 jours."
+            position="right"
+          />
+        </span>
+      }>
         <textarea
           style={{ ...inputStyle, height: 80, resize: "vertical" }}
           value={form.notes}
           onChange={set("notes")}
-          placeholder="Médicaments, posologie, durée…"
+          placeholder="Ex: Amoxicilline 500 mg — 1 cp × 3/j pendant 7 jours"
         />
       </Field>
       {formError && (
@@ -180,8 +190,11 @@ export default function Ordonnances() {
             <tbody>
               {loading && [1,2,3,4,5].map((i) => <SkeletonRow key={i} />)}
               {error && !loading && (
-                <tr><td colSpan={5} style={{ padding: 24, textAlign: "center", color: "#DC2626", fontSize: 13 }}>
-                  Erreur : {error.message}
+                <tr><td colSpan={5} style={{ padding: 24 }}>
+                  <ErrorRetry
+                    message="Impossible de charger les ordonnances."
+                    compact
+                  />
                 </td></tr>
               )}
               {!loading && !error && ordonnances.length === 0 && (

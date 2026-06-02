@@ -57,10 +57,10 @@ export default function Ordonnances() {
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg>
               </div>
               <div style={{ fontSize: 15, fontWeight: 700, color: "#374151", marginBottom: 8 }}>
-                Aucune ordonnance enregistree
+                Aucune ordonnance enregistrée
               </div>
               <div style={{ fontSize: 13, color: "#9CA3AF" }}>
-                Les ordonnances creees par les medecins apparaitront ici.
+                Les ordonnances créées par les médecins apparaîtront ici.
               </div>
             </div>
           ) : filtered.length === 0 ? (

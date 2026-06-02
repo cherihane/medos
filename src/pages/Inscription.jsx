@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import PublicFooter from "../components/PublicFooter";
+import Tooltip from "../components/Tooltip";
 
 // ─── constantes ──────────────────────────────────────────────────────────────
 const ROLES = [
@@ -229,9 +230,17 @@ function EtapeFormulaire({ form, onChange }) {
       </Row>
 
       <Field
-        label="Numéro de licence officielle du Ministère de la Santé"
+        label={
+          <span style={{ display: "inline-flex", alignItems: "center" }}>
+            Numéro de licence officielle du Ministère de la Santé
+            <Tooltip
+              text="Ce numéro est délivré par le Ministère de la Santé de votre pays. Il figure sur votre autorisation d'exercice. Format courant : MSP-LIC-AAAA-XXXXX."
+              position="right"
+            />
+          </span>
+        }
         required
-        hint="Ce numéro sera vérifié lors de la validation de votre demande."
+        hint="Ce numéro sera vérifié auprès du Ministère de la Santé lors de la validation."
       >
         <input style={inputStyle} value={form.licence} onChange={set("licence")} placeholder="Ex: MSP-LIC-2024-00123" />
       </Field>
@@ -470,14 +479,14 @@ export default function Inscription() {
       } else if (m.includes("password") && m.includes("weak")) {
         setErreur("Le mot de passe est trop simple. Utilisez au moins 8 caracteres avec des chiffres et des lettres.");
       } else if (m.includes("network") || m.includes("fetch")) {
-        setErreur("Impossible de contacter le serveur. Verifiez votre connexion internet.");
+        setErreur("Impossible de contacter le serveur. Vérifiez votre connexion internet.");
       } else if (m.includes("violates row-level security") || m.includes("permission")) {
         // Erreur RLS — ne pas exposer les details techniques
         console.error("[inscription] Erreur RLS:", e.message);
-        setErreur("Une erreur s'est produite lors de l'envoi de votre demande. Veuillez reessayer.");
+        setErreur("Une erreur s'est produite lors de l'envoi de votre demande. Veuillez réessayer.");
       } else {
         console.error("[inscription] Erreur:", e.message);
-        setErreur("Une erreur s'est produite. Veuillez reessayer ou contacter contact@kelagroup.org.");
+        setErreur("Une erreur s'est produite. Veuillez réessayer ou contacter contact@kelagroup.org.");
       }
     } finally {
       setSaving(false);

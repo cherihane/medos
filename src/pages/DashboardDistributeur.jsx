@@ -107,7 +107,7 @@ export default function DashboardDistributeur() {
           {loadEtabs ? (
             <div style={{ color: "#9CA3AF", fontSize: 13 }}>Chargement…</div>
           ) : reseauClients.length === 0 ? (
-            <div style={{ color: "#9CA3AF", fontSize: 13 }}>Aucun client enregistre.</div>
+            <div style={{ color: "#9CA3AF", fontSize: 13 }}>Aucun client enregistré.</div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {reseauClients.map((c) => (
@@ -179,7 +179,7 @@ export default function DashboardDistributeur() {
           <div style={{ color: "#9CA3AF", fontSize: 13 }}>Chargement…</div>
         ) : dernieresCommandes.length === 0 ? (
           <div style={{ color: "#9CA3AF", fontSize: 13, padding: "24px 0", textAlign: "center" }}>
-            Aucune commande enregistree.
+            Aucune commande enregistrée.
           </div>
         ) : (
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>

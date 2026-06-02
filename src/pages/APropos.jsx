@@ -56,7 +56,7 @@ export default function APropos() {
             <span style={{ color: "#3B82F6" }}>Med</span>OS
           </h1>
           <p style={{ fontSize: 14, color: "#6B7280", margin: 0 }}>
-            Intelligence Medicale Africaine
+            Intelligence Médicale Africaine
           </p>
         </div>
 

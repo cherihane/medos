@@ -19,21 +19,21 @@ function translateAuthError(message = "") {
     return "Email ou mot de passe incorrect.";
   }
   if (m.includes("email not confirmed")) {
-    return "Votre adresse email n'a pas encore ete confirmee. Verifiez votre boite de reception.";
+    return "Votre adresse email n'a pas encore été confirmée. Vérifiez votre boite de reception.";
   }
   if (m.includes("user not found")) {
-    return "Aucun compte associe a cet email.";
+    return "Aucun compte associé à cet email.";
   }
   if (m.includes("too many requests") || m.includes("rate limit")) {
-    return "Trop de tentatives de connexion. Veuillez patienter quelques minutes avant de reessayer.";
+    return "Trop de tentatives de connexion. Veuillez patienter quelques minutes avant de réessayer.";
   }
   if (m.includes("network") || m.includes("fetch")) {
-    return "Impossible de contacter le serveur. Verifiez votre connexion internet.";
+    return "Impossible de contacter le serveur. Vérifiez votre connexion internet.";
   }
 
   // Erreur generique — log technique en console, message neutre a l'utilisateur
   console.error("[MedOS] Erreur d'authentification:", message);
-  return "Une erreur s'est produite lors de la connexion. Veuillez reessayer.";
+  return "Une erreur s'est produite lors de la connexion. Veuillez réessayer.";
 }
 
 const roles = [

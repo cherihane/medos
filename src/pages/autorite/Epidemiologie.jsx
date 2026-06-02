@@ -12,10 +12,10 @@ const SEVERITE_STYLE = {
 
 const MOIS_LABELS = ["Jan", "Fev", "Mar", "Avr", "Mai", "Jun", "Jul", "Aou", "Sep", "Oct", "Nov", "Dec"];
 
-export default function Epidemiologie() {
+export default function Épidémiologie() {
   const { data: alertes, loading } = useAlertes(100);
 
-  // Alertes de type epidemiologique
+  // Alertes de type épidémiologique
   const alertesEpi = useMemo(
     () => alertes.filter((a) =>
       ["epidemie", "epidemiologie", "maladie", "pharmacovigilance", "rupture_critique"].some((kw) =>
@@ -60,7 +60,7 @@ export default function Epidemiologie() {
   ];
 
   return (
-    <Layout title="Epidemiologie" subtitle="Surveillance epidemiologique et alertes sanitaires">
+    <Layout title="Épidémiologie" subtitle="Surveillance épidémiologique et alertes sanitaires">
       <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
         {kpis.map((k) => (
           <div key={k.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "18px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
@@ -75,7 +75,7 @@ export default function Epidemiologie() {
         {loading ? (
           <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", color: "#9CA3AF", fontSize: 14 }}>Chargement…</div>
         ) : affichees.length === 0 ? (
-          <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", color: "#9CA3AF", fontSize: 14 }}>Aucune alerte enregistree.</div>
+          <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", color: "#9CA3AF", fontSize: 14 }}>Aucune alerte enregistrée.</div>
         ) : (
           <div style={{ width: "100%", height: 220 }}>
             <ResponsiveContainer width="100%" height="100%">
@@ -97,7 +97,7 @@ export default function Epidemiologie() {
             <div style={{ color: "#9CA3AF", fontSize: 13 }}>Chargement…</div>
           ) : affichees.length === 0 ? (
             <div style={{ padding: "32px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>
-              Aucune alerte epidemiologique enregistree.
+              Aucune alerte épidémiologique enregistrée.
             </div>
           ) : (
             affichees.slice(0, 8).map((a) => {

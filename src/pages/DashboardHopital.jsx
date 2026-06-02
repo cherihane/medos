@@ -20,7 +20,7 @@ export default function DashboardHopital() {
 
   const kpiCards = [
     {
-      label: "Patients enregistres",
+      label: "Patients enregistrés",
       value: loadKpi ? "…" : kpi?.patientsHospitalises ?? 0,
       color: "#10B981",
     },
