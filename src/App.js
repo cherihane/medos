@@ -8,6 +8,11 @@ import Inscription from "./pages/Inscription";
 import Parametres from "./pages/Parametres";
 import MotDePasseOublie from "./pages/MotDePasseOublie";
 
+// Pages legales
+import CGU from "./pages/CGU";
+import Confidentialite from "./pages/Confidentialite";
+import APropos from "./pages/APropos";
+
 // Pharmacie
 import PhDashboard from "./pages/pharmacie/Dashboard";
 import PhCaisse from "./pages/pharmacie/Caisse";
@@ -65,6 +70,9 @@ function AppRoutes() {
       <Route path="/" element={auth ? <Navigate to={auth.dashboardPath} replace /> : <Login />} />
       <Route path="/mot-de-passe-oublie" element={<MotDePasseOublie />} />
       <Route path="/inscription" element={<Inscription />} />
+      <Route path="/cgu"             element={<CGU />} />
+      <Route path="/confidentialite" element={<Confidentialite />} />
+      <Route path="/a-propos"        element={<APropos />} />
       <Route path="/parametres" element={<ProtectedRoute><Parametres /></ProtectedRoute>} />
 
       {/* Pharmacie */}

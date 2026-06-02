@@ -1,6 +1,40 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth, roleConfig } from "../context/AuthContext";
+import PublicFooter from "../components/PublicFooter";
+
+/**
+ * Traduit les erreurs techniques Supabase/Auth en messages utilisateur lisibles.
+ * Les messages metier utiles (compte en attente, refuse) sont conserves tels quels.
+ */
+function translateAuthError(message = "") {
+  const m = message.toLowerCase();
+
+  // Messages metier — conserves directement (viennent de login() dans AuthContext)
+  if (m.includes("en cours de validation")) return message;
+  if (m.includes("refus")) return message;
+
+  // Erreurs d'identifiants — message clair sans reveler si l'email existe
+  if (m.includes("invalid login credentials") || m.includes("invalid credentials")) {
+    return "Email ou mot de passe incorrect.";
+  }
+  if (m.includes("email not confirmed")) {
+    return "Votre adresse email n'a pas encore ete confirmee. Verifiez votre boite de reception.";
+  }
+  if (m.includes("user not found")) {
+    return "Aucun compte associe a cet email.";
+  }
+  if (m.includes("too many requests") || m.includes("rate limit")) {
+    return "Trop de tentatives de connexion. Veuillez patienter quelques minutes avant de reessayer.";
+  }
+  if (m.includes("network") || m.includes("fetch")) {
+    return "Impossible de contacter le serveur. Verifiez votre connexion internet.";
+  }
+
+  // Erreur generique — log technique en console, message neutre a l'utilisateur
+  console.error("[MedOS] Erreur d'authentification:", message);
+  return "Une erreur s'est produite lors de la connexion. Veuillez reessayer.";
+}
 
 const roles = [
   { value: "pharmacie", label: "Pharmacie" },
@@ -41,7 +75,7 @@ export default function Login() {
       await login(form.role, form.email, form.password);
       navigate(roleConfig[form.role].dashboardPath);
     } catch (err) {
-      setError(err.message || "Erreur de connexion. Veuillez réessayer.");
+      setError(translateAuthError(err.message));
     } finally {
       setLoading(false);
     }
@@ -239,9 +273,7 @@ export default function Login() {
             </a>
           </p>
 
-          <p style={{ textAlign: "center", fontSize: 11, color: "#9CA3AF", marginTop: 16 }}>
-            2024 Kela Group — Tous droits réservés
-          </p>
+          <PublicFooter />
         </div>
       </div>
     </div>
