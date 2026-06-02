@@ -60,7 +60,7 @@ export default function Caisse() {
           {/* Recherche */}
           <div style={{ backgroundColor: "white", borderRadius: 14, padding: "16px 20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
             <input
-              placeholder="Rechercher un medicament par nom, DCI, categorie..."
+              placeholder="Rechercher un médicament par nom, DCI, catégorie..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               style={{ width: "100%", padding: "10px 14px", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 14, outline: "none", boxSizing: "border-box" }}
@@ -74,7 +74,7 @@ export default function Caisse() {
               {loading ? (
                 <div style={{ color: "#9CA3AF", fontSize: 13 }}>Chargement…</div>
               ) : accesRapide.length === 0 ? (
-                <div style={{ color: "#9CA3AF", fontSize: 13 }}>Aucun medicament en stock.</div>
+                <div style={{ color: "#9CA3AF", fontSize: 13 }}>Aucun médicament en stock.</div>
               ) : (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
                   {accesRapide.map((m) => (
@@ -111,7 +111,7 @@ export default function Caisse() {
               </h3>
               {resultats.length === 0 ? (
                 <div style={{ color: "#9CA3AF", fontSize: 13, padding: "16px 0" }}>
-                  Aucun medicament en stock ne correspond a "{search}".
+                  Aucun médicament en stock ne correspond à "{search}".
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

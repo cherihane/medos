@@ -175,7 +175,7 @@ export default function Stock() {
 
       {error && (
         <div style={{ backgroundColor: "#FEF2F2", padding: "14px 18px", borderRadius: 12, marginBottom: 16, fontSize: 13, color: "#DC2626" }}>
-          Erreur : {error.message}
+          Une erreur s'est produite. Veuillez réessayer.
         </div>
       )}
 

@@ -159,11 +159,11 @@ export default function RapportsODD() {
                 <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.8 }}>
                   Le systeme MedOS recense <strong>{totalEtab}</strong> etablissement{totalEtab > 1 ? "s" : ""} dont <strong>{actifsEtab}</strong> actif{actifsEtab > 1 ? "s" : ""}.
                   La couverture ODD 3.8 calculee depuis les etablissements actifs est de <strong>{couverture38}%</strong> (cible ONU : 90%).
-                  Les autres indicateurs ODD necessitent des donnees epidemiologiques complementaires.
+                  Les autres indicateurs ODD necessitent des donnees épidémiologiques complementaires.
                 </div>
                 <div style={{ marginTop: 16, padding: "12px", backgroundColor: "#F5F3FF", borderRadius: 10 }}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: "#7C3AED", marginBottom: 4 }}>Prochaine etape</div>
-                  <div style={{ fontSize: 12, color: "#6B7280" }}>Connecter les donnees epidemiologiques nationales pour calculer automatiquement les indicateurs ODD 3.3, 3.4 et 3.b.</div>
+                  <div style={{ fontSize: 12, color: "#6B7280" }}>Connecter les donnees épidémiologiques nationales pour calculer automatiquement les indicateurs ODD 3.3, 3.4 et 3.b.</div>
                 </div>
               </>
             )}
@@ -176,7 +176,7 @@ export default function RapportsODD() {
             </div>
             {[
               { name: "Rapport ODD consolidé", desc: `${totalEtab} etablissement${totalEtab !== 1 ? "s" : ""} · ${medicaments.length} medicament${medicaments.length !== 1 ? "s" : ""}` },
-              { name: "Rapport pharmacovigilance", desc: `${alertes.length} alerte${alertes.length !== 1 ? "s" : ""} enregistree${alertes.length !== 1 ? "s" : ""}` },
+              { name: "Rapport pharmacovigilance", desc: `${alertes.length} alerte${alertes.length !== 1 ? "s" : ""} enregistrée${alertes.length !== 1 ? "s" : ""}` },
             ].map((r) => (
               <div key={r.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 0", borderBottom: "1px solid #F3F4F6" }}>
                 <div>

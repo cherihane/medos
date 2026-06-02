@@ -306,7 +306,7 @@ export default function Sidebar({ mobileOpen, onMobileClose }) {
               fontWeight: 500,
             }}
           >
-            Deconnexion
+            Déconnexion
           </button>
         </div>
 

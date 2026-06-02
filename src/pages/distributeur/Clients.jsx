@@ -113,7 +113,7 @@ export default function Clients() {
 
       {error && (
         <div style={{ backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 12, padding: "14px 18px", marginBottom: 16, fontSize: 13, color: "#DC2626" }}>
-          Erreur : {error.message}
+          Une erreur s'est produite. Veuillez réessayer.
         </div>
       )}
 

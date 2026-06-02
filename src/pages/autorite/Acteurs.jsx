@@ -55,7 +55,7 @@ function exportRegistre(liste, etab) {
   });
   openDocument({
     titre: "Registre des acteurs pharmaceutiques",
-    sousTitre: `Exporte le ${dateFr} — ${liste.length} etablissement${liste.length !== 1 ? "s" : ""} enregistres`,
+    sousTitre: `Exporté le ${dateFr} — ${liste.length} établissement${liste.length !== 1 ? "s" : ""} enregistrés`,
     etablissement: etab,
     sections: [{
       titre: "Repertoire complet",
@@ -84,7 +84,7 @@ export default function Acteurs() {
   const inactifs = etablissements.length - actifs;
 
   const kpis = [
-    { label: "Acteurs enregistres", value: loading ? "…" : etablissements.length, color: "#8B5CF6" },
+    { label: "Acteurs enregistrés", value: loading ? "…" : établissements.length, color: "#8B5CF6" },
     { label: "Actifs",              value: loading ? "…" : actifs,                color: "#10B981" },
     { label: "Inactifs",            value: loading ? "…" : inactifs,              color: "#EF4444" },
     { label: "Villes representees", value: loading ? "…" : [...new Set(etablissements.map((e) => e.ville).filter(Boolean))].length, color: "#3B82F6" },
@@ -133,7 +133,7 @@ export default function Acteurs() {
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             </div>
             <div style={{ fontSize: 15, fontWeight: 700, color: "#374151", marginBottom: 8 }}>Aucun acteur enregistre</div>
-            <div style={{ fontSize: 13, color: "#9CA3AF" }}>Les etablissements enregistres dans le systeme apparaitront ici.</div>
+            <div style={{ fontSize: 13, color: "#9CA3AF" }}>Les établissements enregistrés dans le systeme apparaîtront ici.</div>
           </div>
         ) : filtered.length === 0 ? (
           <div style={{ padding: "32px", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>

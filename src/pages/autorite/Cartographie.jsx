@@ -34,7 +34,7 @@ export default function Cartographie() {
   const typesUniques = [...new Set(etablissements.map((e) => e.type).filter(Boolean))].length;
 
   const kpis = [
-    { label: "Structures enregistrees", value: loading ? "…" : etablissements.length, color: "#8B5CF6" },
+    { label: "Structures enregistrées", value: loading ? "…" : établissements.length, color: "#8B5CF6" },
     { label: "Villes couvertes",        value: loading ? "…" : villes,                color: "#10B981" },
     { label: "Structures actives",      value: loading ? "…" : actifs,                color: "#3B82F6" },
     { label: "Types d'acteurs",         value: loading ? "…" : typesUniques,          color: "#F59E0B" },
@@ -64,7 +64,7 @@ export default function Cartographie() {
             <div style={{ height: 400, backgroundColor: "#F8FAFC", borderRadius: 12, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}>
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="1.5"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
               <div style={{ fontSize: 15, fontWeight: 700, color: "#374151" }}>Aucun etablissement connecte dans votre region</div>
-              <div style={{ fontSize: 13, color: "#9CA3AF" }}>Les structures apparaitront ici une fois enregistrees dans le systeme.</div>
+              <div style={{ fontSize: 13, color: "#9CA3AF" }}>Les structures apparaîtront ici une fois enregistrées dans le systeme.</div>
             </div>
           ) : (
             <div style={{ width: "100%", height: 400, backgroundColor: "#E8F4F0", borderRadius: 12, position: "relative", overflow: "hidden" }}>
@@ -76,7 +76,7 @@ export default function Cartographie() {
               ))}
               <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 8 }}>
                 <div style={{ fontSize: 22, fontWeight: 800, color: "#8B5CF6" }}>{etablissements.length}</div>
-                <div style={{ fontSize: 13, color: "#6B7280" }}>etablissement{etablissements.length > 1 ? "s" : ""} enregistre{etablissements.length > 1 ? "s" : ""}</div>
+                <div style={{ fontSize: 13, color: "#6B7280" }}>établissement{établissements.length > 1 ? "s" : ""} enregistre{établissements.length > 1 ? "s" : ""}</div>
                 <div style={{ fontSize: 12, color: "#9CA3AF" }}>{villes} ville{villes > 1 ? "s" : ""}</div>
               </div>
               <div style={{ position: "absolute", bottom: 12, right: 12, fontSize: 11, color: "#9CA3AF", backgroundColor: "rgba(255,255,255,0.8)", padding: "4px 8px", borderRadius: 6 }}>
@@ -114,7 +114,7 @@ export default function Cartographie() {
             {loading ? (
               <div style={{ color: "#9CA3AF", fontSize: 13 }}>Chargement…</div>
             ) : etablissements.length === 0 ? (
-              <div style={{ color: "#9CA3AF", fontSize: 13 }}>Aucun etablissement enregistre.</div>
+              <div style={{ color: "#9CA3AF", fontSize: 13 }}>Aucun établissement enregistre.</div>
             ) : (
               parVille.map(([ville, liste]) => (
                 <div key={ville} style={{ marginBottom: 14 }}>

@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import Layout from "../../components/Layout";
 import QrScanner from "../../components/QrScanner";
 import Toast from "../../components/Toast";
+import Tooltip from "../../components/Tooltip";
 import { useToast } from "../../hooks/useToast";
 import { useVerificationLot } from "../../hooks/useVerificationLot";
 
@@ -220,7 +221,13 @@ export default function Scanner({ profile = "pharmacie" }) {
               </div>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
-                  Numéro de lot (optionnel)
+                  <span style={{ display: "inline-flex", alignItems: "center" }}>
+                    Numéro de lot (optionnel)
+                    <Tooltip
+                      text="Le numéro de lot figure sur l'emballage secondaire du médicament, sous le code-barre ou le QR code. Il permet de tracer la fabrication et d'identifier les retraits de lots."
+                      position="right"
+                    />
+                  </span>
                 </label>
                 <input
                   value={numerolot}

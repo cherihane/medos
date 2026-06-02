@@ -138,7 +138,7 @@ export default function Credits() {
 
       {error && (
         <div style={{ backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 12, padding: "14px 18px", marginBottom: 20, fontSize: 13, color: "#DC2626" }}>
-          Erreur Supabase : {error.message}
+          Impossible de charger les données. Veuillez réessayer.
         </div>
       )}
 

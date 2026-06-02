@@ -8,7 +8,7 @@ const ODD_CIBLES = [
   { goal: "ODD 3.3", label: "Maladies infectieuses",            target: 80 },
   { goal: "ODD 3.4", label: "Maladies non transmissibles",      target: 70 },
   { goal: "ODD 3.8", label: "Couverture sante universelle",     target: 90 },
-  { goal: "ODD 3.b", label: "Acces aux medicaments essentiels", target: 85 },
+  { goal: "ODD 3.b", label: "Accès aux médicaments essentiels", target: 85 },
 ];
 
 const TYPE_LABEL = {
@@ -46,7 +46,7 @@ export default function DashboardAutorite() {
       color: "#EF4444",
     },
     {
-      label: "Medicaments recenses",
+      label: "Médicaments recensés",
       value: loadKpi ? "…" : (kpi?.medicamentsTraces ?? 0).toLocaleString("fr-FR"),
       color: "#3B82F6",
     },
@@ -111,7 +111,7 @@ export default function DashboardAutorite() {
           {loadEtabs ? (
             <div style={{ color: "#9CA3AF", fontSize: 13 }}>Chargement…</div>
           ) : parVille.length === 0 ? (
-            <div style={{ color: "#9CA3AF", fontSize: 13 }}>Aucune structure enregistree.</div>
+            <div style={{ color: "#9CA3AF", fontSize: 13 }}>Aucune structure enregistrée.</div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {parVille.map((r) => {
@@ -185,7 +185,7 @@ export default function DashboardAutorite() {
               {etabs.length} structures actives recensees dans MedOS
             </div>
             <div style={{ fontSize: 12, color: "#3B82F6" }}>
-              Couverture calculee sur la base des etablissements enregistres et actifs.
+              Couverture calculée sur la base des établissements enregistrés et actifs.
             </div>
           </div>
         </div>

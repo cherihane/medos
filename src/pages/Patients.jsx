@@ -57,7 +57,7 @@ export default function Patients() {
                 Aucun patient enregistre
               </div>
               <div style={{ fontSize: 13, color: "#9CA3AF", marginBottom: 20 }}>
-                Les dossiers patients apparaitront ici une fois crees.
+                Les dossiers patients apparaîtront ici une fois créés.
               </div>
               <button style={{ padding: "10px 24px", backgroundColor: "#3B82F6", color: "white", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
                 + Nouveau patient
