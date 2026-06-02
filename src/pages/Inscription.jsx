@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
+import PublicFooter from "../components/PublicFooter";
 
 // ─── constantes ──────────────────────────────────────────────────────────────
 const ROLES = [
@@ -463,7 +464,21 @@ export default function Inscription() {
       setEmailConfirme(form.email.trim());
       setEtape(2);
     } catch (e) {
-      setErreur(e.message);
+      const m = (e.message || "").toLowerCase();
+      if (m.includes("already registered") || m.includes("already exists") || m.includes("duplicate")) {
+        setErreur("Un compte existe deja avec cette adresse email. Connectez-vous ou utilisez une autre adresse.");
+      } else if (m.includes("password") && m.includes("weak")) {
+        setErreur("Le mot de passe est trop simple. Utilisez au moins 8 caracteres avec des chiffres et des lettres.");
+      } else if (m.includes("network") || m.includes("fetch")) {
+        setErreur("Impossible de contacter le serveur. Verifiez votre connexion internet.");
+      } else if (m.includes("violates row-level security") || m.includes("permission")) {
+        // Erreur RLS — ne pas exposer les details techniques
+        console.error("[inscription] Erreur RLS:", e.message);
+        setErreur("Une erreur s'est produite lors de l'envoi de votre demande. Veuillez reessayer.");
+      } else {
+        console.error("[inscription] Erreur:", e.message);
+        setErreur("Une erreur s'est produite. Veuillez reessayer ou contacter contact@kelagroup.org.");
+      }
     } finally {
       setSaving(false);
     }
@@ -566,6 +581,7 @@ export default function Inscription() {
           )}
         </div>
       </div>
+      <PublicFooter />
     </div>
   );
 }

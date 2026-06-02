@@ -10,3 +10,54 @@ body {
   -webkit-font-smoothing: antialiased;
   background-color: #F0F4FB;
 }
+
+/* ── Responsive — tableaux scrollables sur mobile ─────────────────────────── */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ── Grilles KPI responsives ──────────────────────────────────────────────── */
+.kpi-grid {
+  display: grid;
+  gap: 16px;
+}
+
+@media (min-width: 1024px) {
+  .kpi-grid-4 { grid-template-columns: repeat(4, 1fr); }
+  .kpi-grid-3 { grid-template-columns: repeat(3, 1fr); }
+  .kpi-grid-2 { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (min-width: 640px) and (max-width: 1023px) {
+  .kpi-grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .kpi-grid-3 { grid-template-columns: repeat(2, 1fr); }
+  .kpi-grid-2 { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 639px) {
+  .kpi-grid-4 { grid-template-columns: 1fr; }
+  .kpi-grid-3 { grid-template-columns: 1fr; }
+  .kpi-grid-2 { grid-template-columns: 1fr; }
+}
+
+/* ── Modales responsives ──────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  .modal-inner {
+    max-width: 95vw !important;
+    margin: 8px !important;
+    border-radius: 14px !important;
+  }
+}
+
+/* ── Grilles de formulaires : 2 colonnes → 1 colonne sur mobile ───────────── */
+@media (max-width: 639px) {
+  .form-row-2 {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ── Print ────────────────────────────────────────────────────────────────── */
+@media print {
+  .no-print { display: none !important; }
+}

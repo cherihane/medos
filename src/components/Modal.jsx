@@ -17,7 +17,7 @@ export default function Modal({ title, onClose, children, width = 540 }) {
         zIndex: 1000, padding: 20,
       }}
     >
-      <div style={{
+      <div className="modal-inner" style={{
         backgroundColor: "white", borderRadius: 18, width: "100%", maxWidth: width,
         maxHeight: "90vh", overflowY: "auto",
         boxShadow: "0 24px 80px rgba(0,0,0,0.25)",
