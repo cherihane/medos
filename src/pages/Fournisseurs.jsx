@@ -43,7 +43,7 @@ export default function Fournisseurs() {
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 21l1.65-3.8a9 9 0 1 1 3.4 2.9L3 21"/><path d="M9 10h.01M12 10h.01M15 10h.01"/></svg>
           </div>
           <div style={{ fontSize: 16, fontWeight: 700, color: "#374151", marginBottom: 8 }}>
-            Aucun fournisseur enregistre
+            Aucun fournisseur enregistré
           </div>
           <div style={{ fontSize: 13, color: "#9CA3AF", marginBottom: 20 }}>
             Ajoutez vos fournisseurs pour passer des commandes et gerer vos approvisionnements.

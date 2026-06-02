@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth, roleConfig } from "../context/AuthContext";
 import PublicFooter from "../components/PublicFooter";
+import { useIsMobile } from "../hooks/useWindowSize";
 
 /**
  * Traduit les erreurs techniques Supabase/Auth en messages utilisateur lisibles.
@@ -53,6 +54,7 @@ const features = [
 export default function Login() {
   const navigate = useNavigate();
   const { login } = useAuth();
+  const isMobile = useIsMobile(768);
   const [form, setForm] = useState({ email: "", password: "", role: "pharmacie" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -82,69 +84,92 @@ export default function Login() {
   };
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh" }}>
-      {/* Left panel */}
-      <div style={{
-        flex: 1,
-        backgroundColor: "#0A1628",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "center",
-        alignItems: "center",
-        padding: 48,
-        color: "white",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 44 }}>
-          <div style={{
-            width: 52, height: 52,
-            backgroundColor: "#3B82F6",
-            borderRadius: 14,
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}>
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
-            </svg>
-          </div>
-          <div>
-            <div style={{ fontSize: 34, fontWeight: 900, letterSpacing: 1 }}>MedOS</div>
-            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>par le groupe Kela</div>
-          </div>
-        </div>
+    <div style={{ display: "flex", minHeight: "100vh", flexDirection: isMobile ? "column" : "row" }}>
 
-        <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 10, textAlign: "center" }}>
-          Plateforme santé intelligente
-        </h2>
-        <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 13, textAlign: "center", maxWidth: 300, lineHeight: 1.8 }}>
-          Gérez vos pharmacies, hôpitaux et chaînes de distribution en temps réel avec l'IA au service de la santé africaine.
-        </p>
-
-        <div style={{ marginTop: 44, display: "flex", flexDirection: "column", gap: 14, width: "100%", maxWidth: 280 }}>
-          {features.map((f) => (
-            <div key={f} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "#3B82F6", flexShrink: 0 }} />
-              <span style={{ fontSize: 13, color: "rgba(255,255,255,0.6)" }}>{f}</span>
+      {/* Panneau gauche — masqué sur mobile */}
+      {!isMobile && (
+        <div style={{
+          flex: 1,
+          backgroundColor: "#0A1628",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          alignItems: "center",
+          padding: 48,
+          color: "white",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 44 }}>
+            <div style={{
+              width: 52, height: 52,
+              backgroundColor: "#3B82F6",
+              borderRadius: 14,
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+              </svg>
             </div>
-          ))}
-        </div>
-      </div>
+            <div>
+              <div style={{ fontSize: 34, fontWeight: 900, letterSpacing: 1 }}>MedOS</div>
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>par le groupe Kela</div>
+            </div>
+          </div>
 
-      {/* Right panel */}
+          <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 10, textAlign: "center" }}>
+            Plateforme santé intelligente
+          </h2>
+          <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 13, textAlign: "center", maxWidth: 300, lineHeight: 1.8 }}>
+            Gérez vos pharmacies, hôpitaux et chaînes de distribution en temps réel avec l'IA au service de la santé africaine.
+          </p>
+
+          <div style={{ marginTop: 44, display: "flex", flexDirection: "column", gap: 14, width: "100%", maxWidth: 280 }}>
+            {features.map((f) => (
+              <div key={f} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "#3B82F6", flexShrink: 0 }} />
+                <span style={{ fontSize: 13, color: "rgba(255,255,255,0.6)" }}>{f}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Panneau droit — formulaire */}
       <div style={{
         flex: 1,
-        backgroundColor: "#F0F4FB",
+        backgroundColor: isMobile ? "#0A1628" : "#F0F4FB",
         display: "flex",
         justifyContent: "center",
-        alignItems: "center",
-        padding: 48,
+        alignItems: isMobile ? "flex-start" : "center",
+        padding: isMobile ? "32px 20px 40px" : 48,
       }}>
         <div style={{
           backgroundColor: "white",
           borderRadius: 20,
-          padding: "40px 44px",
+          padding: isMobile ? "32px 24px" : "40px 44px",
           width: "100%",
           maxWidth: 420,
           boxShadow: "0 4px 24px rgba(0,0,0,0.08)",
         }}>
+          {/* Logo visible uniquement sur mobile */}
+          {isMobile && (
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 28, justifyContent: "center" }}>
+              <div style={{
+                width: 42, height: 42,
+                backgroundColor: "#3B82F6",
+                borderRadius: 12,
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                </svg>
+              </div>
+              <div>
+                <div style={{ fontSize: 26, fontWeight: 900, color: "#0A1628", letterSpacing: 0.5 }}>MedOS</div>
+                <div style={{ fontSize: 11, color: "#9CA3AF" }}>par le groupe Kela</div>
+              </div>
+            </div>
+          )}
+
           <h2 style={{ fontSize: 22, fontWeight: 800, color: "#0A1628", marginBottom: 4 }}>Connexion</h2>
           <p style={{ color: "#6B7280", fontSize: 13, marginBottom: 28 }}>Accédez à votre espace MedOS</p>
 

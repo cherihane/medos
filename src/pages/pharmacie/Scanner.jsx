@@ -265,7 +265,7 @@ export default function Scanner({ profile = "pharmacie" }) {
 
             {error && (
               <div style={{ marginTop: 12, padding: "10px 14px", backgroundColor: "#FEF2F2", borderRadius: 8, fontSize: 12, color: "#DC2626" }}>
-                Erreur : {error}
+                Une erreur s'est produite. Veuillez réessayer.
               </div>
             )}
           </div>

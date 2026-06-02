@@ -39,7 +39,7 @@ export default function ErrorRetry({ message, onRetry, compact = false }) {
               fontFamily:      "inherit",
             }}
           >
-            Reessayer
+            Réessayer
           </button>
         )}
       </div>

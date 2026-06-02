@@ -891,7 +891,7 @@ function OngletJournal({ refreshKey }) {
           </span>
         </div>
         {loading && <div style={{ color: "#9CA3AF", fontSize: 13 }}>Chargement…</div>}
-        {error && <div style={{ color: "#EF4444", fontSize: 13 }}>{error}</div>}
+        {error && <div style={{ color: "#EF4444", fontSize: 13 }}>Une erreur s'est produite. Veuillez réessayer.</div>}
         {!loading && !error && journal.length === 0 && (
           <div style={{ color: "#9CA3AF", fontSize: 13, textAlign: "center", padding: 20 }}>Aucune transaction pour cette date.</div>
         )}
