@@ -1,5 +1,88 @@
+import { useState } from "react";
 import Layout from "../../components/Layout";
-import { useMedicamentsCritiques, useMedicaments } from "../../hooks/useSupabaseData";
+import { useMedicamentsCritiques, useMedicaments, useFournisseurs } from "../../hooks/useSupabaseData";
+import { insertCommande } from "../../hooks/useMutations";
+
+const inputStyle = {
+  width: "100%", padding: "9px 13px", border: "1.5px solid #E5E7EB",
+  borderRadius: 8, fontSize: 13, outline: "none", boxSizing: "border-box",
+  color: "#0A1628", backgroundColor: "white",
+};
+
+function CommanderModal({ medicamentNom, quantiteDefaut, onClose, onSaved }) {
+  const { data: fournisseurs, loading: loadingF } = useFournisseurs();
+  const [fournisseurId, setFournisseurId] = useState("");
+  const [quantite, setQuantite] = useState(String(quantiteDefaut));
+  const [saving, setSaving] = useState(false);
+  const [erreur, setErreur] = useState(null);
+
+  const handleSave = async () => {
+    if (!fournisseurId) { setErreur("Veuillez sélectionner un fournisseur."); return; }
+    const qty = parseInt(quantite, 10);
+    if (!qty || qty <= 0) { setErreur("La quantité doit être supérieure à 0."); return; }
+    setSaving(true);
+    try {
+      await insertCommande({
+        fournisseur_id: fournisseurId,
+        statut: "envoyee",
+        date_commande: new Date().toISOString(),
+        notes: `${medicamentNom} — Qté : ${qty} (recommandation IA Prédictions)`,
+        montant_total: 0,
+      });
+      onSaved("Commande passée pour " + medicamentNom);
+      onClose();
+    } catch (e) {
+      setErreur("Erreur : " + e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+      <div style={{ backgroundColor: "white", borderRadius: 16, width: 420, padding: "24px 28px", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Commander — {medicamentNom}</h3>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9CA3AF" }}>×</button>
+        </div>
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Fournisseur *</label>
+          <select
+            value={fournisseurId}
+            onChange={(e) => setFournisseurId(e.target.value)}
+            style={{ ...inputStyle, cursor: loadingF ? "wait" : "pointer" }}
+          >
+            <option value="">{loadingF ? "Chargement…" : "— Sélectionner —"}</option>
+            {fournisseurs.filter((f) => f.actif !== false).map((f) => (
+              <option key={f.id} value={f.id}>{f.nom}</option>
+            ))}
+          </select>
+        </div>
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Quantité à commander</label>
+          <input
+            style={inputStyle}
+            type="number"
+            min="1"
+            value={quantite}
+            onChange={(e) => setQuantite(e.target.value)}
+          />
+        </div>
+        {erreur && (
+          <div style={{ padding: "9px 13px", backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, fontSize: 12, color: "#DC2626", marginBottom: 12 }}>
+            {erreur}
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button onClick={onClose} style={{ padding: "9px 18px", backgroundColor: "white", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 13, color: "#6B7280", cursor: "pointer" }}>Annuler</button>
+          <button onClick={handleSave} disabled={saving} style={{ padding: "9px 18px", backgroundColor: saving ? "#E5E7EB" : "#10B981", color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer" }}>
+            {saving ? "Envoi…" : "Passer la commande"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const riskColor = { critique: "#EF4444", alerte: "#F59E0B", normal: "#10B981" };
 
@@ -20,6 +103,10 @@ function getRisque(m) {
 export default function Predictions() {
   const { data: critiques, loading } = useMedicamentsCritiques(20);
   const { data: allMeds } = useMedicaments();
+  const [commanderModal, setCommanderModal] = useState(null); // { nom, quantite }
+  const [toast, setToast] = useState(null);
+
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3500); };
 
   // Build predictions from critiques meds
   const predictions = critiques.map((m) => ({
@@ -33,6 +120,19 @@ export default function Predictions() {
   return (
     <Layout title="Prédictions IA" subtitle="Anticipation de la demande médicamenteuse par intelligence artificielle">
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
+      {toast && (
+        <div style={{ position: "fixed", top: 20, right: 20, backgroundColor: "#10B981", color: "white", padding: "12px 20px", borderRadius: 10, fontWeight: 600, fontSize: 13, zIndex: 2000, boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}>
+          {toast}
+        </div>
+      )}
+      {commanderModal && (
+        <CommanderModal
+          medicamentNom={commanderModal.nom}
+          quantiteDefaut={commanderModal.quantite}
+          onClose={() => setCommanderModal(null)}
+          onSaved={(msg) => { showToast(msg); setCommanderModal(null); }}
+        />
+      )}
       <div className="kpi-row">
         {[
           { label: "Produits à surveiller", value: loading ? "…" : predictions.length,                                            color: "#10B981" },
@@ -103,7 +203,10 @@ export default function Predictions() {
                   <div style={{ fontSize: 13, fontWeight: 600, color: "#0A1628" }}>{p.medicament}</div>
                   <div style={{ fontSize: 11, color: "#9CA3AF" }}>{p.recommendation}</div>
                 </div>
-                <button style={{ padding: "6px 14px", backgroundColor: "#10B981", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                <button
+                  onClick={() => setCommanderModal({ nom: p.medicament, quantite: Math.max(0, (critiques.find(m => m.nom === p.medicament)?.stock_minimum ?? 0) * 3 - p.stock) })}
+                  style={{ padding: "6px 14px", backgroundColor: "#10B981", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                >
                   Commander
                 </button>
               </div>

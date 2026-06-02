@@ -80,7 +80,7 @@ export default function Cartographie() {
                 <div style={{ fontSize: 12, color: "#9CA3AF" }}>{villes} ville{villes > 1 ? "s" : ""}</div>
               </div>
               <div style={{ position: "absolute", bottom: 12, right: 12, fontSize: 11, color: "#9CA3AF", backgroundColor: "rgba(255,255,255,0.8)", padding: "4px 8px", borderRadius: 6 }}>
-                Integration cartographique interactive — a venir
+                Vue par ville — {villes} zone{villes > 1 ? "s" : ""} couverte{villes > 1 ? "s" : ""}
               </div>
             </div>
           )}

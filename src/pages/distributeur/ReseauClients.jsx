@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Layout from "../../components/Layout";
 import { useEtablissements } from "../../hooks/useSupabaseData";
+import { insertLivraison } from "../../hooks/useMutations";
 import { supabase } from "../../supabaseClient";
 import { useIsMobile } from "../../hooks/useWindowSize";
 
@@ -160,6 +161,140 @@ function NouveauClientModal({ onClose, onSaved, etabsMedOS }) {
   );
 }
 
+// ─── Modal Créer une livraison vers un client ─────────────────────────────────
+function CommandeClientModal({ client, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    transporteur: "",
+    date_depart: new Date().toISOString().slice(0, 10),
+    date_arrivee_prevue: "",
+    notes: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [erreur, setErreur] = useState(null);
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const handleSave = async () => {
+    setErreur(null);
+    setSaving(true);
+    try {
+      await insertLivraison({
+        etablissement_id: client.id,
+        statut: "planifiee",
+        transporteur: form.transporteur || null,
+        numero_suivi: "LIV-" + Date.now().toString().slice(-8),
+        date_depart: form.date_depart || null,
+        date_arrivee_prevue: form.date_arrivee_prevue || null,
+      });
+      onSaved("Livraison créée pour " + client.nom);
+      onClose();
+    } catch (e) {
+      setErreur("Erreur : " + e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+      <div style={{ backgroundColor: "white", borderRadius: 16, width: 460, padding: "24px 28px", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#0A1628" }}>Nouvelle livraison — {client.nom}</h3>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9CA3AF" }}>×</button>
+        </div>
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Transporteur</label>
+          <input style={inputStyle} value={form.transporteur} onChange={set("transporteur")} placeholder="Ex: DHL, Transport local…" />
+        </div>
+        <div className="form-row-2" style={{ marginBottom: 14 }}>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Date de départ</label>
+            <input style={inputStyle} type="date" value={form.date_depart} onChange={set("date_depart")} />
+          </div>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Arrivée prévue</label>
+            <input style={inputStyle} type="date" value={form.date_arrivee_prevue} onChange={set("date_arrivee_prevue")} />
+          </div>
+        </div>
+        {erreur && (
+          <div style={{ padding: "9px 13px", backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, fontSize: 12, color: "#DC2626", marginBottom: 12 }}>
+            {erreur}
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button onClick={onClose} style={{ padding: "9px 18px", backgroundColor: "white", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 13, color: "#6B7280", cursor: "pointer" }}>Annuler</button>
+          <button onClick={handleSave} disabled={saving} style={{ padding: "9px 18px", backgroundColor: saving ? "#E5E7EB" : "#F59E0B", color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer" }}>
+            {saving ? "Création…" : "Créer la livraison"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Modal Historique livraisons d'un client ──────────────────────────────────
+const STATUT_LIV = {
+  planifiee:  { label: "Planifiée",   bg: "#F3F4F6", color: "#6B7280" },
+  en_transit: { label: "En transit",  bg: "#E0E7FF", color: "#4F46E5" },
+  livree:     { label: "Livrée",      bg: "#DCFCE7", color: "#16A34A" },
+  annulee:    { label: "Annulée",     bg: "#FEF2F2", color: "#DC2626" },
+};
+
+function HistoriqueClientModal({ client, onClose }) {
+  const [livraisons, setLivraisons] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    supabase
+      .from("livraisons")
+      .select("id, numero_suivi, statut, date_depart, date_arrivee_prevue, transporteur")
+      .eq("etablissement_id", client.id)
+      .order("date_depart", { ascending: false })
+      .limit(20)
+      .then(({ data }) => { setLivraisons(data ?? []); setLoading(false); });
+  }, [client.id]);
+
+  return (
+    <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+      <div style={{ backgroundColor: "white", borderRadius: 16, width: 520, maxHeight: "80vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+        <div style={{ padding: "20px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #E5E7EB", flexShrink: 0 }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#0A1628" }}>Historique — {client.nom}</h3>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9CA3AF" }}>×</button>
+        </div>
+        <div style={{ overflowY: "auto", padding: "16px 24px", flex: 1 }}>
+          {loading && (
+            <div style={{ textAlign: "center", color: "#9CA3AF", fontSize: 13, padding: 24 }}>Chargement…</div>
+          )}
+          {!loading && livraisons.length === 0 && (
+            <div style={{ textAlign: "center", color: "#9CA3AF", fontSize: 13, padding: 32 }}>
+              Aucune livraison enregistrée pour ce client.
+            </div>
+          )}
+          {!loading && livraisons.map((l) => {
+            const s = STATUT_LIV[l.statut] ?? { label: l.statut, bg: "#F3F4F6", color: "#6B7280" };
+            return (
+              <div key={l.id} style={{ padding: "12px 14px", backgroundColor: "#F8FAFC", borderRadius: 10, marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#0A1628", fontFamily: "monospace" }}>{l.numero_suivi ?? l.id.slice(0, 8).toUpperCase()}</div>
+                  <div style={{ fontSize: 11, color: "#6B7280", marginTop: 2 }}>
+                    {l.date_depart ? new Date(l.date_depart).toLocaleDateString("fr-FR") : "—"}
+                    {l.transporteur ? ` · ${l.transporteur}` : ""}
+                  </div>
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 10, backgroundColor: s.bg, color: s.color }}>
+                  {s.label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ padding: "14px 24px", borderTop: "1px solid #E5E7EB", display: "flex", justifyContent: "flex-end", flexShrink: 0 }}>
+          <button onClick={onClose} style={{ padding: "9px 18px", backgroundColor: "white", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 13, color: "#6B7280", cursor: "pointer" }}>Fermer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Page principale ──────────────────────────────────────────────────────────
 export default function ReseauClients() {
   const isMobile = useIsMobile();
@@ -167,6 +302,8 @@ export default function ReseauClients() {
   const { data: etabs, loading, refetch } = useEtablissements();
   const [selected, setSelected] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [commandeModal, setCommandeModal] = useState(null);
+  const [historiqueModal, setHistoriqueModal] = useState(null);
   const [toast, setToast] = useState(null);
 
   const showToast = (msg) => {
@@ -189,6 +326,19 @@ export default function ReseauClients() {
           onClose={() => setShowModal(false)}
           onSaved={(msg) => { showToast(msg); refetch(); }}
           etabsMedOS={etabs}
+        />
+      )}
+      {commandeModal && (
+        <CommandeClientModal
+          client={commandeModal}
+          onClose={() => setCommandeModal(null)}
+          onSaved={(msg) => { showToast(msg); setCommandeModal(null); }}
+        />
+      )}
+      {historiqueModal && (
+        <HistoriqueClientModal
+          client={historiqueModal}
+          onClose={() => setHistoriqueModal(null)}
         />
       )}
 
@@ -266,8 +416,8 @@ export default function ReseauClients() {
                 </div>
               ))}
               <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
-                <button style={{ flex: 1, padding: "9px", backgroundColor: "#F59E0B", color: "white", border: "none", borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Créer commande</button>
-                <button style={{ flex: 1, padding: "9px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 10, fontSize: 12, cursor: "pointer" }}>Historique</button>
+                <button onClick={() => setCommandeModal(selected)} style={{ flex: 1, padding: "9px", backgroundColor: "#F59E0B", color: "white", border: "none", borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Créer commande</button>
+                <button onClick={() => setHistoriqueModal(selected)} style={{ flex: 1, padding: "9px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 10, fontSize: 12, cursor: "pointer" }}>Historique</button>
               </div>
             </>
           )}
