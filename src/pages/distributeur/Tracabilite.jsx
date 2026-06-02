@@ -90,7 +90,7 @@ export default function Tracabilite() {
       <Toast toasts={toasts} />
       {showCamera && <QrScanner onScan={handleQrScan} onClose={() => setShowCamera(false)} />}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+      <div className="dash-grid-2">
 
         {/* ── Gauche : scanner ── */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>

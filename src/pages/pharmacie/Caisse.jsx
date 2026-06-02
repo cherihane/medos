@@ -7,6 +7,7 @@ import { insertVentes, decrementStock, insertJournalCaisse, fetchJournalJour, in
 import { supabase } from "../../supabaseClient";
 import { useAuth } from "../../context/AuthContext";
 import { openDocument, tableHTML, kpiHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
+import { useIsMobile } from "../../hooks/useWindowSize";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 function todayISO() {
@@ -232,6 +233,7 @@ function exportCSV(journal, date) {
 
 // ─── Onglet Caisse ────────────────────────────────────────────────────────────
 function OngletCaisse({ onSaleComplete }) {
+  const isMobile = useIsMobile();
   const { auth } = useAuth();
   const { data: medicaments, loading } = useMedicaments();
   const { toasts, success, error: toastError } = useToast();
@@ -372,7 +374,7 @@ function OngletCaisse({ onSaleComplete }) {
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 20, height: "calc(100vh - 220px)" }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 360px", gap: 20, height: isMobile ? "auto" : "calc(100vh - 220px)" }}>
         {/* Gauche */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div style={{ backgroundColor: "white", borderRadius: 14, padding: "16px 20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
@@ -389,13 +391,13 @@ function OngletCaisse({ onSaleComplete }) {
               Produits disponibles {!loading && `(${medicaments.length})`}
             </h3>
             {loading ? (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
+              <div className="kpi-grid kpi-grid-4" style={{ gap: 10 }}>
                 {[1,2,3,4,5,6,7,8].map((i) => (
                   <div key={i} style={{ height: 64, backgroundColor: "#F3F4F6", borderRadius: 10, animation: "pulse 1.5s ease-in-out infinite" }} />
                 ))}
               </div>
             ) : (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+              <div className="kpi-grid kpi-grid-4" style={{ gap: 10 }}>
                 {favoris.map((m) => {
                   const sansPrix = (m.prix_unitaire ?? 0) === 0;
                   const rupture = (m.stock_actuel ?? 0) === 0;
@@ -624,7 +626,7 @@ function ClotureModal({ date, journal, byMode, totalEncaisse, auth, onClose, onD
 
         {/* Récapitulatif */}
         <div style={{ backgroundColor: "#F8FAFC", borderRadius: 10, padding: "14px 16px", marginBottom: 20 }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <div className="table-scroll"><table style={{ width: "100%", borderCollapse: "collapse" }}>
             <tbody>
               {[
                 { label: "Espèces",      val: totaux.especes },
@@ -642,7 +644,7 @@ function ClotureModal({ date, journal, byMode, totalEncaisse, auth, onClose, onD
                 <td style={{ fontSize: 15, fontWeight: 800, color: "#10B981", textAlign: "right", paddingTop: 8 }}>{totaux.total.toLocaleString("fr-FR")} FCFA</td>
               </tr>
             </tbody>
-          </table>
+          </table></div>
           <div style={{ marginTop: 10, fontSize: 12, color: "#6B7280" }}>Transactions : <strong>{nb}</strong></div>
         </div>
 
@@ -828,7 +830,7 @@ function OngletJournal({ refreshKey }) {
       )}
 
       {/* KPI */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+      <div className="kpi-grid kpi-grid-4" style={{ gap: 12 }}>
         {[
           { label: "Total encaissé", value: `${totalEncaisse.toLocaleString()} FCFA`, color: "#10B981" },
           { label: "Dont espèces (ventes)", value: `${totalEspecesTheorique.toLocaleString()} FCFA`, color: "#3B82F6" },

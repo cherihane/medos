@@ -136,7 +136,7 @@ export default function Rapports() {
   return (
     <Layout title="Rapports" subtitle="Analyses et indicateurs de performance">
       {/* ── KPI ── */}
-      <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
+      <div className="kpi-row">
         {kpis.map((k) => (
           <div key={k.label} style={{ backgroundColor: "white", padding: "18px 22px", borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
             <div style={{ fontSize: 22, fontWeight: 800, color: k.color }}>{k.value}</div>
@@ -146,7 +146,7 @@ export default function Rapports() {
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20, marginBottom: 20 }}>
+      <div className="dash-grid-2-1" style={{ marginBottom: 20 }}>
         {/* Stock par catégorie */}
         <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", minWidth: 0 }}>
           <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Stock par catégorie</h3>
@@ -197,7 +197,7 @@ export default function Rapports() {
       </div>
 
       {/* Alertes par type + rapports */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+      <div className="dash-grid-2">
         <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
           <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Alertes par type</h3>
           {loading ? (

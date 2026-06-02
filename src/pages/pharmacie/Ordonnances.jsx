@@ -8,6 +8,7 @@ import { useToast } from "../../hooks/useToast";
 import { useOrdonnancesPaginated, usePatients } from "../../hooks/useSupabaseData";
 import Pagination from "../../components/Pagination";
 import { updateOrdonnance, insertOrdonnance } from "../../hooks/useMutations";
+import { useIsMobile } from "../../hooks/useWindowSize";
 
 const statusStyle = {
   traitee:    { bg: "#DCFCE7", color: "#16A34A",  label: "Traitée" },
@@ -119,6 +120,8 @@ function NouvelleModal({ patients, onClose, onSaved }) {
 }
 
 export default function Ordonnances() {
+  const isMobile = useIsMobile();
+
   const [statutFilter, setStatutFilter] = useState("");
   const { data: ordonnances, loading, error, total, page, setPage, totalPages, refetch } = useOrdonnancesPaginated(statutFilter);
   const { data: patients } = usePatients();
@@ -155,7 +158,7 @@ export default function Ordonnances() {
         />
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 380px", gap: 20 }}>
         {/* ── Liste ── */}
         <div style={{ backgroundColor: "white", borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
           <div style={{ padding: "16px 20px", borderBottom: "1px solid #E5E7EB", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -179,7 +182,7 @@ export default function Ordonnances() {
             </div>
           </div>
 
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <div className="table-scroll"><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ backgroundColor: "#F8FAFC" }}>
                 {["Référence", "Patient", "Médecin", "Date", "Statut"].map((h) => (
@@ -219,7 +222,7 @@ export default function Ordonnances() {
                 );
               })}
             </tbody>
-          </table>
+          </table></div>
           <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
         </div>
 

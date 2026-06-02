@@ -33,11 +33,11 @@ export default function DashboardPharmacie() {
 
   return (
     <Layout title="Dashboard Pharmacie">
-      <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
+      <div className="kpi-row">
         {kpiCards.map((k) => <KpiCard key={k.label} {...k} />)}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20 }}>
+      <div className="dash-grid-2-1">
         {/* Graphique ventes 7 jours */}
         <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", minWidth: 0 }}>
           <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>

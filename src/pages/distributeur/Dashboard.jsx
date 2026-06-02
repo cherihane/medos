@@ -202,7 +202,7 @@ export default function DashboardDistributeur() {
       `}</style>
 
       {/* KPIs */}
-      <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
+      <div className="kpi-row">
         {kpis.map((k) => (
           <div key={k.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
             <div style={{ fontSize: 24, fontWeight: 800, color: k.color }}>{k.value}</div>
@@ -211,7 +211,7 @@ export default function DashboardDistributeur() {
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+      <div className="dash-grid-2">
         {/* Réseau établissements */}
         <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
           <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>

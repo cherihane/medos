@@ -42,7 +42,7 @@ export default function Cartographie() {
 
   return (
     <Layout title="Cartographie" subtitle="Geolocalisation des structures de sante sur le territoire national">
-      <div style={{ display: "flex", gap: 16, marginBottom: 20 }}>
+      <div className="kpi-row">
         {kpis.map((k) => (
           <div key={k.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "16px 20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
             <div style={{ fontSize: 20, fontWeight: 800, color: k.color }}>{k.value}</div>
@@ -51,7 +51,7 @@ export default function Cartographie() {
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20 }}>
+      <div className="dash-grid-2-1">
         {/* Zone carte */}
         <div style={{ backgroundColor: "white", borderRadius: 16, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
           <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Carte des etablissements</h3>

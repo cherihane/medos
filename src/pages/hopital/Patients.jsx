@@ -251,7 +251,7 @@ function ModalNouveauPatient({ etablissement_id, medecinNom, onClose, onSaved })
         </div>
 
         <div style={{ overflowY: "auto", padding: "0 26px 10px", flexGrow: 1, display: "flex", flexDirection: "column", gap: 14 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div className="form-row-2">
             <div><label style={labelSt}>Prénom <span style={{ color: "#EF4444" }}>*</span></label><input style={inputSt} value={form.prenom} onChange={(e) => set("prenom", e.target.value)} placeholder="Prénom" /></div>
             <div><label style={labelSt}>Nom <span style={{ color: "#EF4444" }}>*</span></label><input style={inputSt} value={form.nom} onChange={(e) => set("nom", e.target.value)} placeholder="Nom de famille" /></div>
           </div>
@@ -271,7 +271,7 @@ function ModalNouveauPatient({ etablissement_id, medecinNom, onClose, onSaved })
               </select>
             </div>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div className="form-row-2">
             <div><label style={labelSt}>Téléphone</label><input style={inputSt} value={form.telephone} onChange={(e) => set("telephone", e.target.value)} placeholder="+225 07 00 00 00 00" /></div>
             <div><label style={labelSt}>Adresse</label><input style={inputSt} value={form.adresse} onChange={(e) => set("adresse", e.target.value)} placeholder="Quartier, ville" /></div>
           </div>
@@ -356,7 +356,7 @@ function ModalNouvelleOrdonnance({ patient, etablissement_id, medecinNom, medica
             </div>
             <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9CA3AF" }}>×</button>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+          <div className="form-row-2" style={{ marginBottom: 14 }}>
             <div><label style={labelSt}>Médecin prescripteur</label><input style={{ ...inputSt, background: "#F8FAFC", color: "#6B7280" }} value={medecinNom ?? "Non précisé"} readOnly /></div>
             <div><label style={labelSt}>Date d'expiration</label><input style={inputSt} type="date" value={dateExpiration} onChange={(e) => setDateExp(e.target.value)} /></div>
           </div>
@@ -447,7 +447,7 @@ function ModalNouveauCompteRendu({ patient, etablissement_id, medecinNom, onClos
         </div>
 
         <div style={{ overflowY: "auto", padding: "0 26px 10px", flexGrow: 1, display: "flex", flexDirection: "column", gap: 14 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div className="form-row-2">
             <div><label style={labelSt}>Médecin <span style={{ color: "#EF4444" }}>*</span></label><input style={inputSt} value={form.medecin} onChange={(e) => set("medecin", e.target.value)} placeholder="Dr. Nom Prénom" /></div>
             <div><label style={labelSt}>Date de consultation</label><input style={inputSt} type="date" value={form.date_consultation} onChange={(e) => set("date_consultation", e.target.value)} /></div>
           </div>
@@ -626,7 +626,7 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
               <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
                 <div>
                   <h4 style={{ margin: "0 0 12px", fontSize: 13, fontWeight: 700, color: "#0A1628" }}>Informations personnelles</h4>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <div className="form-row-2" style={{ gap: 10 }}>
                     {[["Date de naissance", fmtDate(patient.date_naissance)], ["Téléphone", patient.telephone || "—"], ["Adresse", patient.adresse || "—"], ["Dernière visite", fmtDate(patient.derniere_visite)], ["Service", patient.service ?? "—"], ["Statut", patient.statut === "hospitalise" ? "Hospitalisé" : "Ambulatoire"]].map(([lbl, val]) => (
                       <div key={lbl} style={{ padding: "10px 14px", background: "#F8FAFC", borderRadius: 8 }}>
                         <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 3 }}>{lbl}</div>

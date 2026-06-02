@@ -57,7 +57,7 @@ export default function Fournisseurs() {
           Aucun fournisseur ne correspond a la recherche.
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
+        <div className="dash-grid-2">
           {filtered.map((f) => (
             <div
               key={f.id}
@@ -87,7 +87,7 @@ export default function Fournisseurs() {
                 </span>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+              <div className="form-row-2" style={{ gap: 10, marginBottom: 14 }}>
                 {[
                   { label: "Delai de livraison", value: f.delai_livraison ?? "—" },
                   { label: "Conditions paiement", value: f.conditions_paiement ?? "—" },

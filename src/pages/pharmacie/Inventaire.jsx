@@ -356,7 +356,7 @@ export default function Inventaire() {
       </div>
 
       {/* ── KPI mini ── */}
-      <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+      <div className="kpi-row">
         {[
           { label: "Total produits",  value: loading ? "…" : counts.total,    color: "#3B82F6" },
           { label: "Stock critique",  value: loading ? "…" : counts.critique,  color: "#EF4444" },
@@ -378,7 +378,7 @@ export default function Inventaire() {
 
       {/* ── Tableau ── */}
       <div style={{ backgroundColor: "white", borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <div className="table-scroll"><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr style={{ backgroundColor: "#F8FAFC" }}>
               {["Code", "Produit", "Catégorie", "Stock", "Seuil min", "Prix unitaire", "Forme", "Statut", "Actions"].map((h) => (
@@ -437,7 +437,7 @@ export default function Inventaire() {
               );
             })}
           </tbody>
-        </table>
+        </table></div>
         <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
       </div>
     </Layout>

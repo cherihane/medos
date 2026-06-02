@@ -122,7 +122,7 @@ export default function Contrefacons() {
         />
       )}
 
-      <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
+      <div className="kpi-row">
         {[
           { label: "Incidents actifs",   value: loading ? "…" : incidents.length,                                        color: "#EF4444" },
           { label: "Critiques",          value: loading ? "…" : incidents.filter(i => i.severite === "critique").length,  color: "#F59E0B" },
@@ -154,7 +154,7 @@ export default function Contrefacons() {
           </button>
         </div>
 
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <div className="table-scroll"><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr style={{ backgroundColor: "#F8FAFC" }}>
               {["Date", "Titre", "Type", "Gravité", "Actions"].map((h) => (
@@ -199,7 +199,7 @@ export default function Contrefacons() {
               );
             })}
           </tbody>
-        </table>
+        </table></div>
       </div>
     </Layout>
   );
