@@ -433,23 +433,31 @@ export default function Inscription() {
       const { error: insertError } = await supabase.from("etablissements").insert(payload);
       if (insertError) throw new Error(insertError.message);
 
-      // 3. Envoyer les emails d'inscription (confirmation + notification admin) — non bloquant
+      // 3. Envoyer les emails d'inscription (confirmation + notification admin) — non bloquant.
+      // functions.invoke() ne throw pas sur erreur HTTP — il faut vérifier { error }.
       try {
-        await supabase.functions.invoke("send-inscription-email", {
+        const { data: emailData, error: emailError } = await supabase.functions.invoke("send-inscription-email", {
           body: {
-            nom:              payload.nom,
-            type:             payload.type,
-            ville:            payload.ville,
-            pays:             payload.pays,
-            email:            payload.email,
-            adresse:          payload.adresse ?? null,
-            licence_numero:   payload.licence_numero,
+            nom:               payload.nom,
+            type:              payload.type,
+            ville:             payload.ville,
+            pays:              payload.pays,
+            email:             payload.email,
+            adresse:           payload.adresse ?? null,
+            licence_numero:    payload.licence_numero,
             notes_inscription: payload.notes_inscription,
           },
         });
+        // functions.invoke() ne met error que sur réponse non-2xx.
+        // La fonction retourne { ok, errors } — vérifier les deux cas.
+        if (emailError) {
+          console.error("[inscription] Echec envoi emails (HTTP error):", emailError);
+        } else if (emailData && !emailData.ok) {
+          console.error("[inscription] Echec envoi emails (Resend error):", emailData.errors);
+        }
       } catch (emailErr) {
-        // Un echec d'email ne doit pas bloquer l'inscription
-        console.error("[inscription] Echec envoi emails:", emailErr);
+        // Erreur réseau — ne bloque pas l'inscription
+        console.error("[inscription] Echec envoi emails (réseau):", emailErr);
       }
 
       setEmailConfirme(form.email.trim());

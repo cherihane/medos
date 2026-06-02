@@ -276,6 +276,11 @@ async function sendEmail(to: string, subject: string, html: string): Promise<voi
 // ─── Handler principal ────────────────────────────────────────────────────────
 
 Deno.serve(async (req: Request) => {
+  // Log de diagnostic — visible dans Supabase Dashboard > Edge Functions > Logs
+  console.log("[send-inscription-email] RESEND_API_KEY present:", !!RESEND_API_KEY);
+  console.log("[send-inscription-email] FROM_EMAIL:", FROM_EMAIL);
+  console.log("[send-inscription-email] ADMIN_EMAIL:", ADMIN_EMAIL);
+
   if (req.method === "OPTIONS") {
     return new Response(null, {
       headers: {
