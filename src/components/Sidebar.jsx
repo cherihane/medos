@@ -5,12 +5,13 @@ import { useNotifications } from "../context/NotificationsContext";
 import { useIsMobile } from "../hooks/useWindowSize";
 import { supabase } from "../supabaseClient";
 import NavIcon from "./NavIcon";
+import { colors, sidebar, radius, font } from "../theme";
 
 const roleColors = {
-  pharmacie:    "#3B82F6",
-  hopital:      "#10B981",
-  distributeur: "#F59E0B",
-  autorite:     "#8B5CF6",
+  pharmacie:    colors.pharmacie,
+  hopital:      colors.hopital,
+  distributeur: colors.distributeur,
+  autorite:     colors.autorite,
 };
 
 const BADGE_MAP = {

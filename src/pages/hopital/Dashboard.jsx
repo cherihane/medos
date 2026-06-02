@@ -1,7 +1,36 @@
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import KpiCard from "../../components/KpiCard";
 import PredictionsIA from "../../components/PredictionsIA";
 import { useAlertes, useKpiHopital, usePatients } from "../../hooks/useSupabaseData";
+import { supabase } from "../../supabaseClient";
+import { colors, radius, shadow, font } from "../../theme";
+
+function useTendanceHopital() {
+  const [hier, setHier] = useState(null);
+  useEffect(() => {
+    const today = new Date();
+    const hierDebut = new Date(today); hierDebut.setDate(hierDebut.getDate() - 1); hierDebut.setHours(0,0,0,0);
+    const hierFin   = new Date(today); hierFin.setDate(hierFin.getDate() - 1); hierFin.setHours(23,59,59,999);
+    Promise.all([
+      supabase.from("alertes").select("id, severite").eq("resolu", false).gte("created_at", hierDebut.toISOString()).lte("created_at", hierFin.toISOString()),
+      supabase.from("ordonnances").select("id").gte("created_at", hierDebut.toISOString()).lte("created_at", hierFin.toISOString()),
+    ]).then(([alts, ords]) => {
+      setHier({
+        alertesHier: (alts.data ?? []).filter((a) => a.severite === "critique").length,
+        ordonnancesHier: ords.data?.length ?? 0,
+      });
+    });
+  }, []);
+  return hier;
+}
+
+function fmtChange(now, prev) {
+  if (prev == null || prev === 0) return null;
+  const pct = Math.round(((now - prev) / prev) * 100);
+  return pct > 0 ? `+${pct}%` : `${pct}%`;
+}
 
 
 function severiteStyle(severite) {
@@ -24,12 +53,14 @@ function Skeleton({ height = 16, width = "100%", mb = 8 }) {
 // ── KPI depuis Supabase ───────────────────────────────────────────────────────
 function KpiSection() {
   const { data: live, loading } = useKpiHopital();
+  const hier = useTendanceHopital();
+  const navigate = useNavigate();
 
   const kpis = [
-    { label: "Patients hospitalisés",    value: live?.patientsHospitalises ?? 0,    color: "#3B82F6" },
-    { label: "Alertes critiques",        value: live?.alertesCritiques ?? 0,        color: "#EF4444" },
-    { label: "Médicaments dispensés",    value: live?.medicamentsDispenses ?? 0,    color: "#10B981" },
-    { label: "Ordonnances",              value: live?.consultations ?? 0,           color: "#8B5CF6" },
+    { label: "Patients hospitalisés",  value: live?.patientsHospitalises ?? 0, color: "#3B82F6", to: "/hopital/patients",   change: null },
+    { label: "Alertes critiques",      value: live?.alertesCritiques ?? 0,     color: "#EF4444", to: "/hopital/alertes",    change: hier ? fmtChange(live?.alertesCritiques ?? 0, hier.alertesHier) : null },
+    { label: "Médicaments dispensés",  value: live?.medicamentsDispenses ?? 0, color: "#10B981", to: "/hopital/stock",      change: null },
+    { label: "Ordonnances",            value: live?.consultations ?? 0,        color: "#8B5CF6", to: "/hopital/patients",   change: hier ? fmtChange(live?.consultations ?? 0, hier.ordonnancesHier) : null },
   ];
 
   if (loading) {
@@ -49,9 +80,29 @@ function KpiSection() {
   return (
     <div className="kpi-row">
       {kpis.map((k) => (
-        <div key={k.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
-          <div style={{ fontSize: 26, fontWeight: 800, color: k.color }}>{k.value}</div>
-          <div style={{ fontSize: 12, color: "#6B7280", marginTop: 4 }}>{k.label}</div>
+        <div
+          key={k.label}
+          onClick={() => navigate(k.to)}
+          style={{
+            backgroundColor: "white", borderRadius: 14, padding: "20px 24px",
+            boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1,
+            borderLeft: `4px solid ${k.color}`,
+            cursor: "pointer",
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.1)"}
+          onMouseLeave={(e) => e.currentTarget.style.boxShadow = "0 1px 4px rgba(0,0,0,0.06)"}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+            <div style={{ fontSize: 26, fontWeight: 800, color: k.color }}>{k.value}</div>
+            {k.change && (
+              <span style={{
+                fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 20,
+                backgroundColor: k.change.startsWith("-") ? "#FEE2E2" : "#DCFCE7",
+                color: k.change.startsWith("-") ? "#DC2626" : "#16A34A",
+              }}>{k.change}</span>
+            )}
+          </div>
+          <div style={{ fontSize: 12, color: "#6B7280" }}>{k.label}</div>
         </div>
       ))}
     </div>

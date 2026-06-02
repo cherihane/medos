@@ -73,7 +73,6 @@ export default function ReinitialisationMotDePasse() {
         setError("Mot de passe trop faible. Utilisez au moins 8 caractères avec des lettres et des chiffres.");
       } else {
         setError("Une erreur s'est produite. Le lien a peut-être expiré. Faites une nouvelle demande.");
-        console.error("[MedOS] Réinitialisation mot de passe:", err.message);
       }
     } finally {
       setLoading(false);

@@ -1,7 +1,35 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import { useKpiDistributeur, useEtablissements, useCommandesRealtime } from "../../hooks/useSupabaseData";
 import { updateCommande } from "../../hooks/useMutations";
+import { supabase } from "../../supabaseClient";
+import { colors, radius, shadow, font } from "../../theme";
+
+function useTendanceDistributeur() {
+  const [hier, setHier] = useState(null);
+  useEffect(() => {
+    const today = new Date();
+    const hierDebut = new Date(today); hierDebut.setDate(hierDebut.getDate() - 1); hierDebut.setHours(0,0,0,0);
+    const hierFin   = new Date(today); hierFin.setDate(hierFin.getDate() - 1); hierFin.setHours(23,59,59,999);
+    Promise.all([
+      supabase.from("commandes").select("id").gte("created_at", hierDebut.toISOString()).lte("created_at", hierFin.toISOString()),
+      supabase.from("livraisons").select("id").eq("statut", "en_transit").gte("created_at", hierDebut.toISOString()).lte("created_at", hierFin.toISOString()),
+    ]).then(([c, l]) => {
+      setHier({
+        commandesHier:   c.data?.length ?? 0,
+        livraisonsHier:  l.data?.length ?? 0,
+      });
+    });
+  }, []);
+  return hier;
+}
+
+function fmtChange(now, prev) {
+  if (prev == null || prev === 0) return null;
+  const pct = Math.round(((now - prev) / prev) * 100);
+  return pct > 0 ? `+${pct}%` : `${pct}%`;
+}
 
 function fmt(iso) {
   if (!iso) return "—";
@@ -185,12 +213,17 @@ function CommandesPanel() {
 export default function DashboardDistributeur() {
   const { data: kpi, loading: loadKpi } = useKpiDistributeur();
   const { data: etabs, loading: loadEtabs } = useEtablissements();
+  const hier = useTendanceDistributeur();
+  const navigate = useNavigate();
+
+  const commandesActives   = loadKpi ? 0 : (kpi?.commandesActives ?? 0);
+  const livraisonsEnCours  = loadKpi ? 0 : (kpi?.livraisonsEnCours ?? 0);
 
   const kpis = [
-    { label: "Commandes actives",   value: loadKpi ? "…" : kpi?.commandesActives ?? 0,                              color: "#F59E0B" },
-    { label: "Clients",             value: loadKpi ? "…" : kpi?.clients ?? 0,                                       color: "#3B82F6" },
-    { label: "CA total",            value: loadKpi ? "…" : `${((kpi?.ca ?? 0) / 1000000).toFixed(1)}M FCFA`,        color: "#10B981" },
-    { label: "Livraisons en cours", value: loadKpi ? "…" : kpi?.livraisonsEnCours ?? 0,                             color: "#8B5CF6" },
+    { label: "Commandes actives",   value: loadKpi ? "…" : commandesActives,                                        color: "#F59E0B", to: "/distributeur/livraisons", change: hier ? fmtChange(commandesActives, hier.commandesHier) : null },
+    { label: "Clients",             value: loadKpi ? "…" : kpi?.clients ?? 0,                                       color: "#3B82F6", to: "/distributeur/clients",    change: null },
+    { label: "CA total",            value: loadKpi ? "…" : `${((kpi?.ca ?? 0) / 1000000).toFixed(1)}M FCFA`,        color: "#10B981", to: "/distributeur/livraisons", change: null },
+    { label: "Livraisons en cours", value: loadKpi ? "…" : livraisonsEnCours,                                       color: "#8B5CF6", to: "/distributeur/livraisons", change: hier ? fmtChange(livraisonsEnCours, hier.livraisonsHier) : null },
   ];
 
   return (
@@ -204,9 +237,24 @@ export default function DashboardDistributeur() {
       {/* KPIs */}
       <div className="kpi-row">
         {kpis.map((k) => (
-          <div key={k.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
-            <div style={{ fontSize: 24, fontWeight: 800, color: k.color }}>{k.value}</div>
-            <div style={{ fontSize: 12, color: "#6B7280", marginTop: 4 }}>{k.label}</div>
+          <div
+            key={k.label}
+            onClick={() => navigate(k.to)}
+            style={{ backgroundColor: "white", borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}`, cursor: "pointer", transition: "box-shadow 0.15s" }}
+            onMouseEnter={(e) => e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.1)"}
+            onMouseLeave={(e) => e.currentTarget.style.boxShadow = "0 1px 4px rgba(0,0,0,0.06)"}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+              <div style={{ fontSize: 24, fontWeight: 800, color: k.color }}>{k.value}</div>
+              {k.change && (
+                <span style={{
+                  fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 20,
+                  backgroundColor: k.change.startsWith("-") ? "#FEE2E2" : "#DCFCE7",
+                  color: k.change.startsWith("-") ? "#DC2626" : "#16A34A",
+                }}>{k.change}</span>
+              )}
+            </div>
+            <div style={{ fontSize: 12, color: "#6B7280" }}>{k.label}</div>
           </div>
         ))}
       </div>

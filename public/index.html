@@ -6,6 +6,22 @@
     <link rel="icon" type="image/svg+xml" href="%PUBLIC_URL%/logo.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#0A1628" />
+    <meta http-equiv="Content-Security-Policy" content="
+      default-src 'self';
+      script-src 'self' 'unsafe-inline';
+      style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+      font-src 'self' https://fonts.gstatic.com;
+      img-src 'self' data: blob: https://yehqmvwmosskumbegzty.supabase.co;
+      connect-src 'self'
+        https://yehqmvwmosskumbegzty.supabase.co
+        wss://yehqmvwmosskumbegzty.supabase.co
+        https://api.groq.com
+        https://bdpm.ansm.sante.fr;
+      frame-src 'none';
+      object-src 'none';
+      base-uri 'self';
+      form-action 'self';
+    " />
     <meta
       name="description"
       content="MedOS est la plateforme SaaS médicale qui connecte hôpitaux, pharmacies, distributeurs et autorités sanitaires en Afrique."
