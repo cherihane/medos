@@ -16,13 +16,15 @@ export default function KpiCard({ label, value, change, color }) {
         <div style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: color + "18", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <div style={{ width: 10, height: 10, borderRadius: "50%", backgroundColor: color }} />
         </div>
-        <span style={{
-          fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 20,
-          backgroundColor: change && change.startsWith("-") ? "#FEE2E2" : "#DCFCE7",
-          color: change && change.startsWith("-") ? "#DC2626" : "#16A34A",
-        }}>
-          {change}
-        </span>
+        {change != null && (
+          <span style={{
+            fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 20,
+            backgroundColor: change.startsWith("-") ? "#FEE2E2" : "#DCFCE7",
+            color: change.startsWith("-") ? "#DC2626" : "#16A34A",
+          }}>
+            {change}
+          </span>
+        )}
       </div>
       <div style={{ fontSize: 24, fontWeight: 800, color: "#0A1628" }}>{value}</div>
       <div style={{ fontSize: 13, color: "#6B7280" }}>{label}</div>
