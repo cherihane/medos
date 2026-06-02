@@ -7,6 +7,7 @@ import Login from "./pages/Login";
 import Inscription from "./pages/Inscription";
 import Parametres from "./pages/Parametres";
 import MotDePasseOublie from "./pages/MotDePasseOublie";
+import ReinitialisationMotDePasse from "./pages/ReinitialisationMotDePasse";
 
 // Pages legales
 import CGU from "./pages/CGU";
@@ -69,6 +70,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={auth ? <Navigate to={auth.dashboardPath} replace /> : <Login />} />
       <Route path="/mot-de-passe-oublie" element={<MotDePasseOublie />} />
+      <Route path="/reinitialisation" element={<ReinitialisationMotDePasse />} />
       <Route path="/inscription" element={<Inscription />} />
       <Route path="/cgu"             element={<CGU />} />
       <Route path="/confidentialite" element={<Confidentialite />} />

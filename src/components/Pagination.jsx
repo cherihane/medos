@@ -23,7 +23,7 @@ export default function Pagination({ page, totalPages, total, onPage, pageSize =
           backgroundColor: "white", color: page === 0 ? "#D1D5DB" : "#374151",
         }}
       >
-        Precedent
+        Précédent
       </button>
 
       <div style={{ textAlign: "center" }}>

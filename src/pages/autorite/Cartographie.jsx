@@ -76,7 +76,7 @@ export default function Cartographie() {
               ))}
               <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 8 }}>
                 <div style={{ fontSize: 22, fontWeight: 800, color: "#8B5CF6" }}>{etablissements.length}</div>
-                <div style={{ fontSize: 13, color: "#6B7280" }}>établissement{etablissements.length > 1 ? "s" : ""} enregistre{etablissements.length > 1 ? "s" : ""}</div>
+                <div style={{ fontSize: 13, color: "#6B7280" }}>établissement{etablissements.length > 1 ? "s" : ""} enregistré{etablissements.length > 1 ? "s" : ""}</div>
                 <div style={{ fontSize: 12, color: "#9CA3AF" }}>{villes} ville{villes > 1 ? "s" : ""}</div>
               </div>
               <div style={{ position: "absolute", bottom: 12, right: 12, fontSize: 11, color: "#9CA3AF", backgroundColor: "rgba(255,255,255,0.8)", padding: "4px 8px", borderRadius: 6 }}>
@@ -114,7 +114,7 @@ export default function Cartographie() {
             {loading ? (
               <div style={{ color: "#9CA3AF", fontSize: 13 }}>Chargement…</div>
             ) : etablissements.length === 0 ? (
-              <div style={{ color: "#9CA3AF", fontSize: 13 }}>Aucun établissement enregistre.</div>
+              <div style={{ color: "#9CA3AF", fontSize: 13 }}>Aucun établissement enregistré.</div>
             ) : (
               parVille.map(([ville, liste]) => (
                 <div key={ville} style={{ marginBottom: 14 }}>
