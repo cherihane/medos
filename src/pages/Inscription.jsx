@@ -375,13 +375,19 @@ export default function Inscription() {
     if (!validerEtape1()) return;
     setSaving(true);
     try {
-      // 1. Créer le compte Supabase Auth
+      // 1. Créer le compte Supabase Auth puis déconnecter immédiatement.
+      // signUp() crée une session active qui déclencherait onAuthStateChange
+      // dans AuthContext et redirigerait l'utilisateur vers le dashboard avant
+      // que l'écran de confirmation s'affiche. On coupe la session tout de suite
+      // — l'INSERT suivant passe par la politique RLS anon (statut_inscription =
+      // 'en_attente' AND actif = false).
       const { error: signUpError } = await supabase.auth.signUp({
         email: form.email.trim(),
         password: form.password,
         options: { data: { role: form.role } },
       });
       if (signUpError) throw new Error(signUpError.message);
+      await supabase.auth.signOut();
 
       // 2. Construire le payload établissement
       const payload = {
@@ -445,9 +451,6 @@ export default function Inscription() {
         // Un echec d'email ne doit pas bloquer l'inscription
         console.error("[inscription] Echec envoi emails:", emailErr);
       }
-
-      // 4. Déconnecter — le compte n'est pas encore validé
-      await supabase.auth.signOut();
 
       setEmailConfirme(form.email.trim());
       setEtape(2);

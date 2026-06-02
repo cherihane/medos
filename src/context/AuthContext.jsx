@@ -225,6 +225,31 @@ export function AuthProvider({ children }) {
     }
 
     const user = data?.user ?? data?.session?.user;
+
+    // Vérifier le statut d'inscription avant d'autoriser l'accès.
+    // Un compte en_attente ou refuse ne doit pas obtenir de session active.
+    if (user?.email) {
+      const { data: etab } = await supabase
+        .from("etablissements")
+        .select("statut_inscription")
+        .eq("email", user.email)
+        .maybeSingle();
+
+      if (etab?.statut_inscription === "en_attente") {
+        await supabase.auth.signOut();
+        throw new Error(
+          "Votre compte est en cours de validation. Vous recevrez un email dès qu'une décision sera prise."
+        );
+      }
+
+      if (etab?.statut_inscription === "refuse") {
+        await supabase.auth.signOut();
+        throw new Error(
+          "Votre demande d'accès a été refusée. Contactez contact@kelagroup.org pour plus d'informations."
+        );
+      }
+    }
+
     const base = buildAuthBase(user);
     setAuth(base);
     if (base) enrichWithEtablissement(user, { current: true });
