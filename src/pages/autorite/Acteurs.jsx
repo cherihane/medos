@@ -84,7 +84,7 @@ export default function Acteurs() {
   const inactifs = etablissements.length - actifs;
 
   const kpis = [
-    { label: "Acteurs enregistrés", value: loading ? "…" : établissements.length, color: "#8B5CF6" },
+    { label: "Acteurs enregistrés", value: loading ? "…" : etablissements.length, color: "#8B5CF6" },
     { label: "Actifs",              value: loading ? "…" : actifs,                color: "#10B981" },
     { label: "Inactifs",            value: loading ? "…" : inactifs,              color: "#EF4444" },
     { label: "Villes representees", value: loading ? "…" : [...new Set(etablissements.map((e) => e.ville).filter(Boolean))].length, color: "#3B82F6" },
