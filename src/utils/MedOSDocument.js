@@ -304,6 +304,15 @@ export function signatureRowHTML(labels) {
 
 // ── Helper auth ───────────────────────────────────────────────────────────────
 
+// Valeurs génériques de roleConfig qui ne doivent pas apparaître dans un document imprimé.
+const GENERIC_STRUCTURES = new Set([
+  "Votre Pharmacie", "Votre Hôpital", "Votre Distributeur", "Votre Autorité Sanitaire", "MedOS",
+]);
+
+function isGeneric(str) {
+  return !str || GENERIC_STRUCTURES.has(str.trim());
+}
+
 /**
  * Construit l'objet établissement depuis le contexte auth (synchrone, valeurs statiques).
  * Utilisé comme fallback interne — préférer fetchEtabFromAuth pour les documents imprimés.
@@ -313,7 +322,8 @@ export function signatureRowHTML(labels) {
 export function etabFromAuth(auth) {
   if (!auth) return { nom: "MedOS", ville: "", type: "" };
   const [ville = ""] = (auth.location ?? "").split(",");
-  const nom = auth.structure || auth.user?.email || "MedOS";
+  const structure = auth.structure ?? "";
+  const nom = isGeneric(structure) ? (auth.user?.email || "MedOS") : structure;
   return {
     nom,
     ville: ville.trim(),
@@ -323,29 +333,47 @@ export function etabFromAuth(auth) {
 
 /**
  * Construit l'objet établissement depuis le contexte auth en interrogeant la base de données.
- * Priorité : nom réel dans `etablissements` > auth.structure > auth.user.email > "MedOS".
+ * Priorité : nom réel dans `etablissements` > auth.structure (si non générique) > auth.user.email > "MedOS".
  * @param {object|null} auth
  * @returns {Promise<{ nom: string, ville: string, type: string }>}
  */
 export async function fetchEtabFromAuth(auth) {
-  const fallback = etabFromAuth(auth);
-  if (!auth?.etablissement_id) return fallback;
-  try {
-    const { supabase } = await import("../supabaseClient");
-    const { data } = await supabase
-      .from("etablissements")
-      .select("nom, ville, type")
-      .eq("id", auth.etablissement_id)
-      .maybeSingle();
-    if (!data) return fallback;
-    return {
-      nom:   data.nom  || fallback.nom,
-      ville: data.ville || fallback.ville,
-      type:  data.type  || fallback.type,
-    };
-  } catch {
-    return fallback;
+  if (!auth) return { nom: "MedOS", ville: "", type: "" };
+
+  // 1. Cherche dans la table etablissements via etablissement_id
+  if (auth.etablissement_id) {
+    try {
+      const { supabase } = await import("../supabaseClient");
+      const { data } = await supabase
+        .from("etablissements")
+        .select("nom, ville, type")
+        .eq("id", auth.etablissement_id)
+        .maybeSingle();
+      if (data?.nom) {
+        return {
+          nom:   data.nom,
+          ville: data.ville || "",
+          type:  data.type  || auth.label || "",
+        };
+      }
+    } catch {
+      // réseau indisponible — continue avec le fallback
+    }
   }
+
+  // 2. auth.structure si non générique
+  const structure = auth.structure ?? "";
+  if (!isGeneric(structure)) {
+    const [ville = ""] = (auth.location ?? "").split(",");
+    return { nom: structure, ville: ville.trim(), type: auth.label ?? "" };
+  }
+
+  // 3. Email de l'utilisateur en dernier recours
+  return {
+    nom:   auth.user?.email || "MedOS",
+    ville: "",
+    type:  auth.label ?? "",
+  };
 }
 
 // ── Ouverture document ────────────────────────────────────────────────────────

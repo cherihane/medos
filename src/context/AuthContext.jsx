@@ -32,8 +32,8 @@ const NAV_INTERNE = {
 export const roleConfig = {
   pharmacie: {
     label: "Pharmacie",
-    structure: "Pharmacie Lumière",
-    location: "Abidjan, CI",
+    structure: "Votre Pharmacie",
+    location: "",
     initial: "P",
     dashboardPath: "/pharmacie/dashboard",
     nav: [
@@ -51,8 +51,8 @@ export const roleConfig = {
   },
   hopital: {
     label: "Hôpital",
-    structure: "Hôpital Central Abidjan",
-    location: "Abidjan, CI",
+    structure: "Votre Hôpital",
+    location: "",
     initial: "H",
     dashboardPath: "/hopital/dashboard",
     nav: [
@@ -71,8 +71,8 @@ export const roleConfig = {
   },
   distributeur: {
     label: "Distributeur",
-    structure: "MedDistrib International",
-    location: "Abidjan, CI",
+    structure: "Votre Distributeur",
+    location: "",
     initial: "D",
     dashboardPath: "/distributeur/dashboard",
     nav: [
@@ -89,8 +89,8 @@ export const roleConfig = {
   },
   autorite: {
     label: "Autorité",
-    structure: "Ministère de la Santé",
-    location: "Yamoussoukro, CI",
+    structure: "Votre Autorité Sanitaire",
+    location: "",
     initial: "A",
     dashboardPath: "/autorite/vue-nationale",
     nav: [
