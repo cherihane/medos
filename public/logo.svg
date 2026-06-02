@@ -1,14 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <rect width="512" height="512" rx="96" fill="#0A1628"/>
-  <text
-    x="256"
-    y="340"
-    font-family="Georgia, 'Times New Roman', serif"
-    font-size="300"
-    font-weight="700"
-    fill="#FFFFFF"
-    text-anchor="middle"
-    letter-spacing="-8"
-  >M</text>
-  <rect x="156" y="368" width="200" height="12" rx="6" fill="#3B82F6"/>
+  <!-- Carré bleu arrondi — même design que le logo dans la Sidebar -->
+  <rect width="512" height="512" rx="136" fill="#3B82F6"/>
+  <!-- Tracé ECG (M22 12h-4l-3 9L9 3l-3 9H2) mis à l'échelle 512/24 = 21.33x -->
+  <g transform="translate(256,256) scale(21.333) translate(-12,-12)">
+    <path
+      d="M22 12h-4l-3 9L9 3l-3 9H2"
+      fill="none"
+      stroke="white"
+      stroke-width="2.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </g>
 </svg>
