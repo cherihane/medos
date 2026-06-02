@@ -427,7 +427,26 @@ export default function Inscription() {
       const { error: insertError } = await supabase.from("etablissements").insert(payload);
       if (insertError) throw new Error(insertError.message);
 
-      // 3. Déconnecter — le compte n'est pas encore validé
+      // 3. Envoyer les emails d'inscription (confirmation + notification admin) — non bloquant
+      try {
+        await supabase.functions.invoke("send-inscription-email", {
+          body: {
+            nom:              payload.nom,
+            type:             payload.type,
+            ville:            payload.ville,
+            pays:             payload.pays,
+            email:            payload.email,
+            adresse:          payload.adresse ?? null,
+            licence_numero:   payload.licence_numero,
+            notes_inscription: payload.notes_inscription,
+          },
+        });
+      } catch (emailErr) {
+        // Un echec d'email ne doit pas bloquer l'inscription
+        console.error("[inscription] Echec envoi emails:", emailErr);
+      }
+
+      // 4. Déconnecter — le compte n'est pas encore validé
       await supabase.auth.signOut();
 
       setEmailConfirme(form.email.trim());
