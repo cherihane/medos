@@ -5,6 +5,7 @@ import { useToast } from "../hooks/useToast";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../supabaseClient";
 import { colors, radius, shadow, font } from "../theme";
+import { useDarkMode } from "../context/DarkModeContext";
 
 // ─── Pages disponibles par rôle ──────────────────────────────────────────────
 // Ces chemins correspondent exactement aux nav dans AuthContext.roleConfig.
@@ -649,6 +650,35 @@ function SectionPersonnel({ etablissement_id, role }) {
 }
 
 // ─── Page principale ──────────────────────────────────────────────────────────
+function SectionApparence() {
+  const { dark, toggleDark } = useDarkMode();
+  return (
+    <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px 28px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 24 }}>
+      <h2 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Apparence</h2>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>Mode sombre</div>
+          <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 2 }}>Fond #0F172A, cards #1E293B — reposant pour les longues sessions</div>
+        </div>
+        <button
+          onClick={toggleDark}
+          style={{
+            width: 52, height: 28, borderRadius: 14, border: "none", cursor: "pointer", position: "relative",
+            backgroundColor: dark ? "#3B82F6" : "#E5E7EB", transition: "background-color 0.2s",
+            flexShrink: 0,
+          }}
+        >
+          <div style={{
+            position: "absolute", top: 3, left: dark ? 27 : 3, width: 22, height: 22,
+            borderRadius: "50%", backgroundColor: "white", boxShadow: "0 1px 4px rgba(0,0,0,0.2)",
+            transition: "left 0.2s",
+          }} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function Parametres() {
   const { auth } = useAuth();
   const etablissement_id = auth?.etablissement_id ?? null;
@@ -662,6 +692,7 @@ export default function Parametres() {
           Contactez l'administrateur MedOS si vous pensez qu'il s'agit d'une erreur.
         </div>
       )}
+      <SectionApparence />
       <SectionEtablissement etablissement_id={etablissement_id} />
       <SectionPersonnel etablissement_id={etablissement_id} role={role} />
     </Layout>

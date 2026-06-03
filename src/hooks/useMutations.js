@@ -161,3 +161,50 @@ export async function receiveLivraison(medicamentNom, quantite, etablissementDes
   if (error) throw new Error(`receive_livraison: ${error.message}`);
   return data; // "ok" | "medicament_introuvable"
 }
+
+// ─── Fond de caisse ───────────────────────────────────────────────────────────
+export async function insertFondCaisse(fields) {
+  return run(supabase.from("fond_caisse").insert(fields).select().single());
+}
+
+export async function fetchFondJour(etablissement_id, dateISO) {
+  let q = supabase
+    .from("fond_caisse")
+    .select("id, montant, caissier_email, created_at")
+    .eq("date_journee", dateISO);
+  if (etablissement_id) q = q.eq("etablissement_id", etablissement_id);
+  const { data, error } = await q.maybeSingle();
+  if (error) return null;
+  return data ?? null;
+}
+
+// ─── Mouvements de stock ──────────────────────────────────────────────────────
+export async function insertMouvementStock(fields) {
+  return run(supabase.from("mouvements_stock").insert(fields).select().single());
+}
+
+export async function fetchMouvementsStock({ etablissement_id, medicament_id, type, dateDebut, dateFin, limit = 100 }) {
+  let q = supabase
+    .from("mouvements_stock")
+    .select("id, type, quantite, motif, numero_bl, fournisseur, created_at, medicaments(nom, categorie)")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (etablissement_id) q = q.eq("etablissement_id", etablissement_id);
+  if (medicament_id)    q = q.eq("medicament_id", medicament_id);
+  if (type)             q = q.eq("type", type);
+  if (dateDebut)        q = q.gte("created_at", `${dateDebut}T00:00:00+00:00`);
+  if (dateFin)          q = q.lte("created_at", `${dateFin}T23:59:59+00:00`);
+  const { data, error } = await q;
+  if (error) throw new Error(`mouvements_stock: ${error.message}`);
+  return data ?? [];
+}
+
+// ─── Import en masse médicaments ──────────────────────────────────────────────
+export async function upsertMedicaments(rows) {
+  return run(
+    supabase
+      .from("medicaments")
+      .upsert(rows, { onConflict: "nom,etablissement_id" })
+      .select()
+  );
+}

@@ -121,8 +121,9 @@ function PatientModal({ patient, onClose, onSaved }) {
 export default function Patients() {
   const isMobile = useIsMobile();
 
-  const [search, setSearch] = useState("");
-  const { data: patients, loading, error, total, page, setPage, totalPages, refetch } = usePatientsPaginated(search);
+  const [search, setSearch]   = useState("");
+  const [filtre, setFiltre]   = useState("");
+  const { data: patients, loading, error, total, page, setPage, totalPages, refetch } = usePatientsPaginated(search, 20, filtre);
   const { toasts, success } = useToast();
   const [selected, setSelected] = useState(null);
   const [modal, setModal] = useState(null); // null | "add" | "edit"
@@ -146,22 +147,41 @@ export default function Patients() {
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 360px", gap: 20 }}>
         {/* ── Liste ── */}
         <div style={{ backgroundColor: "white", borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
-          <div style={{ padding: "16px 20px", borderBottom: "1px solid #E5E7EB", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#0A1628" }}>
-              Patients ({loading ? "…" : total})
-            </h3>
-            <div style={{ display: "flex", gap: 8 }}>
-              <input
-                placeholder="Rechercher…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                style={{ padding: "7px 14px", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 13, outline: "none", width: 200 }}
-              />
-              <button
-                onClick={() => setModal("add")}
-                style={{ padding: "7px 14px", backgroundColor: "#3B82F6", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-                + Ajouter
-              </button>
+          <div style={{ padding: "16px 20px", borderBottom: "1px solid #E5E7EB" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#0A1628" }}>
+                Patients ({loading ? "…" : total})
+              </h3>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  placeholder="Rechercher…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  style={{ padding: "7px 14px", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 13, outline: "none", width: 200 }}
+                />
+                <button
+                  onClick={() => setModal("add")}
+                  style={{ padding: "7px 14px", backgroundColor: "#3B82F6", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                  + Ajouter
+                </button>
+              </div>
+            </div>
+            {/* Filtres */}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {[
+                { key: "",               label: "Tous" },
+                { key: "fidele",         label: "Fidèle (5+ visites)" },
+                { key: "recurrent",      label: "Récurrent (2–4 visites)" },
+                { key: "occasionnel",    label: "Occasionnel (1 visite)" },
+                { key: "avec_allergies", label: "Avec allergies" },
+                { key: "avec_mutuelle",  label: "Avec mutuelle" },
+              ].map((f) => (
+                <button key={f.key} onClick={() => { setFiltre(f.key); setPage?.(1); }} style={{
+                  padding: "4px 12px", borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: "pointer", border: "none",
+                  backgroundColor: filtre === f.key ? "#3B82F6" : "#F3F4F6",
+                  color: filtre === f.key ? "white" : "#6B7280",
+                }}>{f.label}</button>
+              ))}
             </div>
           </div>
 

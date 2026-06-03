@@ -6,6 +6,7 @@ import { useIsMobile } from "../hooks/useWindowSize";
 import { supabase } from "../supabaseClient";
 import NavIcon from "./NavIcon";
 import { colors, sidebar, radius, font } from "../theme";
+import { useDarkMode } from "../context/DarkModeContext";
 
 const roleColors = {
   pharmacie:    colors.pharmacie,
@@ -88,6 +89,7 @@ const SIDEBAR_WIDTH = 220;
 export default function Sidebar({ mobileOpen, onMobileClose }) {
   const { auth, logout } = useAuth();
   const { unreadCount, unreadByType, lastNotif, markAllRead, dismissLast } = useNotifications();
+  const { dark, toggleDark } = useDarkMode();
   const etablissement = useEtablissementInfo(auth);
   const isMobile = useIsMobile();
 
@@ -293,6 +295,17 @@ export default function Sidebar({ mobileOpen, onMobileClose }) {
               </div>
             </div>
           </div>
+          {/* Toggle mode sombre */}
+          <button
+            onClick={toggleDark}
+            style={{ width: "100%", padding: "7px", backgroundColor: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.55)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontSize: 11, cursor: "pointer", fontWeight: 500, display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}
+          >
+            <span>{dark ? "Mode clair" : "Mode sombre"}</span>
+            <div style={{ width: 32, height: 18, borderRadius: 9, backgroundColor: dark ? "#3B82F6" : "rgba(255,255,255,0.15)", position: "relative", flexShrink: 0 }}>
+              <div style={{ position: "absolute", top: 2, left: dark ? 16 : 2, width: 14, height: 14, borderRadius: "50%", backgroundColor: "white", transition: "left 0.2s" }} />
+            </div>
+          </button>
+
           <button
             onClick={logout}
             style={{

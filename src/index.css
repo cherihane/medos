@@ -9,6 +9,12 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
   -webkit-font-smoothing: antialiased;
   background-color: #F0F4FB;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+[data-theme="dark"] body {
+  background-color: #0F172A;
+  color: #F1F5F9;
 }
 
 /* ── Responsive — tableaux scrollables sur mobile ─────────────────────────── */

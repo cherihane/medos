@@ -1,8 +1,10 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import * as XLSX from "xlsx";
 import Layout from "../../components/Layout";
 import { useMedicaments, useAlertes, usePatients } from "../../hooks/useSupabaseData";
 import { useAuth } from "../../context/AuthContext";
 import { openDocument, tableHTML, alertBannerHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
+import { supabase } from "../../supabaseClient";
 
 function exportRapport(type, { medicaments, alertes, patients }, etab) {
   const dateFr = new Date().toLocaleDateString("fr-FR");
@@ -76,7 +78,173 @@ function exportRapport(type, { medicaments, alertes, patients }, etab) {
   }
 }
 
+// ── Helpers CSV / Excel ────────────────────────────────────────────────────────
+
+function downloadCSV(filename, rows) {
+  const escape = (v) => {
+    const s = String(v ?? "");
+    return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const csv = rows.map((r) => r.map(escape).join(",")).join("\n");
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadXLSX(filename, sheets) {
+  // sheets: [{ name, data: [[...], ...] }]
+  const wb = XLSX.utils.book_new();
+  sheets.forEach(({ name, data }) => {
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    XLSX.utils.book_append_sheet(wb, ws, name);
+  });
+  XLSX.writeFile(wb, filename);
+}
+
+async function exportVentesCSV(auth) {
+  const etablissement_id = auth?.etablissement_id;
+  const { data } = await supabase
+    .from("journal_caisse")
+    .select("created_at, medicament_nom, quantite, prix_unitaire, total, mode_paiement, caissier_email")
+    .eq("etablissement_id", etablissement_id)
+    .order("created_at", { ascending: false })
+    .limit(5000);
+
+  if (!data || data.length === 0) { alert("Aucune vente trouvée."); return; }
+
+  const header = ["Date", "Médicament", "Quantité", "Prix unitaire", "Total", "Mode de paiement", "Caissier"];
+  const rows = data.map((v) => [
+    v.created_at ? new Date(v.created_at).toLocaleDateString("fr-FR") : "—",
+    v.medicament_nom ?? "—",
+    v.quantite ?? 0,
+    v.prix_unitaire ?? 0,
+    v.total ?? 0,
+    v.mode_paiement ?? "—",
+    v.caissier_email ?? "—",
+  ]);
+  downloadCSV(`journal_ventes_${new Date().toISOString().slice(0,10)}.csv`, [header, ...rows]);
+}
+
+function exportInventaireXLSX(medicaments) {
+  const header = ["Médicament", "Catégorie", "Stock actuel", "Stock minimum", "Prix vente (FCFA)", "Date péremption", "Statut"];
+  const rows = medicaments.map((m) => {
+    const rupture = (m.stock_actuel ?? 0) < (m.stock_minimum ?? 0);
+    return [
+      m.nom ?? "—",
+      m.categorie ?? "—",
+      m.stock_actuel ?? 0,
+      m.stock_minimum ?? 0,
+      m.prix_vente ?? 0,
+      m.date_peremption ? new Date(m.date_peremption).toLocaleDateString("fr-FR") : "—",
+      rupture ? "RUPTURE" : "OK",
+    ];
+  });
+  downloadXLSX(`inventaire_${new Date().toISOString().slice(0,10)}.xlsx`, [
+    { name: "Inventaire", data: [header, ...rows] },
+  ]);
+}
+
+async function exportMensuelXLSX(auth) {
+  const etablissement_id = auth?.etablissement_id;
+  const debut = new Date();
+  debut.setDate(1); debut.setHours(0,0,0,0);
+
+  const { data } = await supabase
+    .from("journal_caisse")
+    .select("created_at, medicament_nom, quantite, total, mode_paiement")
+    .eq("etablissement_id", etablissement_id)
+    .gte("created_at", debut.toISOString())
+    .order("created_at", { ascending: false });
+
+  if (!data || data.length === 0) { alert("Aucune vente ce mois-ci."); return; }
+
+  // Feuille 1 : détail
+  const detailHeader = ["Date", "Médicament", "Quantité", "Total", "Mode"];
+  const detailRows = data.map((v) => [
+    v.created_at ? new Date(v.created_at).toLocaleDateString("fr-FR") : "—",
+    v.medicament_nom ?? "—",
+    v.quantite ?? 0,
+    v.total ?? 0,
+    v.mode_paiement ?? "—",
+  ]);
+
+  // Feuille 2 : résumé par mode de paiement
+  const byMode = data.reduce((acc, v) => {
+    const mode = v.mode_paiement ?? "inconnu";
+    acc[mode] = (acc[mode] ?? 0) + (v.total ?? 0);
+    return acc;
+  }, {});
+  const resumeHeader = ["Mode de paiement", "Total (FCFA)"];
+  const resumeRows = Object.entries(byMode).map(([k, v]) => [k, v]);
+  const totalGlobal = data.reduce((s, v) => s + (v.total ?? 0), 0);
+
+  const mois = debut.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  downloadXLSX(`rapport_mensuel_${mois.replace(" ", "_")}.xlsx`, [
+    { name: "Detail", data: [detailHeader, ...detailRows] },
+    { name: "Resume", data: [resumeHeader, ...resumeRows, ["TOTAL", totalGlobal]] },
+  ]);
+}
+
+function exportBilanPDF(medicaments, etab) {
+  const dateFr = new Date().toLocaleDateString("fr-FR");
+  const ruptures = medicaments.filter((m) => (m.stock_actuel ?? 0) < (m.stock_minimum ?? 0));
+  const ok = medicaments.length - ruptures.length;
+  const valeurStock = medicaments.reduce((s, m) => s + (m.stock_actuel ?? 0) * (m.prix_vente ?? 0), 0);
+
+  const statsHTML = `
+    <div style="display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap">
+      ${[
+        { label: "Total produits", val: medicaments.length, color: "#3B82F6" },
+        { label: "En stock OK", val: ok, color: "#16A34A" },
+        { label: "En rupture", val: ruptures.length, color: "#DC2626" },
+        { label: "Valeur stock estimée", val: `${valeurStock.toLocaleString("fr-FR")} FCFA`, color: "#7C3AED" },
+      ].map((s) => `
+        <div style="flex:1;min-width:130px;padding:12px 16px;border-radius:8px;border-left:4px solid ${s.color};background:#F8FAFC">
+          <div style="font-size:20px;font-weight:800;color:${s.color}">${s.val}</div>
+          <div style="font-size:11px;color:#6B7280">${s.label}</div>
+        </div>
+      `).join("")}
+    </div>`;
+
+  const rows = medicaments.map((m) => {
+    const rupture = (m.stock_actuel ?? 0) < (m.stock_minimum ?? 0);
+    const badge = rupture
+      ? `<span style="padding:2px 7px;background:#FEF2F2;color:#DC2626;border-radius:4px;font-weight:700;font-size:10px">RUPTURE</span>`
+      : `<span style="padding:2px 7px;background:#DCFCE7;color:#16A34A;border-radius:4px;font-size:10px">OK</span>`;
+    return [m.nom ?? "—", m.categorie ?? "—", String(m.stock_actuel ?? 0), String(m.stock_minimum ?? 0), String(m.prix_vente ?? 0), badge];
+  });
+
+  openDocument({
+    titre: "Bilan de stock",
+    sousTitre: `Exporté le ${dateFr} — ${medicaments.length} produit${medicaments.length !== 1 ? "s" : ""}`,
+    etablissement: etab,
+    sections: [
+      { titre: "Synthèse", html: statsHTML },
+      { titre: "Détail inventaire complet", html: tableHTML(["Médicament", "Catégorie", "Stock actuel", "Stock min.", "Prix vente", "Statut"], rows, { alignRight: [2, 3, 4] }) },
+    ],
+  });
+}
+
 const COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#8B5CF6", "#EF4444", "#EC4899"];
+
+function ExportBtn({ label, desc, color, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: "flex", flexDirection: "column", alignItems: "flex-start",
+        padding: "14px 18px", borderRadius: 10, border: `1.5px solid ${color}30`,
+        backgroundColor: `${color}08`, cursor: "pointer", minWidth: 220, flex: "1 1 220px",
+        textAlign: "left", transition: "background 0.15s",
+      }}
+    >
+      <span style={{ fontSize: 13, fontWeight: 700, color }}>{label}</span>
+      <span style={{ fontSize: 11, color: "#6B7280", marginTop: 3 }}>{desc}</span>
+    </button>
+  );
+}
 
 export default function Rapports() {
   const { auth } = useAuth();
@@ -229,6 +397,37 @@ export default function Rapports() {
           ))}
         </div>
       </div>
+      {/* ── Exports avances ── */}
+      <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginTop: 20 }}>
+        <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Exports avances</h3>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+          <ExportBtn
+            label="CSV — Journal des ventes"
+            desc="Toutes les ventes (jusqu'a 5 000 lignes)"
+            color="#10B981"
+            onClick={async () => { await exportVentesCSV(auth); }}
+          />
+          <ExportBtn
+            label="Excel — Inventaire complet"
+            desc={`${medicaments.length} produits avec prix et peremptions`}
+            color="#3B82F6"
+            onClick={() => exportInventaireXLSX(medicaments)}
+          />
+          <ExportBtn
+            label="Excel — Rapport mensuel"
+            desc="Ventes du mois en cours, par mode de paiement"
+            color="#7C3AED"
+            onClick={async () => { await exportMensuelXLSX(auth); }}
+          />
+          <ExportBtn
+            label="PDF — Bilan de stock"
+            desc="Synthese + inventaire complet imprimable"
+            color="#F59E0B"
+            onClick={async () => { const etab = await fetchEtabFromAuth(auth); exportBilanPDF(medicaments, etab); }}
+          />
+        </div>
+      </div>
+
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
     </Layout>
   );

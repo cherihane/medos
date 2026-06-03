@@ -4,8 +4,11 @@ import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../c
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useMedicamentsPaginated, useMedicamentStats, useFournisseurs } from "../../hooks/useSupabaseData";
-import { updateMedicament, insertMedicament, insertCommande } from "../../hooks/useMutations";
+import { updateMedicament, insertMedicament, insertCommande, upsertMedicaments } from "../../hooks/useMutations";
 import Pagination from "../../components/Pagination";
+import Papa from "papaparse";
+import * as XLSX from "xlsx";
+import { useAuth } from "../../context/AuthContext";
 
 const FORMES_GALENIQUES = ["Comprimé", "Gélule", "Sirop", "Injectable", "Crème", "Suppositoire", "Patch"];
 
@@ -268,6 +271,129 @@ function NouveauModal({ onClose, onSaved }) {
   );
 }
 
+// ── Modal Import CSV/Excel ────────────────────────────────────────────────────
+const CSV_COLS = ["nom", "categorie", "stock_actuel", "stock_minimum", "prix_achat", "prix_unitaire", "date_peremption"];
+
+function parseRows(rawRows) {
+  return rawRows
+    .filter((r) => r.nom && r.nom.trim())
+    .map((r) => ({
+      nom:            r.nom?.trim() ?? "",
+      categorie:      r.categorie?.trim() || null,
+      stock_actuel:   parseInt(r.stock_actuel ?? r.stock ?? 0, 10) || 0,
+      stock_minimum:  parseInt(r.stock_minimum ?? r.minimum ?? 0, 10) || 0,
+      prix_unitaire:  parseFloat(r.prix_unitaire ?? r.prix_vente ?? 0) || 0,
+      date_peremption: r.date_peremption || null,
+    }));
+}
+
+function ImportModal({ auth, onClose, onImported }) {
+  const [preview, setPreview] = useState(null);
+  const [rows, setRows]       = useState([]);
+  const [saving, setSaving]   = useState(false);
+  const [err, setErr]         = useState(null);
+
+  const handleFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setErr(null);
+    const ext = file.name.split(".").pop().toLowerCase();
+
+    if (ext === "csv") {
+      Papa.parse(file, {
+        header: true, skipEmptyLines: true,
+        complete: (res) => { const parsed = parseRows(res.data); setRows(parsed); setPreview(parsed.slice(0, 5)); },
+        error: (er) => setErr("Erreur CSV : " + er.message),
+      });
+    } else if (ext === "xlsx" || ext === "xls") {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const wb = XLSX.read(ev.target.result, { type: "array" });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const data = XLSX.utils.sheet_to_json(ws, { defval: "" });
+          const parsed = parseRows(data);
+          setRows(parsed);
+          setPreview(parsed.slice(0, 5));
+        } catch (e) { setErr("Erreur Excel : " + e.message); }
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      setErr("Format non supporté. Utilisez CSV ou XLSX.");
+    }
+  };
+
+  const handleImport = async () => {
+    if (rows.length === 0) return;
+    setSaving(true);
+    setErr(null);
+    try {
+      const payload = rows.map((r) => ({
+        ...r,
+        etablissement_id: auth?.etablissement_id ?? null,
+      }));
+      await upsertMedicaments(payload);
+      onImported(rows.length);
+      onClose();
+    } catch (e) {
+      setErr("Erreur import : " + e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title="Importer un inventaire CSV / Excel" onClose={onClose} width={640}>
+      <p style={{ fontSize: 12, color: "#6B7280", margin: "0 0 14px" }}>
+        Colonnes attendues : <code style={{ backgroundColor: "#F3F4F6", padding: "1px 5px", borderRadius: 4, fontSize: 11 }}>nom, catégorie, stock_actuel, stock_minimum, prix_unitaire, date_peremption</code>
+      </p>
+      <input type="file" accept=".csv,.xlsx,.xls" onChange={handleFile} style={{ fontSize: 13, marginBottom: 14 }} />
+      {err && <div style={{ fontSize: 12, color: "#EF4444", backgroundColor: "#FEF2F2", padding: "8px 12px", borderRadius: 8, marginBottom: 12 }}>{err}</div>}
+      {preview && preview.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 8 }}>
+            Aperçu — {rows.length} ligne{rows.length !== 1 ? "s" : ""} détectée{rows.length !== 1 ? "s" : ""}
+          </div>
+          <div className="table-scroll">
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <thead>
+                <tr style={{ backgroundColor: "#F8FAFC" }}>
+                  {["Nom", "Catégorie", "Stock", "Minimum", "Prix unitaire", "Péremption"].map((h) => (
+                    <th key={h} style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, color: "#6B7280", fontSize: 11 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {preview.map((r, i) => (
+                  <tr key={i} style={{ borderBottom: "1px solid #F3F4F6" }}>
+                    <td style={{ padding: "6px 10px", fontWeight: 600 }}>{r.nom}</td>
+                    <td style={{ padding: "6px 10px", color: "#6B7280" }}>{r.categorie ?? "—"}</td>
+                    <td style={{ padding: "6px 10px" }}>{r.stock_actuel}</td>
+                    <td style={{ padding: "6px 10px" }}>{r.stock_minimum}</td>
+                    <td style={{ padding: "6px 10px" }}>{r.prix_unitaire.toLocaleString()} FCFA</td>
+                    <td style={{ padding: "6px 10px", color: "#6B7280" }}>{r.date_peremption ?? "—"}</td>
+                  </tr>
+                ))}
+                {rows.length > 5 && (
+                  <tr>
+                    <td colSpan={6} style={{ padding: "6px 10px", color: "#9CA3AF", fontSize: 11 }}>… et {rows.length - 5} autre{rows.length - 5 !== 1 ? "s" : ""} ligne{rows.length - 5 !== 1 ? "s" : ""}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+      <ModalFooter>
+        <button onClick={onClose} style={{ padding: "9px 20px", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", backgroundColor: "white", color: "#374151" }}>Annuler</button>
+        <button onClick={handleImport} disabled={rows.length === 0 || saving} style={{ padding: "9px 20px", backgroundColor: rows.length === 0 || saving ? "#E5E7EB" : "#3B82F6", color: rows.length === 0 || saving ? "#9CA3AF" : "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: rows.length === 0 || saving ? "not-allowed" : "pointer" }}>
+          {saving ? "Import en cours…" : `Importer ${rows.length > 0 ? rows.length + " produits" : ""}`}
+        </button>
+      </ModalFooter>
+    </Modal>
+  );
+}
+
 export default function Inventaire() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("tous");
@@ -275,9 +401,11 @@ export default function Inventaire() {
   const { data: statsData } = useMedicamentStats();
   const { data: fournisseurs } = useFournisseurs();
   const { toasts, success } = useToast();
+  const { auth } = useAuth();
   const [editMed, setEditMed] = useState(null);
   const [commandMed, setCommandMed] = useState(null);
   const [showNouveau, setShowNouveau] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   // KPI globaux calculés sur toutes les lignes (stock_actuel + stock_minimum seulement)
   const counts = useMemo(() => {
@@ -324,6 +452,13 @@ export default function Inventaire() {
           onSaved={handleNouveauSaved}
         />
       )}
+      {showImport && (
+        <ImportModal
+          auth={auth}
+          onClose={() => setShowImport(false)}
+          onImported={(n) => { refetch(); success(`${n} produit${n !== 1 ? "s" : ""} importé${n !== 1 ? "s" : ""}`); }}
+        />
+      )}
 
       {/* ── Barre de filtres ── */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -347,6 +482,11 @@ export default function Inventaire() {
             onChange={(e) => setSearch(e.target.value)}
             style={{ padding: "8px 14px", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 13, outline: "none", width: 220 }}
           />
+          <button
+            onClick={() => setShowImport(true)}
+            style={{ padding: "8px 16px", backgroundColor: "#F59E0B", color: "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+            Importer CSV/Excel
+          </button>
           <button
             onClick={() => setShowNouveau(true)}
             style={{ padding: "8px 16px", backgroundColor: "#3B82F6", color: "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
