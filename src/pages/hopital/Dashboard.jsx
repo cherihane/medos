@@ -6,6 +6,8 @@ import PredictionsIA from "../../components/PredictionsIA";
 import { useAlertes, useKpiHopital, usePatients } from "../../hooks/useSupabaseData";
 import { supabase } from "../../supabaseClient";
 import { colors, radius, shadow, font } from "../../theme";
+import { useAuth } from "../../context/AuthContext";
+import { fetchLitsOccupes } from "../../hooks/useMutations";
 
 function useTendanceHopital() {
   const [hier, setHier] = useState(null);
@@ -215,12 +217,41 @@ function PatientsPanel() {
         </div>
       )}
 
-      {/* Occupation des services */}
-      <h3 style={{ margin: "20px 0 14px", fontSize: 14, fontWeight: 700, color: colors.navy }}>Occupation des services</h3>
-      <div style={{ fontSize: 13, color: colors.textMuted, textAlign: "center", padding: "16px 0" }}>
-        Aucune donnée d'occupation disponible.<br />
-        <span style={{ fontSize: 12 }}>Connectez un module de gestion des lits pour afficher les taux en temps réel.</span>
-      </div>
+      {/* Lits occupes */}
+      <h3 style={{ margin: "20px 0 10px", fontSize: 14, fontWeight: 700, color: colors.navy }}>Lits occupes</h3>
+      <LitsOccupesPanel />
+    </div>
+  );
+}
+
+// ── Panneau lits occupes ──────────────────────────────────────────────────────
+function LitsOccupesPanel() {
+  const { auth } = useAuth();
+  const [lits, setLits] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchLitsOccupes(auth?.etablissement_id).then((data) => { setLits(data); setLoading(false); });
+  }, [auth?.etablissement_id]); // eslint-disable-line
+
+  if (loading) return <div style={{ height: 60, backgroundColor: colors.borderLight, borderRadius: 8, animation: "pulse 1.5s ease-in-out infinite" }} />;
+  if (lits.length === 0) return <div style={{ fontSize: 12, color: colors.textMuted, textAlign: "center", padding: "12px 0" }}>Aucun patient hospitalise actuellement</div>;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      {lits.slice(0, 6).map((h) => (
+        <div key={h.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", backgroundColor: "#FEF2F2", borderRadius: 8, borderLeft: "3px solid #EF4444" }}>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: colors.navy }}>{h.patients?.prenom} {h.patients?.nom}</div>
+            <div style={{ fontSize: 11, color: colors.textSecondary }}>{h.service ?? "—"}</div>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#DC2626" }}>Lit {h.lit ?? "?"} — Ch. {h.chambre ?? "?"}</div>
+            <div style={{ fontSize: 10, color: colors.textMuted }}>Sortie: {h.date_sortie_prevue ? new Date(h.date_sortie_prevue).toLocaleDateString("fr-FR") : "—"}</div>
+          </div>
+        </div>
+      ))}
+      {lits.length > 6 && <div style={{ fontSize: 11, color: colors.textMuted, textAlign: "center" }}>+{lits.length - 6} autres patients hospitalises</div>}
     </div>
   );
 }

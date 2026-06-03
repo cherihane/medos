@@ -4,8 +4,9 @@ import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
-import { useMedicaments, useFournisseurs } from "../../hooks/useSupabaseData";
-import { updateMedicament, insertMedicament, insertCommande } from "../../hooks/useMutations";
+import { useAuth } from "../../context/AuthContext";
+import { useMedicaments, useFournisseurs, usePatients } from "../../hooks/useSupabaseData";
+import { updateMedicament, insertMedicament, insertCommande, insertDispensation, decrementStock } from "../../hooks/useMutations";
 
 const statusStyle = {
   critique: { bg: "#FEF2F2", color: "#EF4444", label: "Critique" },
@@ -123,14 +124,89 @@ function NouveauModal({ onClose, onSaved }) {
   );
 }
 
+// ── Modal Dispensation nominative ─────────────────────────────────────────────
+const VOIES = ["Oral", "IV", "IM", "SC", "Topique", "Inhalation", "Autre"];
+
+function DispensationModal({ med, patients, onClose, onSaved, auth }) {
+  const [form, setForm] = useState({
+    patient_id: "", quantite: 1, dose: "", duree_jours: 1, voie: "Oral", prescripteur: "", notes: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const handleSave = async () => {
+    if (!form.patient_id) return alert("Selectionnez un patient.");
+    if (Number(form.quantite) < 1) return alert("Quantite invalide.");
+    setSaving(true);
+    try {
+      await insertDispensation({
+        patient_id: form.patient_id,
+        medicament_id: med.id,
+        etablissement_id: auth?.etablissement_id ?? null,
+        quantite: Number(form.quantite),
+        dose: form.dose || null,
+        duree_jours: Number(form.duree_jours) || null,
+        voie: form.voie,
+        prescripteur: form.prescripteur || null,
+        notes: form.notes || null,
+      });
+      // Decrementer stock
+      await decrementStock(med.id, Number(form.quantite));
+      onSaved();
+      onClose();
+    } catch (e) {
+      alert("Erreur : " + e.message);
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <Modal title={`Dispenser — ${med.nom}`} onClose={onClose}>
+      <Field label="Patient *">
+        <select style={selectStyle} value={form.patient_id} onChange={set("patient_id")}>
+          <option value="">-- Selectionner --</option>
+          {patients.map((p) => <option key={p.id} value={p.id}>{p.nom} {p.prenom}</option>)}
+        </select>
+      </Field>
+      <Row>
+        <Field label="Quantite *">
+          <input style={inputStyle} type="number" min="1" max={med.stock_actuel ?? 999} value={form.quantite} onChange={set("quantite")} />
+        </Field>
+        <Field label="Duree (jours)">
+          <input style={inputStyle} type="number" min="1" value={form.duree_jours} onChange={set("duree_jours")} />
+        </Field>
+      </Row>
+      <Row>
+        <Field label="Dose (ex: 500mg 3x/j)">
+          <input style={inputStyle} value={form.dose} onChange={set("dose")} placeholder="500mg 3x/j" />
+        </Field>
+        <Field label="Voie">
+          <select style={selectStyle} value={form.voie} onChange={set("voie")}>
+            {VOIES.map((v) => <option key={v} value={v}>{v}</option>)}
+          </select>
+        </Field>
+      </Row>
+      <Field label="Prescripteur">
+        <input style={inputStyle} value={form.prescripteur} onChange={set("prescripteur")} placeholder="Dr. Dupont" />
+      </Field>
+      <div style={{ padding: "10px 14px", backgroundColor: "#FFFBEB", border: "1px solid #FCD34D", borderRadius: 8, fontSize: 12, color: "#92400E", marginBottom: 8 }}>
+        Stock disponible : {med.stock_actuel ?? 0} unites — apres dispensation : {Math.max(0, (med.stock_actuel ?? 0) - Number(form.quantite || 0))} unites
+      </div>
+      <ModalFooter onCancel={onClose} onSubmit={handleSave} submitLabel="Confirmer la dispensation" saving={saving} />
+    </Modal>
+  );
+}
+
 export default function Stock() {
+  const { auth } = useAuth();
   const { data: medicaments, loading, error, refetch } = useMedicaments();
   const { data: fournisseurs } = useFournisseurs();
+  const { data: patients } = usePatients();
   const { toasts, success } = useToast();
   const [filter, setFilter] = useState("tous");
   const [editMed, setEditMed] = useState(null);
   const [commandMed, setCommandMed] = useState(null);
   const [showNouveau, setShowNouveau] = useState(false);
+  const [dispenseMed, setDispenseMed] = useState(null);
 
   const withStatut = medicaments.map((m) => ({ ...m, statut: getStatut(m) }));
   const filtered = withStatut.filter((p) => filter === "tous" || p.statut === filter);
@@ -143,6 +219,7 @@ export default function Stock() {
       {editMed && <EditModal med={editMed} onClose={() => setEditMed(null)} onSaved={() => { refetch(); success("Médicament mis à jour"); }} />}
       {commandMed && <CommanderModal med={commandMed} fournisseurs={fournisseurs} onClose={() => setCommandMed(null)} onSaved={() => { refetch(); success("Commande passée"); }} />}
       {showNouveau && <NouveauModal onClose={() => setShowNouveau(false)} onSaved={() => { refetch(); success("Médicament ajouté"); }} />}
+      {dispenseMed && <DispensationModal med={dispenseMed} patients={patients} auth={auth} onClose={() => setDispenseMed(null)} onSaved={() => { refetch(); success(`Dispensation enregistree — stock mis a jour`); }} />}
 
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
         <div style={{ display: "flex", gap: 8 }}>
@@ -217,6 +294,7 @@ export default function Stock() {
                     <div style={{ display: "flex", gap: 6 }}>
                       <button onClick={() => setEditMed(p)} style={{ padding: "4px 10px", backgroundColor: "#EFF6FF", color: "#2563EB", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>Éditer</button>
                       <button onClick={() => setCommandMed(p)} style={{ padding: "4px 10px", backgroundColor: "#DCFCE7", color: "#16A34A", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>Commander</button>
+                      <button onClick={() => setDispenseMed(p)} style={{ padding: "4px 10px", backgroundColor: "#FFFBEB", color: "#D97706", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>Dispenser</button>
                     </div>
                   </td>
                 </tr>

@@ -4,10 +4,12 @@
  */
 import { colors } from "../../theme";
 import { useState, useEffect, useCallback, useRef } from "react";
+import { QRCodeSVG } from "qrcode.react";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import Layout from "../../components/Layout";
 import { usePatientsPaginated, usePatientsStats, useMedicaments } from "../../hooks/useSupabaseData";
 import Pagination from "../../components/Pagination";
-import { insertPatient, insertOrdonnance } from "../../hooks/useMutations";
+import { insertPatient, insertOrdonnance, upsertHospitalisation, fetchHospitalisation, insertConstante, fetchConstantes, updatePatientTriage } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../supabaseClient";
 import { openDocument, tableHTML, infoGridHTML, alertBannerHTML, signatureRowHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
@@ -26,6 +28,42 @@ const SERVICE_COLOR = {
   "Chirurgie": "#8B5CF6",         "Urgences": "#DC2626",
   "Neurologie": "#06B6D4",        "Ophtalmologie": "#10B981",
 };
+
+// ── Triage ────────────────────────────────────────────────────────────────────
+const TRIAGE = {
+  urgent:      { color: "#DC2626", bg: "#FEF2F2", label: "Urgent" },
+  semi_urgent: { color: "#D97706", bg: "#FFFBEB", label: "Semi-urgent" },
+  non_urgent:  { color: "#16A34A", bg: "#DCFCE7", label: "Non urgent" },
+};
+
+function TriageBadge({ triage }) {
+  if (!triage) return null;
+  const t = TRIAGE[triage];
+  if (!t) return null;
+  return (
+    <span style={{ padding: "2px 8px", borderRadius: 8, fontSize: 10, fontWeight: 800, backgroundColor: t.bg, color: t.color }}>
+      {t.label}
+    </span>
+  );
+}
+
+// ── Alertes constantes vitales ────────────────────────────────────────────────
+function alerteConstante(key, value) {
+  const v = Number(value);
+  if (isNaN(v)) return null;
+  const limites = {
+    temperature:       { min: 35.5, max: 38.5, label: "Temperature" },
+    tension_systolique: { min: 90,  max: 180,  label: "TA systolique" },
+    tension_diastolique:{ min: 60,  max: 110,  label: "TA diastolique" },
+    pouls:             { min: 50,   max: 120,  label: "Pouls" },
+    saturation_o2:     { min: 92,   max: 100,  label: "SpO2" },
+  };
+  const lim = limites[key];
+  if (!lim) return null;
+  if (v < lim.min) return `${lim.label} trop bas (${v})`;
+  if (v > lim.max) return `${lim.label} trop eleve (${v})`;
+  return null;
+}
 
 // antécédents qui déclenchent le badge ATTENTION
 const ANTECEDENTS_CRITIQUES = [
@@ -497,21 +535,38 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
   const [onglet, setOnglet]           = useState("infos");
   const [ordonnances, setOrdonnances] = useState([]);
   const [comptes, setComptes]         = useState([]);
+  const [constantes, setConstantes]   = useState([]);
+  const [hospi, setHospi]             = useState(null);
   const [loading, setLoading]         = useState(true);
   const [showOrd, setShowOrd]         = useState(false);
   const [showCR, setShowCR]           = useState(false);
   const [detailCR, setDetailCR]       = useState(null);
   const [smsError, setSmsError]       = useState(null);
+  // Constantes form
+  const [constForm, setConstForm]     = useState({ temperature: "", tension_systolique: "", tension_diastolique: "", pouls: "", saturation_o2: "", poids: "", taille: "", notes: "" });
+  const [savingConst, setSavingConst] = useState(false);
+  const [constAlertes, setConstAlertes] = useState([]);
+  // Hospitalisation form
+  const [hospiForm, setHospiForm]     = useState({ statut: "ambulatoire", service: patient.service ?? "Medecine generale", chambre: "", lit: "", date_entree: "", date_sortie_prevue: "", motif_hospitalisation: "" });
+  const [savingHospi, setSavingHospi] = useState(false);
+  const [hospiSaved, setHospiSaved]   = useState(false);
 
   const charger = useCallback(async () => {
     setLoading(true);
     try {
-      const [{ data: ords }, { data: crs }] = await Promise.all([
+      const [{ data: ords }, { data: crs }, constData, hospiData] = await Promise.all([
         supabase.from("ordonnances").select("id, reference, statut, date_emission, date_expiration, medecin_nom, notes").eq("patient_id", patient.id).order("date_emission", { ascending: false }),
         supabase.from("comptes_rendus").select("*").eq("patient_id", patient.id).order("date_consultation", { ascending: false }),
+        fetchConstantes(patient.id),
+        fetchHospitalisation(patient.id),
       ]);
       setOrdonnances(ords ?? []);
       setComptes(crs ?? []);
+      setConstantes(constData);
+      if (hospiData) {
+        setHospi(hospiData);
+        setHospiForm((f) => ({ ...f, statut: hospiData.statut ?? "ambulatoire", chambre: hospiData.chambre ?? "", lit: hospiData.lit ?? "", date_entree: hospiData.date_entree ?? "", date_sortie_prevue: hospiData.date_sortie_prevue ?? "", motif_hospitalisation: hospiData.motif_hospitalisation ?? "" }));
+      }
     } catch { /* silencieux */ }
     finally { setLoading(false); }
   }, [patient.id]);
@@ -527,12 +582,53 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
     ...comptes.map((c)     => ({ type: "compte_rendu", date: c.date_consultation, item: c })),
   ].sort((a, b) => new Date(b.date) - new Date(a.date));
 
+  // Sauvegarder constantes
+  const handleSaveConst = async () => {
+    setSavingConst(true);
+    const alertes = Object.entries(constForm)
+      .map(([k, v]) => alerteConstante(k, v))
+      .filter(Boolean);
+    setConstAlertes(alertes);
+    try {
+      const payload = {
+        patient_id: patient.id,
+        etablissement_id: etablissement_id ?? null,
+        saisi_par: medecinNom ?? null,
+        notes: constForm.notes || null,
+      };
+      ["temperature","tension_systolique","tension_diastolique","pouls","saturation_o2","poids","taille"].forEach((k) => {
+        if (constForm[k] !== "") payload[k] = Number(constForm[k]);
+      });
+      await insertConstante(payload);
+      const fresh = await fetchConstantes(patient.id);
+      setConstantes(fresh);
+      setConstForm({ temperature: "", tension_systolique: "", tension_diastolique: "", pouls: "", saturation_o2: "", poids: "", taille: "", notes: "" });
+    } catch (e) { alert("Erreur : " + e.message); }
+    finally { setSavingConst(false); }
+  };
+
+  // Sauvegarder hospitalisation
+  const handleSaveHospi = async () => {
+    setSavingHospi(true);
+    try {
+      await upsertHospitalisation(patient.id, { ...hospiForm, etablissement_id: etablissement_id ?? null });
+      setHospiSaved(true);
+      setTimeout(() => setHospiSaved(false), 2000);
+      charger();
+      onPatientUpdated("Statut d'hospitalisation mis a jour.");
+    } catch (e) { alert("Erreur : " + e.message); }
+    finally { setSavingHospi(false); }
+  };
+
   const svcColor = SERVICE_COLOR[patient.service] ?? "#6B7280";
   const onglets  = [
     ["infos", "Informations"],
+    ["hospitalisation", "Hospitalisation"],
+    ["constantes", `Constantes (${constantes.length})`],
     ["ordonnances", `Ordonnances (${ordonnances.length})`],
     ["comptes", `Comptes rendus (${comptes.length})`],
     ["historique", `Historique (${historique.length})`],
+    ["qrcode", "QR Code"],
   ];
 
   return (
@@ -658,6 +754,155 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* ── Hospitalisation ── */}
+            {onglet === "hospitalisation" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                <h4 style={{ margin: "0 0 4px", fontSize: 13, fontWeight: 700, color: colors.navy }}>Statut et affectation</h4>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 4 }}>Statut</label>
+                    <select value={hospiForm.statut} onChange={(e) => setHospiForm((f) => ({ ...f, statut: e.target.value }))} style={{ width: "100%", padding: "9px 12px", border: `1.5px solid ${colors.border}`, borderRadius: 8, fontSize: 13, outline: "none", backgroundColor: colors.bgCard, color: colors.navy }}>
+                      <option value="ambulatoire">Ambulatoire</option>
+                      <option value="hospitalise">Hospitalise</option>
+                      <option value="sorti">Sorti</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 4 }}>Service</label>
+                    <select value={hospiForm.service} onChange={(e) => setHospiForm((f) => ({ ...f, service: e.target.value }))} style={{ width: "100%", padding: "9px 12px", border: `1.5px solid ${colors.border}`, borderRadius: 8, fontSize: 13, outline: "none", backgroundColor: colors.bgCard, color: colors.navy }}>
+                      {SERVICES.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 4 }}>Chambre</label>
+                    <input value={hospiForm.chambre} onChange={(e) => setHospiForm((f) => ({ ...f, chambre: e.target.value }))} placeholder="Ex: B12" style={{ width: "100%", padding: "9px 12px", border: `1.5px solid ${colors.border}`, borderRadius: 8, fontSize: 13, outline: "none", boxSizing: "border-box", backgroundColor: colors.bgCard, color: colors.navy }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 4 }}>Lit</label>
+                    <input value={hospiForm.lit} onChange={(e) => setHospiForm((f) => ({ ...f, lit: e.target.value }))} placeholder="Ex: 3" style={{ width: "100%", padding: "9px 12px", border: `1.5px solid ${colors.border}`, borderRadius: 8, fontSize: 13, outline: "none", boxSizing: "border-box", backgroundColor: colors.bgCard, color: colors.navy }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 4 }}>Date d'entree</label>
+                    <input type="date" value={hospiForm.date_entree} onChange={(e) => setHospiForm((f) => ({ ...f, date_entree: e.target.value }))} style={{ width: "100%", padding: "9px 12px", border: `1.5px solid ${colors.border}`, borderRadius: 8, fontSize: 13, outline: "none", boxSizing: "border-box", backgroundColor: colors.bgCard, color: colors.navy }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 4 }}>Sortie prevue</label>
+                    <input type="date" value={hospiForm.date_sortie_prevue} onChange={(e) => setHospiForm((f) => ({ ...f, date_sortie_prevue: e.target.value }))} style={{ width: "100%", padding: "9px 12px", border: `1.5px solid ${colors.border}`, borderRadius: 8, fontSize: 13, outline: "none", boxSizing: "border-box", backgroundColor: colors.bgCard, color: colors.navy }} />
+                  </div>
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 4 }}>Motif d'hospitalisation</label>
+                  <textarea value={hospiForm.motif_hospitalisation} onChange={(e) => setHospiForm((f) => ({ ...f, motif_hospitalisation: e.target.value }))} rows={3} style={{ width: "100%", padding: "9px 12px", border: `1.5px solid ${colors.border}`, borderRadius: 8, fontSize: 13, outline: "none", boxSizing: "border-box", resize: "vertical", backgroundColor: colors.bgCard, color: colors.navy }} />
+                </div>
+                {hospiForm.statut === "hospitalise" && (
+                  <div style={{ padding: "10px 14px", backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, fontSize: 12, color: "#DC2626", fontWeight: 600 }}>
+                    Ce patient sera marque comme hospitalise — verifiez que chambre et lit sont renseignes.
+                  </div>
+                )}
+                <button onClick={handleSaveHospi} disabled={savingHospi} style={{ padding: "10px 20px", backgroundColor: ACCENT, color: "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", alignSelf: "flex-start" }}>
+                  {savingHospi ? "Enregistrement..." : hospiSaved ? "Sauvegarde !" : "Enregistrer le statut"}
+                </button>
+              </div>
+            )}
+
+            {/* ── Constantes vitales ── */}
+            {onglet === "constantes" && (
+              <div>
+                <h4 style={{ margin: "0 0 12px", fontSize: 13, fontWeight: 700, color: colors.navy }}>Saisir les constantes</h4>
+                {constAlertes.length > 0 && (
+                  <div style={{ padding: "10px 14px", backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, fontSize: 12, color: "#DC2626", marginBottom: 12 }}>
+                    <div style={{ fontWeight: 700, marginBottom: 4 }}>Valeurs critiques detectees :</div>
+                    {constAlertes.map((a) => <div key={a}>• {a}</div>)}
+                  </div>
+                )}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+                  {[
+                    { key: "temperature", label: "Temperature (°C)", placeholder: "37.2" },
+                    { key: "pouls", label: "Pouls (bpm)", placeholder: "72" },
+                    { key: "tension_systolique", label: "TA systolique (mmHg)", placeholder: "120" },
+                    { key: "tension_diastolique", label: "TA diastolique (mmHg)", placeholder: "80" },
+                    { key: "saturation_o2", label: "SpO2 (%)", placeholder: "98" },
+                    { key: "poids", label: "Poids (kg)", placeholder: "70" },
+                    { key: "taille", label: "Taille (cm)", placeholder: "170" },
+                  ].map(({ key, label, placeholder }) => (
+                    <div key={key}>
+                      <label style={{ fontSize: 11, fontWeight: 600, color: colors.text, display: "block", marginBottom: 3 }}>{label}</label>
+                      <input type="number" step="0.1" value={constForm[key]} onChange={(e) => setConstForm((f) => ({ ...f, [key]: e.target.value }))} placeholder={placeholder} style={{ width: "100%", padding: "8px 10px", border: `1.5px solid ${constForm[key] && alerteConstante(key, constForm[key]) ? "#EF4444" : colors.border}`, borderRadius: 7, fontSize: 13, outline: "none", boxSizing: "border-box", backgroundColor: colors.bgCard, color: colors.navy }} />
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginBottom: 10 }}>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: colors.text, display: "block", marginBottom: 3 }}>Notes</label>
+                  <input value={constForm.notes} onChange={(e) => setConstForm((f) => ({ ...f, notes: e.target.value }))} style={{ width: "100%", padding: "8px 10px", border: `1.5px solid ${colors.border}`, borderRadius: 7, fontSize: 13, outline: "none", boxSizing: "border-box", backgroundColor: colors.bgCard, color: colors.navy }} />
+                </div>
+                <button onClick={handleSaveConst} disabled={savingConst} style={{ padding: "8px 20px", backgroundColor: ACCENT, color: "white", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 20 }}>
+                  {savingConst ? "Enregistrement..." : "Enregistrer les constantes"}
+                </button>
+
+                {/* Historique constantes */}
+                {constantes.length > 0 && (
+                  <>
+                    <h4 style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 700, color: colors.navy }}>Historique ({constantes.length} mesures)</h4>
+                    {/* Graphique temperature + pouls */}
+                    {constantes.some((c) => c.temperature || c.pouls) && (
+                      <div style={{ marginBottom: 14 }}>
+                        <div style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 6 }}>Temperature °C (rouge) / Pouls bpm (bleu) — 10 dernieres mesures</div>
+                        <ResponsiveContainer width="100%" height={140}>
+                          <LineChart data={[...constantes].reverse().slice(0, 10).map((c) => ({ date: new Date(c.created_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" }), temp: c.temperature, pouls: c.pouls }))}>
+                            <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                            <YAxis tick={{ fontSize: 10 }} />
+                            <Tooltip />
+                            <Line type="monotone" dataKey="temp" stroke="#EF4444" dot={false} name="Temp °C" />
+                            <Line type="monotone" dataKey="pouls" stroke="#3B82F6" dot={false} name="Pouls bpm" />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {constantes.slice(0, 8).map((c) => (
+                        <div key={c.id} style={{ display: "flex", gap: 8, padding: "8px 12px", backgroundColor: colors.bgSurface, borderRadius: 8, fontSize: 12, flexWrap: "wrap" }}>
+                          <span style={{ color: colors.textMuted, minWidth: 80 }}>{new Date(c.created_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                          {c.temperature && <span style={{ color: "#EF4444" }}>T: {c.temperature}°C</span>}
+                          {(c.tension_systolique || c.tension_diastolique) && <span style={{ color: "#8B5CF6" }}>TA: {c.tension_systolique}/{c.tension_diastolique} mmHg</span>}
+                          {c.pouls && <span style={{ color: "#3B82F6" }}>Pouls: {c.pouls} bpm</span>}
+                          {c.saturation_o2 && <span style={{ color: c.saturation_o2 < 92 ? "#EF4444" : "#10B981" }}>SpO2: {c.saturation_o2}%</span>}
+                          {c.poids && <span style={{ color: colors.text }}>Poids: {c.poids} kg</span>}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* ── QR Code ── */}
+            {onglet === "qrcode" && (
+              <div style={{ textAlign: "center", padding: "20px 0" }}>
+                <h4 style={{ margin: "0 0 20px", fontSize: 13, fontWeight: 700, color: colors.navy }}>QR Code — Dossier patient</h4>
+                <div style={{ display: "inline-block", padding: 20, backgroundColor: "white", borderRadius: 16, boxShadow: "0 2px 12px rgba(0,0,0,0.1)", marginBottom: 20 }}>
+                  <QRCodeSVG
+                    value={`MEDOS-PATIENT:${patient.id}:${patient.numero_dossier ?? ""}:${patient.prenom ?? ""} ${patient.nom ?? ""}`}
+                    size={200}
+                    level="M"
+                    includeMargin={false}
+                  />
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: colors.navy, marginBottom: 4 }}>{patient.prenom} {patient.nom}</div>
+                {patient.numero_dossier && (
+                  <div style={{ fontSize: 12, color: colors.textSecondary, fontFamily: "monospace", marginBottom: 16 }}>{patient.numero_dossier}</div>
+                )}
+                <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 20, maxWidth: 340, margin: "0 auto 20px" }}>
+                  Ce QR code contient l'identifiant unique du dossier patient. Le scanner permet d'ouvrir directement sa fiche dans MedOS.
+                </div>
+                <button
+                  onClick={() => window.print()}
+                  style={{ padding: "9px 20px", backgroundColor: ACCENT, color: "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer" }}
+                >
+                  Imprimer le QR Code
+                </button>
               </div>
             )}
 
@@ -877,6 +1122,7 @@ function PatientRow({ patient, onOpen, isLast }) {
             <span style={{ fontSize: 13, fontWeight: 700, color: colors.navy }}>{patient.prenom} {patient.nom}</span>
             {urgent    && <span style={{ padding: "1px 6px", background: "#DC2626", color: "white", borderRadius: 5, fontSize: 9, fontWeight: 800, letterSpacing: 0.5 }}>URGENT</span>}
             {attention && <span style={{ padding: "1px 6px", background: "#D97706", color: "white", borderRadius: 5, fontSize: 9, fontWeight: 800, letterSpacing: 0.5 }}>ATTENTION</span>}
+            <TriageBadge triage={patient.triage} />
           </div>
           <div style={{ fontSize: 11, color: patient.statut === "hospitalise" ? "#EF4444" : "#9CA3AF", marginTop: 1 }}>
             {patient.statut === "hospitalise" ? "Hospitalisé" : "Ambulatoire"}
@@ -909,6 +1155,7 @@ export default function PatientsHopital() {
   const patientStats = usePatientsStats();
   const { data: medicaments }                = useMedicaments();
   const [filtreService, setFiltreService]    = useState("tous");
+  const [filtreTriage, setFiltreTriage]      = useState("tous");
   const [showNouv, setShowNouv]              = useState(false);
   const [fichePatient, setFichePatient]      = useState(null);
   const [toast, setToast]                    = useState(null);
@@ -922,6 +1169,7 @@ export default function PatientsHopital() {
   const filtered = patients
     .filter((p) => filtreStatut === "tous"    || p.statut  === filtreStatut)
     .filter((p) => filtreService === "tous"   || (p.service ?? "Médecine générale") === filtreService)
+    .filter((p) => filtreTriage === "tous"    || p.triage  === filtreTriage)
     .filter((p) => {
       const q = recherche.toLowerCase();
       return !q || `${p.prenom} ${p.nom}`.toLowerCase().includes(q) || (p.numero_dossier ?? "").toLowerCase().includes(q);
@@ -983,6 +1231,13 @@ export default function PatientsHopital() {
           <option value="tous">Tous les services</option>
           {SERVICES.map((s) => <option key={s}>{s}</option>)}
         </select>
+
+        {/* Filtre triage */}
+        <div style={{ display: "flex", gap: 5 }}>
+          {[["tous", "Tous", "#6B7280"], ["urgent", "Urgent", "#DC2626"], ["semi_urgent", "Semi-urgent", "#D97706"], ["non_urgent", "Non urgent", "#16A34A"]].map(([v, l, c]) => (
+            <button key={v} onClick={() => setFiltreTriage(v)} style={{ padding: "6px 10px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer", border: `1.5px solid ${filtreTriage === v ? c : colors.border}`, backgroundColor: filtreTriage === v ? c + "18" : colors.bgCard, color: filtreTriage === v ? c : colors.textSecondary }}>{l}</button>
+          ))}
+        </div>
 
         <button onClick={() => setShowNouv(true)} style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 16px", background: ACCENT, color: "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>

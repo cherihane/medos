@@ -41,6 +41,8 @@ const HoAssistant    = lazy(() => import("./pages/hopital/AssistantIA"));
 const HoReseau       = lazy(() => import("./pages/hopital/Reseau"));
 const HoAlertes      = lazy(() => import("./pages/hopital/Alertes"));
 const HoRapports     = lazy(() => import("./pages/hopital/Rapports"));
+const HoFacturation  = lazy(() => import("./pages/hopital/Facturation"));
+const HoPlanning     = lazy(() => import("./pages/hopital/Planning"));
 
 // Distributeur
 const DiDashboard     = lazy(() => import("./pages/distributeur/Dashboard"));
@@ -135,6 +137,8 @@ function AppRoutes() {
         <Route path="/hopital/reseau"       element={<ProtectedRoute requiredRole="hopital"><HoReseau /></ProtectedRoute>} />
         <Route path="/hopital/alertes"      element={<ProtectedRoute requiredRole="hopital"><HoAlertes /></ProtectedRoute>} />
         <Route path="/hopital/rapports"     element={<ProtectedRoute requiredRole="hopital"><HoRapports /></ProtectedRoute>} />
+        <Route path="/hopital/facturation"  element={<ProtectedRoute requiredRole="hopital"><HoFacturation /></ProtectedRoute>} />
+        <Route path="/hopital/planning"     element={<ProtectedRoute requiredRole="hopital"><HoPlanning /></ProtectedRoute>} />
 
         {/* Distributeur */}
         <Route path="/distributeur/dashboard"      element={<ProtectedRoute requiredRole="distributeur"><DiDashboard /></ProtectedRoute>} />
