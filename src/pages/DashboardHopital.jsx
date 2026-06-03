@@ -1,3 +1,4 @@
+import { colors } from "../theme";
 import Layout from "../components/Layout";
 import KpiCard from "../components/KpiCard";
 import { useKpiHopital, useAlertes, useMedicamentsCritiques } from "../hooks/useSupabaseData";
@@ -49,12 +50,12 @@ export default function DashboardHopital() {
 
       <div className="dash-grid-2">
         {/* Medicaments a reapprovisionner */}
-        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: colors.navy }}>
             Medicaments a reapprovisionner
           </h3>
           {loadCrit ? (
-            <div style={{ color: "#9CA3AF", fontSize: 13 }}>Chargement…</div>
+            <div style={{ color: colors.textMuted, fontSize: 13 }}>Chargement…</div>
           ) : critiques.length === 0 ? (
             <div style={{ padding: "16px", backgroundColor: "#F0FDF4", borderRadius: 10, color: "#16A34A", fontSize: 13, fontWeight: 600 }}>
               Tous les stocks sont au-dessus du seuil minimum.
@@ -75,7 +76,7 @@ export default function DashboardHopital() {
                     }}
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                      <span style={{ fontWeight: 700, fontSize: 13, color: "#0A1628" }}>{m.nom}</span>
+                      <span style={{ fontWeight: 700, fontSize: 13, color: colors.navy }}>{m.nom}</span>
                       <span style={{
                         fontSize: 11, padding: "2px 8px", borderRadius: 12, fontWeight: 700,
                         backgroundColor: niveau === "critique" ? "#FEE2E2" : "#FEF9C3",
@@ -84,7 +85,7 @@ export default function DashboardHopital() {
                         {niveau.toUpperCase()}
                       </span>
                     </div>
-                    <div style={{ fontSize: 12, color: "#6B7280" }}>
+                    <div style={{ fontSize: 12, color: colors.textSecondary }}>
                       Stock actuel : <strong style={{ color: "#EF4444" }}>{m.stock_actuel}</strong>
                       {" / "}Minimum : <strong>{m.stock_minimum}</strong>
                       {" — "}<span style={{ color: "#3B82F6", fontWeight: 600 }}>Commander {manque} unites</span>
@@ -97,10 +98,10 @@ export default function DashboardHopital() {
         </div>
 
         {/* Alertes actives */}
-        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Alertes actives</h3>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Alertes actives</h3>
           {loadAlertes ? (
-            <div style={{ color: "#9CA3AF", fontSize: 13 }}>Chargement…</div>
+            <div style={{ color: colors.textMuted, fontSize: 13 }}>Chargement…</div>
           ) : alertes.length === 0 ? (
             <div style={{ padding: "16px", backgroundColor: "#F0FDF4", borderRadius: 10, color: "#16A34A", fontSize: 13, fontWeight: 600 }}>
               Aucune alerte active.
@@ -120,13 +121,13 @@ export default function DashboardHopital() {
                     }}
                   >
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: "#0A1628", marginBottom: 2 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: colors.navy, marginBottom: 2 }}>
                         {a.titre}
                       </div>
                       {a.message && (
-                        <div style={{ fontSize: 12, color: "#6B7280" }}>{a.message}</div>
+                        <div style={{ fontSize: 12, color: colors.textSecondary }}>{a.message}</div>
                       )}
-                      <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>
+                      <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 4 }}>
                         {fmtDate(a.created_at)}
                       </div>
                     </div>
@@ -142,8 +143,8 @@ export default function DashboardHopital() {
             </div>
           )}
 
-          <div style={{ marginTop: 20, padding: "14px 16px", backgroundColor: "#F8FAFC", borderRadius: 10 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#0A1628", marginBottom: 8 }}>
+          <div style={{ marginTop: 20, padding: "14px 16px", backgroundColor: colors.bgSurface, borderRadius: 10 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: colors.navy, marginBottom: 8 }}>
               Total alertes non resolues : {loadKpi ? "…" : kpi?.totalAlertes ?? 0}
             </div>
             <div style={{ display: "flex", gap: 16, fontSize: 12 }}>

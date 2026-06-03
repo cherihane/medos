@@ -1,3 +1,4 @@
+import { colors } from "../theme";
 import { useState, useMemo } from "react";
 import Layout from "../components/Layout";
 import { useMedicaments } from "../hooks/useSupabaseData";
@@ -61,23 +62,23 @@ export default function Caisse() {
         {/* Gauche : catalogue */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {/* Recherche */}
-          <div style={{ backgroundColor: "white", borderRadius: 14, padding: "16px 20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "16px 20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
             <input
               placeholder="Rechercher un médicament par nom, DCI, catégorie..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              style={{ width: "100%", padding: "10px 14px", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 14, outline: "none", boxSizing: "border-box" }}
+              style={{ width: "100%", padding: "10px 14px", border: "1.5px solid var(--border)", borderRadius: 10, fontSize: 14, outline: "none", boxSizing: "border-box" }}
             />
           </div>
 
           {/* Acces rapide */}
           {!search && (
-            <div style={{ backgroundColor: "white", borderRadius: 14, padding: "20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-              <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 700, color: "#0A1628" }}>Acces rapide</h3>
+            <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+              <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 700, color: colors.navy }}>Acces rapide</h3>
               {loading ? (
-                <div style={{ color: "#9CA3AF", fontSize: 13 }}>Chargement…</div>
+                <div style={{ color: colors.textMuted, fontSize: 13 }}>Chargement…</div>
               ) : accesRapide.length === 0 ? (
-                <div style={{ color: "#9CA3AF", fontSize: 13 }}>Aucun médicament en stock.</div>
+                <div style={{ color: colors.textMuted, fontSize: 13 }}>Aucun médicament en stock.</div>
               ) : (
                 <div className="kpi-grid kpi-grid-4" style={{ gap: 10 }}>
                   {accesRapide.map((m) => (
@@ -85,16 +86,16 @@ export default function Caisse() {
                       key={m.id}
                       onClick={() => addToCart(m)}
                       style={{
-                        padding: "12px 8px", backgroundColor: "#F0F4FB",
-                        border: "1.5px solid #E5E7EB", borderRadius: 10,
+                        padding: "12px 8px", backgroundColor: colors.bg,
+                        border: "1.5px solid var(--border)", borderRadius: 10,
                         cursor: "pointer", textAlign: "center",
                       }}
                     >
-                      <div style={{ fontSize: 11, fontWeight: 700, color: "#0A1628", marginBottom: 4, lineHeight: 1.3 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: colors.navy, marginBottom: 4, lineHeight: 1.3 }}>
                         {m.nom}
                       </div>
                       {m.dosage && (
-                        <div style={{ fontSize: 10, color: "#9CA3AF", marginBottom: 4 }}>{m.dosage}</div>
+                        <div style={{ fontSize: 10, color: colors.textMuted, marginBottom: 4 }}>{m.dosage}</div>
                       )}
                       <div style={{ fontSize: 12, color: "#3B82F6", fontWeight: 600 }}>
                         {m.prix_unitaire != null ? `${Number(m.prix_unitaire).toLocaleString("fr-FR")} FCFA` : "—"}
@@ -108,12 +109,12 @@ export default function Caisse() {
 
           {/* Resultats de recherche */}
           {search && (
-            <div style={{ backgroundColor: "white", borderRadius: 14, padding: "20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, overflowY: "auto" }}>
-              <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 700, color: "#0A1628" }}>
+            <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, overflowY: "auto" }}>
+              <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 700, color: colors.navy }}>
                 Resultats ({resultats.length})
               </h3>
               {resultats.length === 0 ? (
-                <div style={{ color: "#9CA3AF", fontSize: 13, padding: "16px 0" }}>
+                <div style={{ color: colors.textMuted, fontSize: 13, padding: "16px 0" }}>
                   Aucun médicament en stock ne correspond à "{search}".
                 </div>
               ) : (
@@ -121,16 +122,16 @@ export default function Caisse() {
                   {resultats.map((m) => (
                     <div
                       key={m.id}
-                      style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", backgroundColor: "#F8FAFC", borderRadius: 10 }}
+                      style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", backgroundColor: colors.bgSurface, borderRadius: 10 }}
                     >
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: 13, color: "#0A1628" }}>{m.nom}</div>
-                        <div style={{ fontSize: 11, color: "#9CA3AF" }}>
+                        <div style={{ fontWeight: 600, fontSize: 13, color: colors.navy }}>{m.nom}</div>
+                        <div style={{ fontSize: 11, color: colors.textMuted }}>
                           {m.categorie ?? "—"}{m.dosage ? ` · ${m.dosage}` : ""} · Stock : {m.stock_actuel}
                         </div>
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                        <span style={{ fontWeight: 700, color: "#374151" }}>
+                        <span style={{ fontWeight: 700, color: colors.text }}>
                           {m.prix_unitaire != null ? `${Number(m.prix_unitaire).toLocaleString("fr-FR")} FCFA` : "—"}
                         </span>
                         <button
@@ -149,25 +150,25 @@ export default function Caisse() {
         </div>
 
         {/* Droite : panier */}
-        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", display: "flex", flexDirection: "column" }}>
-          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Panier</h3>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", display: "flex", flexDirection: "column" }}>
+          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Panier</h3>
 
           <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
             {cart.length === 0 ? (
-              <div style={{ textAlign: "center", color: "#9CA3AF", fontSize: 13, padding: 40 }}>
+              <div style={{ textAlign: "center", color: colors.textMuted, fontSize: 13, padding: 40 }}>
                 Aucun article dans le panier.
                 <br />
                 Cliquez sur un produit pour l'ajouter.
               </div>
             ) : (
               cart.map((item) => (
-                <div key={item.id} style={{ padding: "10px 14px", backgroundColor: "#F8FAFC", borderRadius: 10 }}>
-                  <div style={{ fontWeight: 600, fontSize: 13, color: "#0A1628", marginBottom: 6 }}>{item.nom}</div>
+                <div key={item.id} style={{ padding: "10px 14px", backgroundColor: colors.bgSurface, borderRadius: 10 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: colors.navy, marginBottom: 6 }}>{item.nom}</div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <button
                         onClick={() => updateQty(item.id, item.qty - 1)}
-                        style={{ width: 26, height: 26, borderRadius: "50%", border: "1px solid #E5E7EB", background: "white", cursor: "pointer", fontSize: 14, fontWeight: 700, lineHeight: 1 }}
+                        style={{ width: 26, height: 26, borderRadius: "50%", border: "1px solid var(--border)", background: "white", cursor: "pointer", fontSize: 14, fontWeight: 700, lineHeight: 1 }}
                       >
                         -
                       </button>
@@ -175,12 +176,12 @@ export default function Caisse() {
                       <button
                         onClick={() => updateQty(item.id, item.qty + 1)}
                         disabled={item.qty >= item.stock_actuel}
-                        style={{ width: 26, height: 26, borderRadius: "50%", border: "1px solid #E5E7EB", background: "white", cursor: item.qty >= item.stock_actuel ? "not-allowed" : "pointer", fontSize: 14, fontWeight: 700, lineHeight: 1, opacity: item.qty >= item.stock_actuel ? 0.4 : 1 }}
+                        style={{ width: 26, height: 26, borderRadius: "50%", border: "1px solid var(--border)", background: "white", cursor: item.qty >= item.stock_actuel ? "not-allowed" : "pointer", fontSize: 14, fontWeight: 700, lineHeight: 1, opacity: item.qty >= item.stock_actuel ? 0.4 : 1 }}
                       >
                         +
                       </button>
                     </div>
-                    <span style={{ fontWeight: 700, color: "#0A1628" }}>
+                    <span style={{ fontWeight: 700, color: colors.navy }}>
                       {(Number(item.prix_unitaire ?? 0) * item.qty).toLocaleString("fr-FR")} FCFA
                     </span>
                   </div>
@@ -190,18 +191,18 @@ export default function Caisse() {
           </div>
 
           {/* Resume */}
-          <div style={{ borderTop: "1px solid #E5E7EB", paddingTop: 16, marginTop: 8 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 13, color: "#6B7280" }}>
+          <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 13, color: colors.textSecondary }}>
               <span>Sous-total ({cart.reduce((s, i) => s + i.qty, 0)} articles)</span>
               <span>{total.toLocaleString("fr-FR")} FCFA</span>
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 18, fontWeight: 800, color: "#0A1628", marginBottom: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 18, fontWeight: 800, color: colors.navy, marginBottom: 16 }}>
               <span>TOTAL</span>
               <span>{total.toLocaleString("fr-FR")} FCFA</span>
             </div>
 
             <div style={{ marginBottom: 12 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 6 }}>
                 Mode de paiement
               </label>
               <div style={{ display: "flex", gap: 8 }}>
@@ -215,7 +216,7 @@ export default function Caisse() {
                     onClick={() => setPaiement(mode.key)}
                     style={{
                       flex: 1, padding: "8px", borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: "pointer",
-                      border: paiement === mode.key ? "2px solid #3B82F6" : "1.5px solid #E5E7EB",
+                      border: paiement === mode.key ? "2px solid #3B82F6" : "1.5px solid var(--border)",
                       backgroundColor: paiement === mode.key ? "#EFF6FF" : "white",
                       color: paiement === mode.key ? "#2563EB" : "#6B7280",
                     }}

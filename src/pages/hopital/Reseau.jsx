@@ -1,3 +1,4 @@
+import { colors } from "../../theme";
 import { useState } from "react";
 import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
@@ -19,14 +20,14 @@ function EtabModal({ etab, onClose }) {
           { label: "Email",   value: etab.email || "—" },
           { label: "Adresse", value: etab.adresse || "—" },
         ].map((item) => (
-          <div key={item.label} style={{ padding: "10px 14px", backgroundColor: "#F8FAFC", borderRadius: 10 }}>
-            <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 3, textTransform: "capitalize" }}>{item.label}</div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#0A1628" }}>{item.value}</div>
+          <div key={item.label} style={{ padding: "10px 14px", backgroundColor: colors.bgSurface, borderRadius: 10 }}>
+            <div style={{ fontSize: 11, color: colors.textMuted, marginBottom: 3, textTransform: "capitalize" }}>{item.label}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: colors.navy }}>{item.value}</div>
           </div>
         ))}
       </div>
       <div style={{ marginTop: 16 }}>
-        <button onClick={onClose} style={{ width: "100%", padding: "10px", backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: 10, fontSize: 13, cursor: "pointer" }}>Fermer</button>
+        <button onClick={onClose} style={{ width: "100%", padding: "10px", backgroundColor: colors.bgSurface, border: "1px solid var(--border)", borderRadius: 10, fontSize: 13, cursor: "pointer" }}>Fermer</button>
       </div>
     </Modal>
   );
@@ -113,25 +114,25 @@ export default function Reseau() {
           { label: "Pharmacies", value: loading ? "…" : etablissements.filter(e => e.type === "pharmacie").length, color: "#8B5CF6" },
           { label: "Distributeurs", value: loading ? "…" : etablissements.filter(e => e.type === "distributeur").length, color: "#F59E0B" },
         ].map((k) => (
-          <div key={k.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "18px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
+          <div key={k.label} style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "18px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
             <div style={{ fontSize: 22, fontWeight: 800, color: k.color }}>{k.value}</div>
-            <div style={{ fontSize: 12, color: "#6B7280" }}>{k.label}</div>
+            <div style={{ fontSize: 12, color: colors.textSecondary }}>{k.label}</div>
           </div>
         ))}
       </div>
 
-      <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-        <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Établissements du réseau</h3>
+      <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+        <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Établissements du réseau</h3>
         {loading && [1,2,3].map((i) => (
-          <div key={i} style={{ height: 60, backgroundColor: "#F8FAFC", borderRadius: 10, marginBottom: 8, animation: "pulse 1.5s ease-in-out infinite" }} />
+          <div key={i} style={{ height: 60, backgroundColor: colors.bgSurface, borderRadius: 10, marginBottom: 8, animation: "pulse 1.5s ease-in-out infinite" }} />
         ))}
         {!loading && etablissements.map((e) => (
-          <div key={e.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px", backgroundColor: "#F8FAFC", borderRadius: 10, marginBottom: 8 }}>
+          <div key={e.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px", backgroundColor: colors.bgSurface, borderRadius: 10, marginBottom: 8 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <div style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "#10B981" }} />
               <div>
-                <div style={{ fontWeight: 600, fontSize: 13, color: "#0A1628" }}>{e.nom}</div>
-                <div style={{ fontSize: 11, color: "#9CA3AF", textTransform: "capitalize" }}>{e.type} · {e.ville}</div>
+                <div style={{ fontWeight: 600, fontSize: 13, color: colors.navy }}>{e.nom}</div>
+                <div style={{ fontSize: 11, color: colors.textMuted, textTransform: "capitalize" }}>{e.type} · {e.ville}</div>
               </div>
             </div>
             <div style={{ display: "flex", gap: 8 }}>

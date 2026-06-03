@@ -1,3 +1,4 @@
+import { colors } from "../../theme";
 import { useState } from "react";
 import Layout from "../../components/Layout";
 import Modal, { Field, ModalFooter, selectStyle } from "../../components/Modal";
@@ -19,7 +20,7 @@ const statusStyle = {
   normal:   { bg: "#DCFCE7", color: "#16A34A" },
   alerte:   { bg: "#FFFBEB", color: "#F59E0B" },
   critique: { bg: "#FEF2F2", color: "#EF4444" },
-  annulee:  { bg: "#F3F4F6", color: "#9CA3AF" },
+  annulee:  { bg: "#F3F4F6", color: colors.textMuted },
 };
 
 function fmt(iso) {
@@ -29,17 +30,17 @@ function fmt(iso) {
 
 function Skeleton() {
   return (
-    <div style={{ backgroundColor: "white", borderRadius: 16, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", animation: "pulse 1.5s ease-in-out infinite" }}>
+    <div style={{ backgroundColor: colors.bgCard, borderRadius: 16, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", animation: "pulse 1.5s ease-in-out infinite" }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
         <div>
-          <div style={{ width: 200, height: 16, backgroundColor: "#F3F4F6", borderRadius: 6, marginBottom: 8 }} />
-          <div style={{ width: 140, height: 12, backgroundColor: "#F3F4F6", borderRadius: 6 }} />
+          <div style={{ width: 200, height: 16, backgroundColor: colors.borderLight, borderRadius: 6, marginBottom: 8 }} />
+          <div style={{ width: 140, height: 12, backgroundColor: colors.borderLight, borderRadius: 6 }} />
         </div>
-        <div style={{ width: 80, height: 28, backgroundColor: "#F3F4F6", borderRadius: 8 }} />
+        <div style={{ width: 80, height: 28, backgroundColor: colors.borderLight, borderRadius: 8 }} />
       </div>
-      <div style={{ height: 10, backgroundColor: "#F3F4F6", borderRadius: 6, marginBottom: 12 }} />
+      <div style={{ height: 10, backgroundColor: colors.borderLight, borderRadius: 6, marginBottom: 12 }} />
       <div style={{ display: "flex", gap: 8 }}>
-        {[1,2,3].map((i) => <div key={i} style={{ flex: 1, height: 34, backgroundColor: "#F3F4F6", borderRadius: 8 }} />)}
+        {[1,2,3].map((i) => <div key={i} style={{ flex: 1, height: 34, backgroundColor: colors.borderLight, borderRadius: 8 }} />)}
       </div>
     </div>
   );
@@ -69,10 +70,10 @@ function PaiementModal({ commande, onClose, onSaved }) {
 
   return (
     <Modal title="Enregistrer un paiement" onClose={onClose} width={420}>
-      <div style={{ padding: "14px 16px", backgroundColor: "#F8FAFC", borderRadius: 10, marginBottom: 16 }}>
-        <div style={{ fontSize: 12, color: "#9CA3AF" }}>Commande</div>
-        <div style={{ fontWeight: 700, color: "#0A1628" }}>{commande.reference ?? commande.id.slice(0,8).toUpperCase()}</div>
-        <div style={{ fontSize: 13, color: "#374151", marginTop: 4 }}>
+      <div style={{ padding: "14px 16px", backgroundColor: colors.bgSurface, borderRadius: 10, marginBottom: 16 }}>
+        <div style={{ fontSize: 12, color: colors.textMuted }}>Commande</div>
+        <div style={{ fontWeight: 700, color: colors.navy }}>{commande.reference ?? commande.id.slice(0,8).toUpperCase()}</div>
+        <div style={{ fontSize: 13, color: colors.text, marginTop: 4 }}>
           Montant : <strong>{(commande.montant_total ?? 0).toLocaleString()} FCFA</strong>
         </div>
       </div>
@@ -129,9 +130,9 @@ export default function Credits() {
           { label: "En alerte",         value: loading ? "…" : enAlerte,                                color: "#F59E0B" },
           { label: "Critiques",         value: loading ? "…" : enCritique,                              color: "#EF4444" },
         ].map((k) => (
-          <div key={k.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
-            <div style={{ fontSize: 20, fontWeight: 800, color: "#0A1628", marginTop: 4 }}>{k.value}</div>
-            <div style={{ fontSize: 12, color: "#6B7280" }}>{k.label}</div>
+          <div key={k.label} style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
+            <div style={{ fontSize: 20, fontWeight: 800, color: colors.navy, marginTop: 4 }}>{k.value}</div>
+            <div style={{ fontSize: 12, color: colors.textSecondary }}>{k.label}</div>
           </div>
         ))}
       </div>
@@ -145,7 +146,7 @@ export default function Credits() {
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {loading && [1,2,3].map((i) => <Skeleton key={i} />)}
         {!loading && !error && actives.length === 0 && (
-          <div style={{ backgroundColor: "white", borderRadius: 14, padding: "40px", textAlign: "center", color: "#9CA3AF", fontSize: 13, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "40px", textAlign: "center", color: colors.textMuted, fontSize: 13, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
             Aucune commande en encours
           </div>
         )}
@@ -158,28 +159,28 @@ export default function Credits() {
           const pct = Math.min(100, Math.round((montant / 10000000) * 100));
 
           return (
-            <div key={c.id} style={{ backgroundColor: "white", borderRadius: 16, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+            <div key={c.id} style={{ backgroundColor: colors.bgCard, borderRadius: 16, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
                 <div>
-                  <div style={{ fontWeight: 800, fontSize: 16, color: "#0A1628", marginBottom: 2 }}>{client}</div>
-                  <div style={{ fontSize: 12, color: "#9CA3AF" }}>
+                  <div style={{ fontWeight: 800, fontSize: 16, color: colors.navy, marginBottom: 2 }}>{client}</div>
+                  <div style={{ fontSize: 12, color: colors.textMuted }}>
                     {c.reference ?? c.id.slice(0,8).toUpperCase()} · Fournisseur : {fourn}
                   </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontSize: 13, color: "#6B7280" }}>Livraison : <strong>{fmt(c.date_livraison_prevue)}</strong></span>
+                  <span style={{ fontSize: 13, color: colors.textSecondary }}>Livraison : <strong>{fmt(c.date_livraison_prevue)}</strong></span>
                   <span style={{ padding: "4px 12px", borderRadius: 12, fontSize: 12, fontWeight: 700, backgroundColor: s.bg, color: s.color }}>{c.statut}</span>
                 </div>
               </div>
 
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 14 }}>
-                <span style={{ color: "#6B7280" }}>Montant</span>
-                <span style={{ fontWeight: 800, color: "#0A1628" }}>{montant.toLocaleString()} FCFA</span>
+                <span style={{ color: colors.textSecondary }}>Montant</span>
+                <span style={{ fontWeight: 800, color: colors.navy }}>{montant.toLocaleString()} FCFA</span>
               </div>
               <div style={{ height: 10, backgroundColor: "#E5E7EB", borderRadius: 6, marginBottom: 6 }}>
                 <div style={{ height: "100%", width: `${pct}%`, borderRadius: 6, backgroundColor: pct >= 90 ? "#EF4444" : pct >= 60 ? "#F59E0B" : "#10B981" }} />
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#9CA3AF", marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: colors.textMuted, marginBottom: 16 }}>
                 <span>Passée le {fmt(c.date_commande)}</span>
                 <span style={{ fontFamily: "monospace" }}>{c.statut.toUpperCase()}</span>
               </div>

@@ -1,3 +1,4 @@
+import { colors } from "../../theme";
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
@@ -20,7 +21,7 @@ function fmtDate(iso) {
 }
 
 function CriticiteBadge({ days }) {
-  if (days === null) return <span style={{ fontSize: 11, color: "#9CA3AF" }}>Pas de date</span>;
+  if (days === null) return <span style={{ fontSize: 11, color: colors.textMuted }}>Pas de date</span>;
   if (days < 0) return <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, backgroundColor: "#1F2937", color: "#F9FAFB" }}>Expiré</span>;
   if (days <= 30) return <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, backgroundColor: "#FEF2F2", color: "#DC2626" }}>Critique — {days}j</span>;
   if (days <= 60) return <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, backgroundColor: "#FFFBEB", color: "#D97706" }}>Alerte — {days}j</span>;
@@ -119,7 +120,7 @@ export default function Peremptions() {
                 <tr key={i} style={{ borderBottom: `1px solid ${t.borderLight}`, animation: "pulse 1.5s ease-in-out infinite" }}>
                   {[160, 100, 80, 100, 100, 80].map((w, j) => (
                     <td key={j} style={{ padding: "13px 16px" }}>
-                      <div style={{ height: 13, width: w, backgroundColor: "#F3F4F6", borderRadius: 6 }} />
+                      <div style={{ height: 13, width: w, backgroundColor: colors.borderLight, borderRadius: 6 }} />
                     </td>
                   ))}
                 </tr>

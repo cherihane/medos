@@ -2,6 +2,7 @@
  * Patients — Module Hôpital
  * v2 : services médicaux, comptes rendus, hover card, badges urgence, historique
  */
+import { colors } from "../../theme";
 import { useState, useEffect, useCallback, useRef } from "react";
 import Layout from "../../components/Layout";
 import { usePatientsPaginated, usePatientsStats, useMedicaments } from "../../hooks/useSupabaseData";
@@ -34,11 +35,11 @@ const ANTECEDENTS_CRITIQUES = [
 
 // ── Styles partagés ───────────────────────────────────────────────────────────
 const inputSt = {
-  width: "100%", padding: "9px 12px", border: "1.5px solid #E5E7EB",
+  width: "100%", padding: "9px 12px", border: "1.5px solid var(--border)",
   borderRadius: 8, fontSize: 13, outline: "none", boxSizing: "border-box",
-  color: "#0A1628", backgroundColor: "white",
+  color: colors.navy, backgroundColor: colors.bgCard,
 };
-const labelSt = { fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 5 };
+const labelSt = { fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 5 };
 const Spin = () => (
   <div style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,0.4)", borderTopColor: "white", borderRadius: "50%", animation: "spin .8s linear infinite", flexShrink: 0 }} />
 );
@@ -241,12 +242,12 @@ function ModalNouveauPatient({ etablissement_id, medecinNom, onClose, onSaved })
         <div style={{ padding: "22px 26px 0", flexShrink: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
             <div>
-              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#0A1628" }}>Nouveau patient</h3>
-              <div style={{ fontSize: 12, color: "#6B7280", marginTop: 3 }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: colors.navy }}>Nouveau patient</h3>
+              <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 3 }}>
                 Dossier : <span style={{ fontFamily: "monospace", fontWeight: 700, color: ACCENT }}>{dossier}</span>
               </div>
             </div>
-            <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9CA3AF" }}>×</button>
+            <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: colors.textMuted }}>×</button>
           </div>
         </div>
 
@@ -276,11 +277,11 @@ function ModalNouveauPatient({ etablissement_id, medecinNom, onClose, onSaved })
             <div><label style={labelSt}>Adresse</label><input style={inputSt} value={form.adresse} onChange={(e) => set("adresse", e.target.value)} placeholder="Quartier, ville" /></div>
           </div>
           <div>
-            <label style={labelSt}>Allergies connues <span style={{ fontSize: 10, fontWeight: 400, color: "#9CA3AF" }}>— séparez par des virgules</span></label>
+            <label style={labelSt}>Allergies connues <span style={{ fontSize: 10, fontWeight: 400, color: colors.textMuted }}>— séparez par des virgules</span></label>
             <input style={{ ...inputSt, borderColor: form.allergies ? "#FCA5A5" : "#E5E7EB" }} value={form.allergies} onChange={(e) => set("allergies", e.target.value)} placeholder="Ex : Pénicilline, Aspirine, Latex" />
           </div>
           <div>
-            <label style={labelSt}>Antécédents médicaux <span style={{ fontSize: 10, fontWeight: 400, color: "#9CA3AF" }}>— séparez par des virgules</span></label>
+            <label style={labelSt}>Antécédents médicaux <span style={{ fontSize: 10, fontWeight: 400, color: colors.textMuted }}>— séparez par des virgules</span></label>
             <input style={inputSt} value={form.antecedents} onChange={(e) => set("antecedents", e.target.value)} placeholder="Ex : Diabète type 2, Hypertension" />
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
@@ -301,8 +302,8 @@ function ModalNouveauPatient({ etablissement_id, medecinNom, onClose, onSaved })
           {err && <div style={{ padding: "8px 12px", background: "#FEF2F2", borderRadius: 8, fontSize: 12, color: "#DC2626" }}>{err}</div>}
         </div>
 
-        <div style={{ display: "flex", gap: 10, padding: "16px 26px", borderTop: "1px solid #F3F4F6", flexShrink: 0 }}>
-          <button onClick={onClose} style={{ flex: 1, padding: 11, background: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 10, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>Annuler</button>
+        <div style={{ display: "flex", gap: 10, padding: "16px 26px", borderTop: "1px solid var(--border-light)", flexShrink: 0 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: 11, background: "#F8FAFC", color: colors.text, border: "1px solid var(--border)", borderRadius: 10, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>Annuler</button>
           <button onClick={handleSave} disabled={saving} style={{ flex: 2, padding: 11, background: saving ? "#E5E7EB" : ACCENT, color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
             {saving ? <><Spin />Enregistrement…</> : "Enregistrer le patient"}
           </button>
@@ -351,23 +352,23 @@ function ModalNouvelleOrdonnance({ patient, etablissement_id, medecinNom, medica
         <div style={{ padding: "22px 26px 0", flexShrink: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
             <div>
-              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#0A1628" }}>Nouvelle ordonnance</h3>
-              <div style={{ fontSize: 12, color: "#6B7280", marginTop: 3 }}>{patient.prenom} {patient.nom}</div>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: colors.navy }}>Nouvelle ordonnance</h3>
+              <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 3 }}>{patient.prenom} {patient.nom}</div>
             </div>
-            <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9CA3AF" }}>×</button>
+            <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: colors.textMuted }}>×</button>
           </div>
           <div className="form-row-2" style={{ marginBottom: 14 }}>
-            <div><label style={labelSt}>Médecin prescripteur</label><input style={{ ...inputSt, background: "#F8FAFC", color: "#6B7280" }} value={medecinNom ?? "Non précisé"} readOnly /></div>
+            <div><label style={labelSt}>Médecin prescripteur</label><input style={{ ...inputSt, background: "#F8FAFC", color: colors.textSecondary }} value={medecinNom ?? "Non précisé"} readOnly /></div>
             <div><label style={labelSt}>Date d'expiration</label><input style={inputSt} type="date" value={dateExpiration} onChange={(e) => setDateExp(e.target.value)} /></div>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 1.2fr 0.8fr 32px", gap: 8, padding: "8px 10px", background: "#F8FAFC", borderRadius: "8px 8px 0 0", border: "1px solid #E5E7EB", borderBottom: "none" }}>
-            {["Médicament", "Posologie", "Durée", ""].map((h) => <div key={h} style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>{h}</div>)}
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1.2fr 0.8fr 32px", gap: 8, padding: "8px 10px", background: "#F8FAFC", borderRadius: "8px 8px 0 0", border: "1px solid var(--border)", borderBottom: "none" }}>
+            {["Médicament", "Posologie", "Durée", ""].map((h) => <div key={h} style={{ fontSize: 11, fontWeight: 700, color: colors.textSecondary, textTransform: "uppercase" }}>{h}</div>)}
           </div>
         </div>
         <div style={{ overflowY: "auto", flexGrow: 1, padding: "0 26px" }}>
-          <div style={{ border: "1px solid #E5E7EB", borderTop: "none", borderRadius: "0 0 8px 8px", overflow: "hidden" }}>
+          <div style={{ border: "1px solid var(--border)", borderTop: "none", borderRadius: "0 0 8px 8px", overflow: "hidden" }}>
             {lignes.map((l, i) => (
-              <div key={l.id} style={{ display: "grid", gridTemplateColumns: "2fr 1.2fr 0.8fr 32px", gap: 8, padding: "8px 10px", borderBottom: i < lignes.length - 1 ? "1px solid #F3F4F6" : "none", alignItems: "center", background: i % 2 === 0 ? "white" : "#FAFAFA" }}>
+              <div key={l.id} style={{ display: "grid", gridTemplateColumns: "2fr 1.2fr 0.8fr 32px", gap: 8, padding: "8px 10px", borderBottom: i < lignes.length - 1 ? "1px solid var(--border-light)" : "none", alignItems: "center", background: i % 2 === 0 ? "white" : "#FAFAFA" }}>
                 <select value={l.medicament_id} onChange={(e) => setLigne(l.id, "medicament_id", e.target.value)} style={{ ...inputSt, fontSize: 12, padding: "7px 9px", background: "white" }}>
                   <option value="">— Médicament —</option>
                   {medicaments.map((m) => <option key={m.id} value={m.id}>{m.nom}{m.dosage ? ` ${m.dosage}` : ""}</option>)}
@@ -389,8 +390,8 @@ function ModalNouvelleOrdonnance({ patient, etablissement_id, medecinNom, medica
           </div>
           {err && <div style={{ marginTop: 10, padding: "8px 12px", background: "#FEF2F2", borderRadius: 8, fontSize: 12, color: "#DC2626" }}>{err}</div>}
         </div>
-        <div style={{ display: "flex", gap: 10, padding: "14px 26px", borderTop: "1px solid #F3F4F6", flexShrink: 0 }}>
-          <button onClick={onClose} style={{ flex: 1, padding: 11, background: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 10, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>Annuler</button>
+        <div style={{ display: "flex", gap: 10, padding: "14px 26px", borderTop: "1px solid var(--border-light)", flexShrink: 0 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: 11, background: "#F8FAFC", color: colors.text, border: "1px solid var(--border)", borderRadius: 10, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>Annuler</button>
           <button onClick={handleSave} disabled={saving} style={{ flex: 2, padding: 11, background: saving ? "#E5E7EB" : ACCENT, color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
             {saving ? <><Spin />Enregistrement…</> : "Créer l'ordonnance"}
           </button>
@@ -439,10 +440,10 @@ function ModalNouveauCompteRendu({ patient, etablissement_id, medecinNom, onClos
         <div style={{ padding: "22px 26px 0", flexShrink: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
             <div>
-              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#0A1628" }}>Nouveau compte rendu</h3>
-              <div style={{ fontSize: 12, color: "#6B7280", marginTop: 3 }}>{patient.prenom} {patient.nom} — {patient.numero_dossier ?? ""}</div>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: colors.navy }}>Nouveau compte rendu</h3>
+              <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 3 }}>{patient.prenom} {patient.nom} — {patient.numero_dossier ?? ""}</div>
             </div>
-            <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9CA3AF" }}>×</button>
+            <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: colors.textMuted }}>×</button>
           </div>
         </div>
 
@@ -474,8 +475,8 @@ function ModalNouveauCompteRendu({ patient, etablissement_id, medecinNom, onClos
           {err && <div style={{ padding: "8px 12px", background: "#FEF2F2", borderRadius: 8, fontSize: 12, color: "#DC2626" }}>{err}</div>}
         </div>
 
-        <div style={{ display: "flex", gap: 10, padding: "16px 26px", borderTop: "1px solid #F3F4F6", flexShrink: 0 }}>
-          <button onClick={onClose} style={{ flex: 1, padding: 11, background: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 10, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>Annuler</button>
+        <div style={{ display: "flex", gap: 10, padding: "16px 26px", borderTop: "1px solid var(--border-light)", flexShrink: 0 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: 11, background: "#F8FAFC", color: colors.text, border: "1px solid var(--border)", borderRadius: 10, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>Annuler</button>
           <button onClick={handleSave} disabled={saving} style={{ flex: 2, padding: 11, background: saving ? "#E5E7EB" : ACCENT, color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
             {saving ? <><Spin />Enregistrement…</> : "Enregistrer le compte rendu"}
           </button>
@@ -489,7 +490,7 @@ function ModalNouveauCompteRendu({ patient, etablissement_id, medecinNom, onClos
 const STATUT_ORD = {
   en_attente: { bg: "#FFFBEB", color: "#D97706" }, validee: { bg: "#DCFCE7", color: "#16A34A" },
   traitee: { bg: "#DBEAFE", color: "#2563EB" },    refusee: { bg: "#FEF2F2", color: "#EF4444" },
-  expiree: { bg: "#F3F4F6", color: "#9CA3AF" },
+  expiree: { bg: "#F3F4F6", color: colors.textMuted },
 };
 
 function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medicaments, onClose, onPatientUpdated, auth }) {
@@ -545,15 +546,15 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
           <div style={{ background: "white", borderRadius: 16, width: "100%", maxWidth: 560, maxHeight: "88vh", overflow: "auto", padding: 28, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
               <div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Compte rendu du {fmtDate(detailCR.date_consultation)}</div>
-                <div style={{ fontSize: 12, color: "#6B7280" }}>Dr. {detailCR.medecin}</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: colors.navy }}>Compte rendu du {fmtDate(detailCR.date_consultation)}</div>
+                <div style={{ fontSize: 12, color: colors.textSecondary }}>Dr. {detailCR.medecin}</div>
               </div>
-              <button onClick={() => setDetailCR(null)} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9CA3AF" }}>×</button>
+              <button onClick={() => setDetailCR(null)} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: colors.textMuted }}>×</button>
             </div>
             {[["Motif", detailCR.motif], ["Examen clinique", detailCR.examen_clinique], ["Diagnostic", detailCR.diagnostic], ["Traitement prescrit", detailCR.traitement]].map(([lbl, val]) => val ? (
               <div key={lbl} style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", marginBottom: 4 }}>{lbl}</div>
-                <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.6, padding: "10px 14px", background: "#F8FAFC", borderRadius: 8 }}>{val}</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted, textTransform: "uppercase", marginBottom: 4 }}>{lbl}</div>
+                <div style={{ fontSize: 13, color: colors.text, lineHeight: 1.6, padding: "10px 14px", background: "#F8FAFC", borderRadius: 8 }}>{val}</div>
               </div>
             ) : null)}
             {detailCR.prochain_rdv && (
@@ -605,7 +606,7 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
           )}
 
           {/* Onglets */}
-          <div style={{ display: "flex", borderBottom: "1px solid #E5E7EB", flexShrink: 0, padding: "0 26px", overflowX: "auto" }}>
+          <div style={{ display: "flex", borderBottom: "1px solid var(--border)", flexShrink: 0, padding: "0 26px", overflowX: "auto" }}>
             {onglets.map(([key, label]) => (
               <button key={key} onClick={() => setOnglet(key)} style={{ padding: "12px 14px", background: "none", border: "none", borderBottom: onglet === key ? `2px solid ${ACCENT}` : "2px solid transparent", fontSize: 13, fontWeight: onglet === key ? 700 : 400, color: onglet === key ? ACCENT : "#6B7280", cursor: "pointer", marginBottom: -1, whiteSpace: "nowrap" }}>
                 {label}
@@ -625,19 +626,19 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
             {onglet === "infos" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
                 <div>
-                  <h4 style={{ margin: "0 0 12px", fontSize: 13, fontWeight: 700, color: "#0A1628" }}>Informations personnelles</h4>
+                  <h4 style={{ margin: "0 0 12px", fontSize: 13, fontWeight: 700, color: colors.navy }}>Informations personnelles</h4>
                   <div className="form-row-2" style={{ gap: 10 }}>
                     {[["Date de naissance", fmtDate(patient.date_naissance)], ["Téléphone", patient.telephone || "—"], ["Adresse", patient.adresse || "—"], ["Dernière visite", fmtDate(patient.derniere_visite)], ["Service", patient.service ?? "—"], ["Statut", patient.statut === "hospitalise" ? "Hospitalisé" : "Ambulatoire"]].map(([lbl, val]) => (
                       <div key={lbl} style={{ padding: "10px 14px", background: "#F8FAFC", borderRadius: 8 }}>
-                        <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 3 }}>{lbl}</div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: "#0A1628" }}>{val}</div>
+                        <div style={{ fontSize: 11, color: colors.textMuted, marginBottom: 3 }}>{lbl}</div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: colors.navy }}>{val}</div>
                       </div>
                     ))}
                   </div>
                 </div>
                 {patient.antecedents?.length > 0 && (
                   <div>
-                    <h4 style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 700, color: "#0A1628" }}>Antécédents médicaux</h4>
+                    <h4 style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 700, color: colors.navy }}>Antécédents médicaux</h4>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                       {patient.antecedents.map((a) => {
                         const crit = ANTECEDENTS_CRITIQUES.some((k) => a.toLowerCase().includes(k));
@@ -653,7 +654,7 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
                         {patient.allergies.map((a) => <span key={a} style={{ padding: "4px 10px", background: "#FEE2E2", color: "#DC2626", borderRadius: 6, fontSize: 12, fontWeight: 700 }}>{a}</span>)}
                       </div>
-                      <div style={{ fontSize: 11, color: "#9CA3AF" }}>Vérifiez systématiquement avant toute prescription.</div>
+                      <div style={{ fontSize: 11, color: colors.textMuted }}>Vérifiez systématiquement avant toute prescription.</div>
                     </div>
                   </div>
                 )}
@@ -664,33 +665,33 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
             {onglet === "ordonnances" && (
               <div>
                 {loading ? [1,2,3].map((i) => <div key={i} style={{ height: 70, background: "#F8FAFC", borderRadius: 10, marginBottom: 10, animation: "pulse 1.5s ease-in-out infinite" }} />) :
-                 ordonnances.length === 0 ? <div style={{ padding: "40px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>Aucune ordonnance enregistrée</div> :
+                 ordonnances.length === 0 ? <div style={{ padding: "40px 0", textAlign: "center", color: colors.textMuted, fontSize: 13 }}>Aucune ordonnance enregistrée</div> :
                  ordonnances.map((o) => {
                   const s = STATUT_ORD[o.statut] ?? STATUT_ORD.en_attente;
                   const lignes = parseLignes(o.notes); const instr = parseInstr(o.notes);
                   return (
-                    <div key={o.id} style={{ border: "1px solid #E5E7EB", borderRadius: 10, marginBottom: 12, overflow: "hidden" }}>
+                    <div key={o.id} style={{ border: "1px solid var(--border)", borderRadius: 10, marginBottom: 12, overflow: "hidden" }}>
                       <div style={{ padding: "10px 14px", background: "#F8FAFC", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <div>
-                          <span style={{ fontSize: 12, fontFamily: "monospace", fontWeight: 700, color: "#374151" }}>{o.reference}</span>
-                          <span style={{ fontSize: 11, color: "#9CA3AF", marginLeft: 12 }}>Émise le {fmtDate(o.date_emission)}</span>
-                          {o.date_expiration && <span style={{ fontSize: 11, color: "#9CA3AF", marginLeft: 8 }}>· Expire le {fmtDate(o.date_expiration)}</span>}
+                          <span style={{ fontSize: 12, fontFamily: "monospace", fontWeight: 700, color: colors.text }}>{o.reference}</span>
+                          <span style={{ fontSize: 11, color: colors.textMuted, marginLeft: 12 }}>Émise le {fmtDate(o.date_emission)}</span>
+                          {o.date_expiration && <span style={{ fontSize: 11, color: colors.textMuted, marginLeft: 8 }}>· Expire le {fmtDate(o.date_expiration)}</span>}
                         </div>
                         <span style={{ padding: "2px 8px", background: s.bg, color: s.color, borderRadius: 6, fontSize: 11, fontWeight: 700 }}>{o.statut.replace("_", " ")}</span>
                       </div>
                       {lignes.length > 0 && (
                         <div style={{ padding: "10px 14px" }}>
                           {lignes.map((l, i) => (
-                            <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: i < lignes.length - 1 ? "1px solid #F3F4F6" : "none" }}>
-                              <span style={{ fontSize: 13, fontWeight: 600, color: "#0A1628" }}>{l.nom}</span>
-                              <span style={{ fontSize: 12, color: "#6B7280" }}>{l.posologie}{l.duree ? ` — ${l.duree}` : ""}</span>
+                            <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: i < lignes.length - 1 ? "1px solid var(--border-light)" : "none" }}>
+                              <span style={{ fontSize: 13, fontWeight: 600, color: colors.navy }}>{l.nom}</span>
+                              <span style={{ fontSize: 12, color: colors.textSecondary }}>{l.posologie}{l.duree ? ` — ${l.duree}` : ""}</span>
                             </div>
                           ))}
-                          {instr && <div style={{ marginTop: 8, fontSize: 12, color: "#6B7280", fontStyle: "italic" }}>{instr}</div>}
+                          {instr && <div style={{ marginTop: 8, fontSize: 12, color: colors.textSecondary, fontStyle: "italic" }}>{instr}</div>}
                         </div>
                       )}
                       {/* Actions ordonnance */}
-                      <div style={{ padding: "8px 14px", borderTop: "1px solid #F3F4F6", background: "white", display: "flex", gap: 8 }}>
+                      <div style={{ padding: "8px 14px", borderTop: "1px solid var(--border-light)", background: "white", display: "flex", gap: 8 }}>
                         <button
                           onClick={() => printOrdonnance({ ordonnance: o, patient, hopitalNom: hopitalNom ?? "Hôpital", medecinNom, lignes, instr, auth })}
                           style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", background: "#0A1628", color: "white", border: "none", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
@@ -700,7 +701,7 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
                         {patient.telephone && (
                           <button
                             onClick={() => { setSmsError(null); envoyerSMSOrdonnance(patient, lignes, setSmsError); }}
-                            style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", background: "white", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
+                            style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", background: "white", color: colors.text, border: "1px solid var(--border)", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
                             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                             Envoyer par SMS
                           </button>
@@ -716,29 +717,29 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
             {onglet === "comptes" && (
               <div>
                 {loading ? [1,2].map((i) => <div key={i} style={{ height: 90, background: "#F8FAFC", borderRadius: 10, marginBottom: 10, animation: "pulse 1.5s ease-in-out infinite" }} />) :
-                 comptes.length === 0 ? <div style={{ padding: "40px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>Aucun compte rendu enregistré</div> :
+                 comptes.length === 0 ? <div style={{ padding: "40px 0", textAlign: "center", color: colors.textMuted, fontSize: 13 }}>Aucun compte rendu enregistré</div> :
                  comptes.map((c) => (
-                  <div key={c.id} style={{ border: "1px solid #E5E7EB", borderRadius: 10, marginBottom: 12, overflow: "hidden" }}>
+                  <div key={c.id} style={{ border: "1px solid var(--border)", borderRadius: 10, marginBottom: 12, overflow: "hidden" }}>
                     <div style={{ padding: "10px 14px", background: "#F8FAFC", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <div>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: "#0A1628" }}>{fmtDate(c.date_consultation)}</span>
-                        <span style={{ fontSize: 12, color: "#6B7280", marginLeft: 10 }}>Dr. {c.medecin}</span>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: colors.navy }}>{fmtDate(c.date_consultation)}</span>
+                        <span style={{ fontSize: 12, color: colors.textSecondary, marginLeft: 10 }}>Dr. {c.medecin}</span>
                       </div>
                       {c.prochain_rdv && <span style={{ fontSize: 11, color: ACCENT, fontWeight: 600 }}>RDV : {fmtDate(c.prochain_rdv)}</span>}
                     </div>
                     {/* Résumé 3 lignes */}
                     <div style={{ padding: "10px 14px" }}>
-                      {c.motif && <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}><strong style={{ color: "#374151" }}>Motif :</strong> {c.motif}</div>}
-                      {c.diagnostic && <div style={{ fontSize: 12, color: "#374151", marginBottom: 4, fontWeight: 600 }}>{c.diagnostic.slice(0, 120)}{c.diagnostic.length > 120 ? "…" : ""}</div>}
-                      {c.traitement && <div style={{ fontSize: 12, color: "#6B7280" }}>{c.traitement.slice(0, 100)}{c.traitement.length > 100 ? "…" : ""}</div>}
+                      {c.motif && <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 4 }}><strong style={{ color: colors.text }}>Motif :</strong> {c.motif}</div>}
+                      {c.diagnostic && <div style={{ fontSize: 12, color: colors.text, marginBottom: 4, fontWeight: 600 }}>{c.diagnostic.slice(0, 120)}{c.diagnostic.length > 120 ? "…" : ""}</div>}
+                      {c.traitement && <div style={{ fontSize: 12, color: colors.textSecondary }}>{c.traitement.slice(0, 100)}{c.traitement.length > 100 ? "…" : ""}</div>}
                       <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-                        <button onClick={() => setDetailCR(c)} style={{ padding: "4px 12px", background: "white", border: "1px solid #E5E7EB", borderRadius: 6, fontSize: 11, color: "#374151", cursor: "pointer", fontWeight: 600 }}>
+                        <button onClick={() => setDetailCR(c)} style={{ padding: "4px 12px", background: "white", border: "1px solid var(--border)", borderRadius: 6, fontSize: 11, color: colors.text, cursor: "pointer", fontWeight: 600 }}>
                           Voir le détail complet
                         </button>
                         {c.prochain_rdv && patient.telephone && (
                           <button
                             onClick={() => { setSmsError(null); envoyerSMSRendezVous(patient, c.prochain_rdv, c.medecin, hopitalNom ?? "Hôpital", setSmsError); }}
-                            style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 12px", background: "white", border: "1px solid #E5E7EB", borderRadius: 6, fontSize: 11, color: "#374151", cursor: "pointer", fontWeight: 600 }}>
+                            style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 12px", background: "white", border: "1px solid var(--border)", borderRadius: 6, fontSize: 11, color: colors.text, cursor: "pointer", fontWeight: 600 }}>
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                             SMS rappel RDV
                           </button>
@@ -754,7 +755,7 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
             {onglet === "historique" && (
               <div>
                 {loading ? [1,2,3,4].map((i) => <div key={i} style={{ height: 56, background: "#F8FAFC", borderRadius: 8, marginBottom: 8, animation: "pulse 1.5s ease-in-out infinite" }} />) :
-                 historique.length === 0 ? <div style={{ padding: "40px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>Aucun événement dans l'historique</div> :
+                 historique.length === 0 ? <div style={{ padding: "40px 0", textAlign: "center", color: colors.textMuted, fontSize: 13 }}>Aucun événement dans l'historique</div> :
                  historique.map(({ type, date, item }, idx) => (
                   <div key={item.id} style={{ display: "flex", gap: 14, marginBottom: 12, animation: "fadeIn .2s ease" }}>
                     {/* Ligne de temps */}
@@ -763,18 +764,18 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
                       {idx < historique.length - 1 && <div style={{ width: 2, background: "#E5E7EB", flexGrow: 1, marginTop: 4 }} />}
                     </div>
                     <div style={{ flex: 1, paddingBottom: 8 }}>
-                      <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 3 }}>{fmtDate(date)}</div>
+                      <div style={{ fontSize: 11, color: colors.textMuted, marginBottom: 3 }}>{fmtDate(date)}</div>
                       {type === "ordonnance" ? (
                         <div style={{ padding: "8px 12px", background: "#EFF6FF", borderRadius: 8, border: "1px solid #BFDBFE" }}>
                           <span style={{ fontSize: 12, fontWeight: 700, color: "#2563EB" }}>Ordonnance</span>
-                          <span style={{ fontSize: 11, color: "#6B7280", marginLeft: 10 }}>{item.reference} · {item.statut.replace("_", " ")}</span>
-                          {parseLignes(item.notes).length > 0 && <div style={{ fontSize: 12, color: "#374151", marginTop: 4 }}>{parseLignes(item.notes).map((l) => l.nom).join(", ")}</div>}
+                          <span style={{ fontSize: 11, color: colors.textSecondary, marginLeft: 10 }}>{item.reference} · {item.statut.replace("_", " ")}</span>
+                          {parseLignes(item.notes).length > 0 && <div style={{ fontSize: 12, color: colors.text, marginTop: 4 }}>{parseLignes(item.notes).map((l) => l.nom).join(", ")}</div>}
                         </div>
                       ) : (
                         <div style={{ padding: "8px 12px", background: "#ECFDF5", borderRadius: 8, border: "1px solid #A7F3D0" }}>
                           <span style={{ fontSize: 12, fontWeight: 700, color: "#065F46" }}>Compte rendu</span>
-                          <span style={{ fontSize: 11, color: "#6B7280", marginLeft: 10 }}>Dr. {item.medecin}</span>
-                          {item.motif && <div style={{ fontSize: 12, color: "#374151", marginTop: 3 }}>{item.motif}</div>}
+                          <span style={{ fontSize: 11, color: colors.textSecondary, marginLeft: 10 }}>Dr. {item.medecin}</span>
+                          {item.motif && <div style={{ fontSize: 12, color: colors.text, marginTop: 3 }}>{item.motif}</div>}
                           {item.diagnostic && <div style={{ fontSize: 12, color: "#065F46", fontWeight: 600, marginTop: 2 }}>{item.diagnostic.slice(0, 80)}{item.diagnostic.length > 80 ? "…" : ""}</div>}
                           {item.prochain_rdv && <div style={{ fontSize: 11, color: ACCENT, marginTop: 3, fontWeight: 600 }}>RDV : {fmtDate(item.prochain_rdv)}</div>}
                         </div>
@@ -787,8 +788,8 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
           </div>
 
           {/* Actions */}
-          <div style={{ padding: "14px 26px", borderTop: "1px solid #F3F4F6", display: "flex", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
-            <button onClick={onClose} style={{ padding: "9px 16px", background: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 9, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>Fermer</button>
+          <div style={{ padding: "14px 26px", borderTop: "1px solid var(--border-light)", display: "flex", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
+            <button onClick={onClose} style={{ padding: "9px 16px", background: "#F8FAFC", color: colors.text, border: "1px solid var(--border)", borderRadius: 9, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>Fermer</button>
             <button onClick={() => printFichePatient({ patient, ordonnances, comptes, auth })} style={{ padding: "9px 16px", background: "#1D4ED8", color: "white", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Imprimer la fiche</button>
             <button onClick={() => { setShowCR(true); setOnglet("comptes"); }} style={{ padding: "9px 16px", background: "#0A1628", color: "white", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
@@ -814,12 +815,12 @@ function HoverCard({ patient, anchorRef }) {
       top: (anchorRef.current?.getBoundingClientRect().top ?? 0) - 8,
       left: (anchorRef.current?.getBoundingClientRect().right ?? 0) + 12,
       width: 280, background: "white", borderRadius: 12,
-      boxShadow: "0 8px 32px rgba(0,0,0,0.18)", border: "1px solid #E5E7EB",
+      boxShadow: "0 8px 32px rgba(0,0,0,0.18)", border: "1px solid var(--border)",
       animation: "fadeIn .15s ease",
     }}>
-      <div style={{ padding: "12px 16px", borderBottom: "1px solid #F3F4F6" }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "#0A1628" }}>{patient.prenom} {patient.nom}</div>
-        <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>{patient.numero_dossier ?? ""} · {age(patient.date_naissance)}</div>
+      <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border-light)" }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: colors.navy }}>{patient.prenom} {patient.nom}</div>
+        <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>{patient.numero_dossier ?? ""} · {age(patient.date_naissance)}</div>
         <div style={{ display: "flex", gap: 5, marginTop: 6, flexWrap: "wrap" }}>
           <span style={{ padding: "2px 7px", background: svcColor, color: "white", borderRadius: 5, fontSize: 10, fontWeight: 600 }}>{patient.service ?? "Méd. générale"}</span>
           {patient.groupe_sanguin && <span style={{ padding: "2px 7px", background: "#FEE2E2", color: "#DC2626", borderRadius: 5, fontSize: 10, fontWeight: 700 }}>{patient.groupe_sanguin}</span>}
@@ -834,14 +835,14 @@ function HoverCard({ patient, anchorRef }) {
         </div>
       )}
       {patient.antecedents?.length > 0 && (
-        <div style={{ padding: "8px 16px", borderBottom: "1px solid #F3F4F6" }}>
+        <div style={{ padding: "8px 16px", borderBottom: "1px solid var(--border-light)" }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: "#D97706", textTransform: "uppercase", marginBottom: 4 }}>Antécédents</div>
-          <div style={{ fontSize: 11, color: "#374151" }}>{patient.antecedents.slice(0, 3).join(", ")}{patient.antecedents.length > 3 ? "…" : ""}</div>
+          <div style={{ fontSize: 11, color: colors.text }}>{patient.antecedents.slice(0, 3).join(", ")}{patient.antecedents.length > 3 ? "…" : ""}</div>
         </div>
       )}
       <div style={{ padding: "8px 16px" }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", marginBottom: 3 }}>Dernière visite</div>
-        <div style={{ fontSize: 12, color: "#374151", fontWeight: 600 }}>{fmtDate(patient.derniere_visite)}</div>
+        <div style={{ fontSize: 10, fontWeight: 700, color: colors.textMuted, textTransform: "uppercase", marginBottom: 3 }}>Dernière visite</div>
+        <div style={{ fontSize: 12, color: colors.text, fontWeight: 600 }}>{fmtDate(patient.derniere_visite)}</div>
       </div>
     </div>
   );
@@ -862,7 +863,7 @@ function PatientRow({ patient, onOpen, isLast }) {
       onClick={onOpen}
       onMouseEnter={() => { timerRef.current = setTimeout(() => setHovered(true), 600); }}
       onMouseLeave={() => { clearTimeout(timerRef.current); setHovered(false); }}
-      style={{ display: "grid", gridTemplateColumns: "2.4fr 0.7fr 0.7fr 0.7fr 1.2fr 1fr 1.2fr", gap: 0, padding: "13px 20px", borderBottom: isLast ? "none" : "1px solid #F3F4F6", alignItems: "center", cursor: "pointer", transition: "background .12s", background: hovered ? "#F8FAFC" : urgent ? "#FFFAFA" : "white", animation: "fadeIn .2s ease" }}
+      style={{ display: "grid", gridTemplateColumns: "2.4fr 0.7fr 0.7fr 0.7fr 1.2fr 1fr 1.2fr", gap: 0, padding: "13px 20px", borderBottom: isLast ? "none" : "1px solid var(--border-light)", alignItems: "center", cursor: "pointer", transition: "background .12s", background: hovered ? "#F8FAFC" : urgent ? "#FFFAFA" : "white", animation: "fadeIn .2s ease" }}
     >
       {hovered && <HoverCard patient={patient} anchorRef={rowRef} />}
 
@@ -873,7 +874,7 @@ function PatientRow({ patient, onOpen, isLast }) {
         </div>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: "#0A1628" }}>{patient.prenom} {patient.nom}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: colors.navy }}>{patient.prenom} {patient.nom}</span>
             {urgent    && <span style={{ padding: "1px 6px", background: "#DC2626", color: "white", borderRadius: 5, fontSize: 9, fontWeight: 800, letterSpacing: 0.5 }}>URGENT</span>}
             {attention && <span style={{ padding: "1px 6px", background: "#D97706", color: "white", borderRadius: 5, fontSize: 9, fontWeight: 800, letterSpacing: 0.5 }}>ATTENTION</span>}
           </div>
@@ -883,18 +884,18 @@ function PatientRow({ patient, onOpen, isLast }) {
         </div>
       </div>
 
-      <div style={{ fontSize: 13, color: "#374151" }}>{age(patient.date_naissance)}</div>
-      <div style={{ fontSize: 13, color: "#6B7280" }}>{patient.genre === "M" ? "M" : patient.genre === "F" ? "F" : patient.genre ?? "—"}</div>
+      <div style={{ fontSize: 13, color: colors.text }}>{age(patient.date_naissance)}</div>
+      <div style={{ fontSize: 13, color: colors.textSecondary }}>{patient.genre === "M" ? "M" : patient.genre === "F" ? "F" : patient.genre ?? "—"}</div>
       <div>
         {patient.groupe_sanguin
           ? <span style={{ padding: "2px 7px", background: "#FEE2E2", color: "#DC2626", borderRadius: 6, fontSize: 11, fontWeight: 700 }}>{patient.groupe_sanguin}</span>
-          : <span style={{ color: "#9CA3AF", fontSize: 13 }}>—</span>}
+          : <span style={{ color: colors.textMuted, fontSize: 13 }}>—</span>}
       </div>
       <div>
         <span style={{ padding: "2px 8px", background: svcColor + "20", color: svcColor, borderRadius: 6, fontSize: 11, fontWeight: 600 }}>{patient.service ?? "Méd. générale"}</span>
       </div>
-      <div style={{ fontSize: 12, color: "#6B7280" }}>{fmtDate(patient.derniere_visite)}</div>
-      <div style={{ fontSize: 12, color: "#374151" }}>{patient.medecin_referent ? `Dr. ${patient.medecin_referent}` : "—"}</div>
+      <div style={{ fontSize: 12, color: colors.textSecondary }}>{fmtDate(patient.derniere_visite)}</div>
+      <div style={{ fontSize: 12, color: colors.text }}>{patient.medecin_referent ? `Dr. ${patient.medecin_referent}` : "—"}</div>
     </div>
   );
 }
@@ -959,7 +960,7 @@ export default function PatientsHopital() {
         ].map((k) => (
           <div key={k.label} style={{ flex: 1, minWidth: 130, background: "white", borderRadius: 14, padding: "15px 18px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", borderLeft: `4px solid ${k.color}` }}>
             <div style={{ fontSize: 22, fontWeight: 800, color: k.color }}>{k.value}</div>
-            <div style={{ fontSize: 12, color: "#6B7280" }}>{k.label}</div>
+            <div style={{ fontSize: 12, color: colors.textSecondary }}>{k.label}</div>
           </div>
         ))}
       </div>
@@ -967,7 +968,7 @@ export default function PatientsHopital() {
       {/* Barre d'actions */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
         <input value={recherche} onChange={(e) => setRecherche(e.target.value)} placeholder="Rechercher par nom ou n° dossier…"
-          style={{ flex: 1, minWidth: 200, padding: "9px 14px", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 13, outline: "none", color: "#0A1628" }} />
+          style={{ flex: 1, minWidth: 200, padding: "9px 14px", border: "1.5px solid var(--border)", borderRadius: 10, fontSize: 13, outline: "none", color: colors.navy }} />
 
         {/* Filtre statut */}
         <div style={{ display: "flex", gap: 5 }}>
@@ -978,7 +979,7 @@ export default function PatientsHopital() {
 
         {/* Filtre service */}
         <select value={filtreService} onChange={(e) => setFiltreService(e.target.value)}
-          style={{ padding: "8px 12px", border: "1.5px solid #E5E7EB", borderRadius: 9, fontSize: 12, color: filtreService === "tous" ? "#6B7280" : "#0A1628", fontWeight: filtreService === "tous" ? 400 : 600, outline: "none", cursor: "pointer", background: "white" }}>
+          style={{ padding: "8px 12px", border: "1.5px solid var(--border)", borderRadius: 9, fontSize: 12, color: filtreService === "tous" ? "#6B7280" : "#0A1628", fontWeight: filtreService === "tous" ? 400 : 600, outline: "none", cursor: "pointer", background: "white" }}>
           <option value="tous">Tous les services</option>
           {SERVICES.map((s) => <option key={s}>{s}</option>)}
         </select>
@@ -993,13 +994,13 @@ export default function PatientsHopital() {
       {loading ? (
         <div style={{ background: "white", borderRadius: 16, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
           {[1,2,3,4,5].map((i) => (
-            <div key={i} style={{ display: "grid", gridTemplateColumns: "2.4fr 0.7fr 0.7fr 0.7fr 1.2fr 1fr 1.2fr", padding: "14px 20px", borderBottom: "1px solid #F3F4F6", gap: 0, alignItems: "center" }}>
+            <div key={i} style={{ display: "grid", gridTemplateColumns: "2.4fr 0.7fr 0.7fr 0.7fr 1.2fr 1fr 1.2fr", padding: "14px 20px", borderBottom: "1px solid var(--border-light)", gap: 0, alignItems: "center" }}>
               {[1,2,3,4,5,6,7].map((j) => <div key={j} style={{ height: 13, background: "#F3F4F6", borderRadius: 4, animation: "pulse 1.5s ease-in-out infinite", marginRight: 14 }} />)}
             </div>
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div style={{ background: "white", borderRadius: 16, padding: "48px 20px", textAlign: "center", color: "#9CA3AF", fontSize: 13, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+        <div style={{ background: "white", borderRadius: 16, padding: "48px 20px", textAlign: "center", color: colors.textMuted, fontSize: 13, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
           {recherche || filtreStatut !== "tous" || filtreService !== "tous" ? "Aucun patient ne correspond" : "Aucun patient enregistré"}
         </div>
       ) : groupes.map(({ service, liste }) => (
@@ -1008,16 +1009,16 @@ export default function PatientsHopital() {
           {service && (
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
               <div style={{ width: 10, height: 10, borderRadius: "50%", background: SERVICE_COLOR[service] ?? "#6B7280" }} />
-              <span style={{ fontSize: 13, fontWeight: 700, color: "#0A1628" }}>{service}</span>
-              <span style={{ fontSize: 12, color: "#6B7280" }}>{liste.length} patient{liste.length !== 1 ? "s" : ""}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: colors.navy }}>{service}</span>
+              <span style={{ fontSize: 12, color: colors.textSecondary }}>{liste.length} patient{liste.length !== 1 ? "s" : ""}</span>
             </div>
           )}
 
           <div style={{ background: "white", borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
             {/* Colonnes */}
-            <div style={{ display: "grid", gridTemplateColumns: "2.4fr 0.7fr 0.7fr 0.7fr 1.2fr 1fr 1.2fr", gap: 0, padding: "10px 20px", background: "#F8FAFC", borderBottom: "1px solid #E5E7EB" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "2.4fr 0.7fr 0.7fr 0.7fr 1.2fr 1fr 1.2fr", gap: 0, padding: "10px 20px", background: "#F8FAFC", borderBottom: "1px solid var(--border)" }}>
               {["Nom / Prénom", "Âge", "Sexe", "Gr.sang.", "Service", "Dernière visite", "Médecin réf."].map((h) => (
-                <div key={h} style={{ fontSize: 10, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: 0.4 }}>{h}</div>
+                <div key={h} style={{ fontSize: 10, fontWeight: 700, color: colors.textSecondary, textTransform: "uppercase", letterSpacing: 0.4 }}>{h}</div>
               ))}
             </div>
             {liste.map((p, i) => (

@@ -6,6 +6,7 @@
  * - Modal "Réceptionner livraison" : génère un numéro de lot MedOS unique,
  *   l'insère dans la table `lots` (authentifié) et incrémente le stock
  */
+import { colors } from "../../theme";
 import { useState, useCallback } from "react";
 import Layout from "../../components/Layout";
 import Toast from "../../components/Toast";
@@ -153,10 +154,10 @@ function genererNumeroLot(annee = new Date().getFullYear()) {
 
 // ── Modal Réception ───────────────────────────────────────────────────────────
 const inputStyle = {
-  width: "100%", padding: "9px 12px", border: "1.5px solid #E5E7EB",
-  borderRadius: 8, fontSize: 13, outline: "none", boxSizing: "border-box", color: "#0A1628",
+  width: "100%", padding: "9px 12px", border: "1.5px solid var(--border)",
+  borderRadius: 8, fontSize: 13, outline: "none", boxSizing: "border-box", color: colors.navy,
 };
-const labelStyle = { fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 5 };
+const labelStyle = { fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 5 };
 
 function ModalReception({ medicaments, onClose, onSuccess }) {
   const [form, setForm] = useState({
@@ -208,14 +209,14 @@ function ModalReception({ medicaments, onClose, onSuccess }) {
       position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.45)",
       zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
     }}>
-      <div style={{ backgroundColor: "white", borderRadius: 16, padding: 28, width: "100%", maxWidth: 520, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+      <div style={{ backgroundColor: colors.bgCard, borderRadius: 16, padding: 28, width: "100%", maxWidth: 520, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
           <div>
-            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#0A1628" }}>Réceptionner une livraison</h3>
-            <p style={{ margin: "4px 0 0", fontSize: 12, color: "#6B7280" }}>Un lot MedOS certifié sera généré automatiquement</p>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: colors.navy }}>Réceptionner une livraison</h3>
+            <p style={{ margin: "4px 0 0", fontSize: 12, color: colors.textSecondary }}>Un lot MedOS certifié sera généré automatiquement</p>
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9CA3AF", lineHeight: 1 }}>×</button>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: colors.textMuted, lineHeight: 1 }}>×</button>
         </div>
 
         {/* Numéro de lot généré */}
@@ -226,7 +227,7 @@ function ModalReception({ medicaments, onClose, onSuccess }) {
           </div>
           <button
             onClick={() => setLotGenere(genererNumeroLot())}
-            style={{ fontSize: 11, padding: "5px 10px", backgroundColor: "white", border: "1px solid #FCD34D", borderRadius: 6, cursor: "pointer", color: "#B45309", fontWeight: 600 }}
+            style={{ fontSize: 11, padding: "5px 10px", backgroundColor: colors.bgCard, border: "1px solid #FCD34D", borderRadius: 6, cursor: "pointer", color: "#B45309", fontWeight: 600 }}
           >
             Regénérer
           </button>
@@ -237,7 +238,7 @@ function ModalReception({ medicaments, onClose, onSuccess }) {
           <div>
             <label style={labelStyle}>Médicament <span style={{ color: "#EF4444" }}>*</span></label>
             <select value={form.medicament_id} onChange={(e) => set("medicament_id", e.target.value)}
-              style={{ ...inputStyle, backgroundColor: "white" }}>
+              style={{ ...inputStyle, backgroundColor: colors.bgCard }}>
               <option value="">— Sélectionner —</option>
               {medicaments.map((m) => (
                 <option key={m.id} value={m.id}>{m.nom}</option>
@@ -285,7 +286,7 @@ function ModalReception({ medicaments, onClose, onSuccess }) {
         )}
 
         <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
-          <button onClick={onClose} style={{ flex: 1, padding: "11px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 10, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: "11px", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)", borderRadius: 10, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>
             Annuler
           </button>
           <button
@@ -373,16 +374,16 @@ function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id
 
   return (
     <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.45)", zIndex: 1100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div style={{ backgroundColor: "white", borderRadius: 16, width: "100%", maxWidth: 680, maxHeight: "90vh", overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+      <div style={{ backgroundColor: colors.bgCard, borderRadius: 16, width: "100%", maxWidth: 680, maxHeight: "90vh", overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
 
         {/* ── En-tête fixe ── */}
         <div style={{ padding: "22px 28px 0", flexShrink: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
             <div>
-              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#0A1628" }}>Nouveau bon de commande fabricant</h3>
-              <p style={{ margin: "4px 0 0", fontSize: 12, color: "#6B7280" }}>Le bon de commande sera envoyé par email au fabricant</p>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: colors.navy }}>Nouveau bon de commande fabricant</h3>
+              <p style={{ margin: "4px 0 0", fontSize: 12, color: colors.textSecondary }}>Le bon de commande sera envoyé par email au fabricant</p>
             </div>
-            <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9CA3AF", lineHeight: 1, flexShrink: 0 }}>×</button>
+            <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: colors.textMuted, lineHeight: 1, flexShrink: 0 }}>×</button>
           </div>
 
           {/* Champs en-tête */}
@@ -410,22 +411,22 @@ function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id
           </div>
 
           {/* En-tête tableau */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 130px 36px", gap: 8, padding: "8px 12px", backgroundColor: "#F8FAFC", borderRadius: "8px 8px 0 0", border: "1px solid #E5E7EB", borderBottom: "none" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>Médicament</div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>Quantité</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 130px 36px", gap: 8, padding: "8px 12px", backgroundColor: colors.bgSurface, borderRadius: "8px 8px 0 0", border: "1px solid var(--border)", borderBottom: "none" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: colors.textSecondary, textTransform: "uppercase" }}>Médicament</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: colors.textSecondary, textTransform: "uppercase" }}>Quantité</div>
             <div />
           </div>
         </div>
 
         {/* ── Lignes défilables ── */}
         <div style={{ overflowY: "auto", flexGrow: 1, padding: "0 28px", borderLeft: "none" }}>
-          <div style={{ border: "1px solid #E5E7EB", borderTop: "none", borderRadius: "0 0 8px 8px", overflow: "hidden" }}>
+          <div style={{ border: "1px solid var(--border)", borderTop: "none", borderRadius: "0 0 8px 8px", overflow: "hidden" }}>
             {lignes.map((l, i) => (
-              <div key={l.id} style={{ display: "grid", gridTemplateColumns: "1fr 130px 36px", gap: 8, padding: "8px 12px", borderBottom: i < lignes.length - 1 ? "1px solid #F3F4F6" : "none", alignItems: "center", backgroundColor: i % 2 === 0 ? "white" : "#FAFAFA" }}>
+              <div key={l.id} style={{ display: "grid", gridTemplateColumns: "1fr 130px 36px", gap: 8, padding: "8px 12px", borderBottom: i < lignes.length - 1 ? "1px solid var(--border-light)" : "none", alignItems: "center", backgroundColor: i % 2 === 0 ? "white" : "#FAFAFA" }}>
                 <select
                   value={l.medicament_id}
                   onChange={(e) => setLigne(l.id, "medicament_id", e.target.value)}
-                  style={{ ...inputStyle, fontSize: 12, padding: "7px 10px", backgroundColor: "white" }}
+                  style={{ ...inputStyle, fontSize: 12, padding: "7px 10px", backgroundColor: colors.bgCard }}
                 >
                   <option value="">— Médicament —</option>
                   {medicaments.map((m) => (
@@ -451,7 +452,7 @@ function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id
 
           <button
             onClick={addLigne}
-            style={{ marginTop: 10, marginBottom: 4, display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", backgroundColor: "white", border: `1.5px dashed ${ACCENT}`, borderRadius: 8, fontSize: 12, color: ACCENT, fontWeight: 600, cursor: "pointer" }}
+            style={{ marginTop: 10, marginBottom: 4, display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", backgroundColor: colors.bgCard, border: `1.5px dashed ${ACCENT}`, borderRadius: 8, fontSize: 12, color: ACCENT, fontWeight: 600, cursor: "pointer" }}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
             Ajouter un médicament
@@ -459,14 +460,14 @@ function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id
         </div>
 
         {/* ── Pied fixe : total + actions ── */}
-        <div style={{ padding: "12px 28px 20px", flexShrink: 0, borderTop: "1px solid #F3F4F6" }}>
+        <div style={{ padding: "12px 28px 20px", flexShrink: 0, borderTop: "1px solid var(--border-light)" }}>
           {/* Totaux */}
           <div style={{ display: "flex", gap: 16, marginBottom: 12 }}>
-            <div style={{ fontSize: 12, color: "#6B7280" }}>
-              Références : <strong style={{ color: "#0A1628" }}>{totalRefs}</strong>
+            <div style={{ fontSize: 12, color: colors.textSecondary }}>
+              Références : <strong style={{ color: colors.navy }}>{totalRefs}</strong>
             </div>
-            <div style={{ fontSize: 12, color: "#6B7280" }}>
-              Quantité totale : <strong style={{ color: "#0A1628" }}>{totalQty.toLocaleString("fr-FR")} unités</strong>
+            <div style={{ fontSize: 12, color: colors.textSecondary }}>
+              Quantité totale : <strong style={{ color: colors.navy }}>{totalQty.toLocaleString("fr-FR")} unités</strong>
             </div>
           </div>
 
@@ -477,7 +478,7 @@ function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id
           )}
 
           <div style={{ display: "flex", gap: 10 }}>
-            <button onClick={onClose} style={{ flex: 1, padding: "11px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 10, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>
+            <button onClick={onClose} style={{ flex: 1, padding: "11px", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)", borderRadius: 10, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>
               Annuler
             </button>
             <button
@@ -491,7 +492,7 @@ function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id
                 const etab = await fetchEtabFromAuth(auth);
                 printBonCommandeFabricant({ header, lignes: lignesPrint, etab });
               }}
-              style={{ padding: "11px 16px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+              style={{ padding: "11px 16px", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
             >
               Imprimer
             </button>
@@ -565,7 +566,7 @@ export default function Entrepot() {
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {stockFaible.map((m) => (
-              <div key={m.id} style={{ fontSize: 12, padding: "4px 10px", backgroundColor: "white", borderRadius: 6, border: "1px solid #FCA5A5", color: "#991B1B", fontWeight: 600 }}>
+              <div key={m.id} style={{ fontSize: 12, padding: "4px 10px", backgroundColor: colors.bgCard, borderRadius: 6, border: "1px solid #FCA5A5", color: "#991B1B", fontWeight: 600 }}>
                 {m.nom} — {m.stock_actuel} / {m.stock_minimum} min
               </div>
             ))}
@@ -579,15 +580,15 @@ export default function Entrepot() {
           value={recherche}
           onChange={(e) => setRecherche(e.target.value)}
           placeholder="Rechercher un médicament…"
-          style={{ flex: 1, maxWidth: 320, padding: "9px 14px", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 13, outline: "none", color: "#0A1628" }}
+          style={{ flex: 1, maxWidth: 320, padding: "9px 14px", border: "1.5px solid var(--border)", borderRadius: 10, fontSize: 13, outline: "none", color: colors.navy }}
         />
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 12, color: "#6B7280" }}>
+          <span style={{ fontSize: 12, color: colors.textSecondary }}>
             {loading ? "Chargement…" : `${filtered.length} produit${filtered.length !== 1 ? "s" : ""}`}
           </span>
           <button
             onClick={() => setShowCommande(true)}
-            style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 18px", backgroundColor: "white", color: ACCENT, border: `1.5px solid ${ACCENT}`, borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+            style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 18px", backgroundColor: colors.bgCard, color: ACCENT, border: `1.5px solid ${ACCENT}`, borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-1.5 7h13M10 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm7 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/>
             </svg>
@@ -605,26 +606,26 @@ export default function Entrepot() {
       </div>
 
       {/* ── Tableau stock ── */}
-      <div style={{ backgroundColor: "white", borderRadius: 16, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
+      <div style={{ backgroundColor: colors.bgCard, borderRadius: 16, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
         {/* En-tête */}
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1.5fr 1fr", gap: 0, padding: "12px 20px", backgroundColor: "#F8FAFC", borderBottom: "1px solid #E5E7EB" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1.5fr 1fr", gap: 0, padding: "12px 20px", backgroundColor: colors.bgSurface, borderBottom: "1px solid var(--border)" }}>
           {["Médicament", "Stock actuel", "Seuil min.", "Prix grossiste", "Niveau de stock", "Statut"].map((h) => (
-            <div key={h} style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: 0.5 }}>{h}</div>
+            <div key={h} style={{ fontSize: 11, fontWeight: 700, color: colors.textSecondary, textTransform: "uppercase", letterSpacing: 0.5 }}>{h}</div>
           ))}
         </div>
 
         {/* Skeleton */}
         {loading && [1,2,3,4,5].map((i) => (
-          <div key={i} style={{ padding: "16px 20px", borderBottom: "1px solid #F3F4F6", display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1.5fr 1fr", gap: 0, alignItems: "center" }}>
+          <div key={i} style={{ padding: "16px 20px", borderBottom: "1px solid var(--border-light)", display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1.5fr 1fr", gap: 0, alignItems: "center" }}>
             {[1,2,3,4,5,6].map((j) => (
-              <div key={j} style={{ height: 14, backgroundColor: "#F3F4F6", borderRadius: 4, animation: "pulse 1.5s ease-in-out infinite", marginRight: 16 }} />
+              <div key={j} style={{ height: 14, backgroundColor: colors.borderLight, borderRadius: 4, animation: "pulse 1.5s ease-in-out infinite", marginRight: 16 }} />
             ))}
           </div>
         ))}
 
         {/* Lignes */}
         {!loading && filtered.length === 0 && (
-          <div style={{ padding: "40px 20px", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>
+          <div style={{ padding: "40px 20px", textAlign: "center", color: colors.textMuted, fontSize: 13 }}>
             {recherche ? "Aucun médicament trouvé" : "Aucun médicament enregistré dans la base"}
           </div>
         )}
@@ -638,40 +639,40 @@ export default function Entrepot() {
             <div key={m.id} style={{
               display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1.5fr 1fr",
               gap: 0, padding: "14px 20px",
-              borderBottom: i < filtered.length - 1 ? "1px solid #F3F4F6" : "none",
+              borderBottom: i < filtered.length - 1 ? "1px solid var(--border-light)" : "none",
               alignItems: "center",
               backgroundColor: vide ? "#FFF5F5" : faible ? "#FFFBEB" : "white",
               animation: "fadeIn 0.2s ease",
             }}>
               {/* Médicament */}
               <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#0A1628" }}>{m.nom}</div>
-                {m.code && <div style={{ fontSize: 11, color: "#9CA3AF", fontFamily: "monospace" }}>{m.code}</div>}
+                <div style={{ fontSize: 13, fontWeight: 700, color: colors.navy }}>{m.nom}</div>
+                {m.code && <div style={{ fontSize: 11, color: colors.textMuted, fontFamily: "monospace" }}>{m.code}</div>}
               </div>
 
               {/* Stock actuel */}
               <div style={{ fontSize: 13, fontWeight: 700, color: couleur }}>
                 {m.stock_actuel ?? "—"}
-                <span style={{ fontSize: 10, color: "#9CA3AF", fontWeight: 400, marginLeft: 3 }}>unités</span>
+                <span style={{ fontSize: 10, color: colors.textMuted, fontWeight: 400, marginLeft: 3 }}>unités</span>
               </div>
 
               {/* Seuil minimum */}
-              <div style={{ fontSize: 13, color: "#6B7280" }}>
+              <div style={{ fontSize: 13, color: colors.textSecondary }}>
                 {m.stock_minimum ?? "—"}
-                <span style={{ fontSize: 10, color: "#9CA3AF", marginLeft: 3 }}>min</span>
+                <span style={{ fontSize: 10, color: colors.textMuted, marginLeft: 3 }}>min</span>
               </div>
 
               {/* Prix grossiste */}
-              <div style={{ fontSize: 13, color: "#0A1628" }}>
+              <div style={{ fontSize: 13, color: colors.navy }}>
                 {m.prix_achat ? `${m.prix_achat.toLocaleString("fr-FR")} FCFA` : "—"}
               </div>
 
               {/* Barre de niveau */}
               <div>
-                <div style={{ height: 6, backgroundColor: "#F3F4F6", borderRadius: 3, overflow: "hidden", marginBottom: 3 }}>
+                <div style={{ height: 6, backgroundColor: colors.borderLight, borderRadius: 3, overflow: "hidden", marginBottom: 3 }}>
                   <div style={{ height: "100%", width: `${pctVal}%`, backgroundColor: couleur, borderRadius: 3, transition: "width 0.4s ease" }} />
                 </div>
-                <div style={{ fontSize: 10, color: "#9CA3AF" }}>{pctVal}% du seuil ×2</div>
+                <div style={{ fontSize: 10, color: colors.textMuted }}>{pctVal}% du seuil ×2</div>
               </div>
 
               {/* Statut badge */}

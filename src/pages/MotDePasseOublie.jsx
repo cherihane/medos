@@ -1,3 +1,4 @@
+import { colors } from "../theme";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
@@ -32,12 +33,12 @@ export default function MotDePasseOublie() {
 
   return (
     <div style={{
-      minHeight: "100vh", backgroundColor: "#F0F4FB",
+      minHeight: "100vh", backgroundColor: colors.bg,
       display: "flex", alignItems: "center", justifyContent: "center",
       fontFamily: "'Inter', -apple-system, sans-serif",
     }}>
       <div style={{
-        backgroundColor: "white", borderRadius: 20, padding: "48px 44px",
+        backgroundColor: colors.bgCard, borderRadius: 20, padding: "48px 44px",
         boxShadow: "0 4px 24px rgba(0,0,0,0.08)", width: "100%", maxWidth: 420,
       }}>
         {/* Logo */}
@@ -51,8 +52,8 @@ export default function MotDePasseOublie() {
               <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
             </svg>
           </div>
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: "#0A1628" }}>Mot de passe oublié</h1>
-          <p style={{ margin: "8px 0 0", fontSize: 13, color: "#6B7280" }}>
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: colors.navy }}>Mot de passe oublié</h1>
+          <p style={{ margin: "8px 0 0", fontSize: 13, color: colors.textSecondary }}>
             Saisissez votre email pour recevoir un lien de réinitialisation.
           </p>
         </div>
@@ -83,7 +84,7 @@ export default function MotDePasseOublie() {
         ) : (
           <form onSubmit={handleSubmit}>
             <div style={{ marginBottom: 20 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: colors.text, marginBottom: 6 }}>
                 Adresse email
               </label>
               <input
@@ -93,9 +94,9 @@ export default function MotDePasseOublie() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="votre@email.com"
                 style={{
-                  width: "100%", padding: "11px 14px", border: "1.5px solid #E5E7EB",
+                  width: "100%", padding: "11px 14px", border: "1.5px solid var(--border)",
                   borderRadius: 10, fontSize: 14, outline: "none", boxSizing: "border-box",
-                  color: "#0A1628",
+                  color: colors.navy,
                 }}
               />
             </div>
@@ -129,7 +130,7 @@ export default function MotDePasseOublie() {
                 type="button"
                 onClick={() => navigate("/")}
                 style={{
-                  background: "none", border: "none", color: "#6B7280",
+                  background: "none", border: "none", color: colors.textSecondary,
                   fontSize: 13, cursor: "pointer", textDecoration: "underline",
                 }}
               >

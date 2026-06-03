@@ -39,20 +39,20 @@ const PAYS = [
 const inputStyle = {
   width: "100%",
   padding: "10px 14px",
-  border: "1.5px solid #E5E7EB",
+  border: "1.5px solid var(--border)",
   borderRadius: 8,
   fontSize: 13,
   outline: "none",
   boxSizing: "border-box",
-  color: "#0A1628",
-  backgroundColor: "white",
+  color: colors.navy,
+  backgroundColor: colors.bgCard,
 };
 
 const labelStyle = {
   display: "block",
   fontSize: 12,
   fontWeight: 600,
-  color: "#374151",
+  color: colors.text,
   marginBottom: 5,
 };
 
@@ -64,7 +64,7 @@ function Field({ label, required, children, hint }) {
         {required && <span style={{ color: "#EF4444", marginLeft: 2 }}>*</span>}
       </label>
       {children}
-      {hint && <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 3 }}>{hint}</div>}
+      {hint && <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 3 }}>{hint}</div>}
     </div>
   );
 }
@@ -75,7 +75,7 @@ function Row({ children }) {
 
 function SectionTitle({ children }) {
   return (
-    <div style={{ fontSize: 12, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 14, marginTop: 8, paddingBottom: 6, borderBottom: "1px solid #F3F4F6" }}>
+    <div style={{ fontSize: 12, fontWeight: 700, color: colors.text, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 14, marginTop: 8, paddingBottom: 6, borderBottom: "1px solid var(--border-light)" }}>
       {children}
     </div>
   );
@@ -85,7 +85,7 @@ function SectionTitle({ children }) {
 function EtapeRole({ value, onChange }) {
   return (
     <div>
-      <p style={{ fontSize: 13, color: "#6B7280", marginBottom: 20 }}>
+      <p style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 20 }}>
         Sélectionnez le type de votre structure de santé.
       </p>
       <div className="role-cards-grid">
@@ -97,7 +97,7 @@ function EtapeRole({ value, onChange }) {
             style={{
               padding: "16px",
               borderRadius: 10,
-              border: value === r.key ? "2px solid #3B82F6" : "1.5px solid #E5E7EB",
+              border: value === r.key ? "2px solid #3B82F6" : "1.5px solid var(--border)",
               backgroundColor: value === r.key ? "#EFF6FF" : "white",
               cursor: "pointer",
               textAlign: "left",
@@ -106,7 +106,7 @@ function EtapeRole({ value, onChange }) {
             <div style={{ fontSize: 13, fontWeight: 700, color: value === r.key ? "#2563EB" : "#0A1628", marginBottom: 4 }}>
               {r.label}
             </div>
-            <div style={{ fontSize: 11, color: "#9CA3AF" }}>{r.desc}</div>
+            <div style={{ fontSize: 11, color: colors.textMuted }}>{r.desc}</div>
           </button>
         ))}
       </div>
@@ -203,7 +203,7 @@ function EtapeFormulaire({ form, onChange }) {
 
   return (
     <div>
-      <p style={{ fontSize: 13, color: "#6B7280", marginBottom: 18 }}>
+      <p style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 18 }}>
         Renseignez les informations de votre établissement et les coordonnées du responsable.
       </p>
 
@@ -282,9 +282,9 @@ function EtapeFormulaire({ form, onChange }) {
       </Row>
 
       {/* Note gestion du personnel */}
-      <div style={{ marginTop: 6, padding: "12px 16px", backgroundColor: "#F0F4FB", borderRadius: 10, border: "1px solid #DBEAFE" }}>
+      <div style={{ marginTop: 6, padding: "12px 16px", backgroundColor: colors.bg, borderRadius: 10, border: "1px solid #DBEAFE" }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: "#1D4ED8", marginBottom: 4 }}>Gestion du personnel</div>
-        <div style={{ fontSize: 12, color: "#374151", lineHeight: 1.6 }}>
+        <div style={{ fontSize: 12, color: colors.text, lineHeight: 1.6 }}>
           Une fois votre compte validé par MedOS, vous pourrez inviter votre personnel depuis les paramètres de votre compte.
           Chaque membre recevra un email d'invitation avec un rôle défini (caissier, pharmacien, médecin, infirmière…)
           et accèdera uniquement aux fonctionnalités correspondant à son rôle.
@@ -302,12 +302,12 @@ function EtapeConfirmation({ email }) {
       <div style={{ width: 56, height: 56, borderRadius: "50%", backgroundColor: "#DCFCE7", border: "2px solid #16A34A", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", fontSize: 22, color: "#16A34A", fontWeight: 800 }}>
         ✓
       </div>
-      <h2 style={{ fontSize: 18, fontWeight: 800, color: "#0A1628", marginBottom: 10 }}>
+      <h2 style={{ fontSize: 18, fontWeight: 800, color: colors.navy, marginBottom: 10 }}>
         Demande envoyée avec succès
       </h2>
-      <p style={{ fontSize: 13, color: "#6B7280", maxWidth: 380, margin: "0 auto 20px", lineHeight: 1.6 }}>
+      <p style={{ fontSize: 13, color: colors.textSecondary, maxWidth: 380, margin: "0 auto 20px", lineHeight: 1.6 }}>
         Votre demande d'accès à MedOS a bien été reçue et est en cours d'examen.
-        Vous recevrez une réponse à <strong style={{ color: "#0A1628" }}>{email}</strong> dans un délai de 24 à 48 heures ouvrées.
+        Vous recevrez une réponse à <strong style={{ color: colors.navy }}>{email}</strong> dans un délai de 24 à 48 heures ouvrées.
       </p>
       <div style={{ backgroundColor: "#FFFBEB", border: "1px solid #FCD34D", borderRadius: 10, padding: "12px 18px", fontSize: 12, color: "#92400E", marginBottom: 24, textAlign: "left", maxWidth: 380, margin: "0 auto 24px", lineHeight: 1.6 }}>
         <strong>Prochaine étape :</strong> une fois votre compte validé, connectez-vous sur la page de connexion
@@ -486,19 +486,19 @@ export default function Inscription() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", backgroundColor: "#F8FAFC", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 20px" }}>
+    <div style={{ minHeight: "100vh", backgroundColor: colors.bgSurface, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 20px" }}>
       <div style={{ width: "100%", maxWidth: 600 }}>
 
         {/* En-tête */}
         <div style={{ textAlign: "center", marginBottom: 28 }}>
-          <div style={{ fontSize: 26, fontWeight: 900, color: "#0A1628", letterSpacing: "-0.5px", marginBottom: 4 }}>
+          <div style={{ fontSize: 26, fontWeight: 900, color: colors.navy, letterSpacing: "-0.5px", marginBottom: 4 }}>
             Med<span style={{ color: "#3B82F6" }}>OS</span>
           </div>
-          <div style={{ fontSize: 13, color: "#9CA3AF" }}>Demande d'accès à la plateforme</div>
+          <div style={{ fontSize: 13, color: colors.textMuted }}>Demande d'accès à la plateforme</div>
         </div>
 
         {/* Carte */}
-        <div style={{ backgroundColor: "white", borderRadius: 16, boxShadow: "0 4px 24px rgba(0,0,0,0.08)", padding: "28px 32px" }}>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 16, boxShadow: "0 4px 24px rgba(0,0,0,0.08)", padding: "28px 32px" }}>
 
           {/* Stepper */}
           {etape < 2 && (
@@ -527,7 +527,7 @@ export default function Inscription() {
 
           {/* Titre */}
           {etape < 2 && (
-            <h2 style={{ fontSize: 16, fontWeight: 800, color: "#0A1628", marginBottom: 18 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 800, color: colors.navy, marginBottom: 18 }}>
               {etape === 0 ? "Quel type de structure représentez-vous ?" : "Informations de votre établissement"}
             </h2>
           )}
@@ -548,11 +548,11 @@ export default function Inscription() {
 
           {/* Navigation */}
           {etape < 2 && (
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 22, paddingTop: 18, borderTop: "1px solid #F3F4F6" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 22, paddingTop: 18, borderTop: "1px solid var(--border-light)" }}>
               <button
                 type="button"
                 onClick={() => etape === 0 ? navigate("/") : setEtape((e) => e - 1)}
-                style={{ padding: "10px 20px", backgroundColor: "white", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 13, color: "#6B7280", cursor: "pointer", fontWeight: 600 }}
+                style={{ padding: "10px 20px", backgroundColor: colors.bgCard, border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 13, color: colors.textSecondary, cursor: "pointer", fontWeight: 600 }}
               >
                 {etape === 0 ? "Retour à la connexion" : "Précédent"}
               </button>

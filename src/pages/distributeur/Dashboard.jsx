@@ -39,7 +39,7 @@ function fmt(iso) {
 // Valeurs exactes du check constraint SQL :
 // brouillon | envoyee | confirmee | en_transit | livree | annulee
 const STATUT_STYLE = {
-  brouillon:  { bg: "#F3F4F6", color: "#6B7280",  label: "Brouillon" },
+  brouillon:  { bg: "#F3F4F6", color: colors.textSecondary,  label: "Brouillon" },
   envoyee:    { bg: "#FEF9C3", color: "#A16207",  label: "Envoyée" },
   confirmee:  { bg: "#DBEAFE", color: "#2563EB",  label: "Confirmée" },
   en_transit: { bg: "#E0E7FF", color: "#4F46E5",  label: "En transit" },
@@ -48,7 +48,7 @@ const STATUT_STYLE = {
 };
 
 function StatutBadge({ statut }) {
-  const s = STATUT_STYLE[statut] || { bg: "#F3F4F6", color: "#6B7280", label: statut };
+  const s = STATUT_STYLE[statut] || { bg: "#F3F4F6", color: colors.textSecondary, label: statut };
   return (
     <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 8, fontWeight: 700, backgroundColor: s.bg, color: s.color }}>
       {s.label}
@@ -105,9 +105,9 @@ function CommandesPanel() {
   };
 
   return (
-    <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", minWidth: 0 }}>
+    <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", minWidth: 0 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Commandes reçues</h3>
+        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: colors.navy }}>Commandes reçues</h3>
         <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10, fontWeight: 700, backgroundColor: "#DCFCE7", color: "#16A34A", padding: "3px 8px", borderRadius: 10 }}>
           <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "#16A34A", display: "inline-block", animation: "livePulse 1.5s ease-in-out infinite" }} />
           TEMPS RÉEL
@@ -120,11 +120,11 @@ function CommandesPanel() {
         </div>
       )}
       {loading && [1, 2, 3].map((i) => (
-        <div key={i} style={{ height: 56, backgroundColor: "#F8FAFC", borderRadius: 8, marginBottom: 8, animation: "pulse 1.5s ease-in-out infinite" }} />
+        <div key={i} style={{ height: 56, backgroundColor: colors.bgSurface, borderRadius: 8, marginBottom: 8, animation: "pulse 1.5s ease-in-out infinite" }} />
       ))}
 
       {!loading && commandes.length === 0 && (
-        <div style={{ color: "#9CA3AF", fontSize: 13, textAlign: "center", padding: 24 }}>
+        <div style={{ color: colors.textMuted, fontSize: 13, textAlign: "center", padding: 24 }}>
           Aucune commande — en attente de nouvelles commandes…
         </div>
       )}
@@ -137,13 +137,13 @@ function CommandesPanel() {
               padding: "12px 14px",
               backgroundColor: isNew ? "#FFFBEB" : "#F8FAFC",
               borderRadius: 10,
-              border: isNew ? "1px solid #FCD34D" : "1px solid #F3F4F6",
+              border: isNew ? "1px solid #FCD34D" : "1px solid var(--border-light)",
               transition: "background-color 1s ease",
               animation: isNew ? "newRow 0.4s ease" : undefined,
             }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "#0A1628" }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: colors.navy }}>
                     {c.etablissements?.nom ?? "—"}
                     {isNew && (
                       <span style={{ marginLeft: 8, fontSize: 10, backgroundColor: "#FCD34D", color: "#92400E", padding: "1px 6px", borderRadius: 6, fontWeight: 700 }}>
@@ -151,7 +151,7 @@ function CommandesPanel() {
                       </span>
                     )}
                   </div>
-                  <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>
+                  <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>
                     {c.reference ?? c.id.slice(0, 8).toUpperCase()} · {fmt(c.date_commande)}
                     {c.notes && <span> · {c.notes.slice(0, 60)}{c.notes.length > 60 ? "…" : ""}</span>}
                   </div>
@@ -160,7 +160,7 @@ function CommandesPanel() {
               </div>
 
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: "#0A1628" }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: colors.navy }}>
                   {(c.montant_total ?? 0).toLocaleString()} FCFA
                 </div>
 
@@ -240,7 +240,7 @@ export default function DashboardDistributeur() {
           <div
             key={k.label}
             onClick={() => navigate(k.to)}
-            style={{ backgroundColor: "white", borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}`, cursor: "pointer", transition: "box-shadow 0.15s" }}
+            style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}`, cursor: "pointer", transition: "box-shadow 0.15s" }}
             onMouseEnter={(e) => e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.1)"}
             onMouseLeave={(e) => e.currentTarget.style.boxShadow = "0 1px 4px rgba(0,0,0,0.06)"}
           >
@@ -254,27 +254,27 @@ export default function DashboardDistributeur() {
                 }}>{k.change}</span>
               )}
             </div>
-            <div style={{ fontSize: 12, color: "#6B7280" }}>{k.label}</div>
+            <div style={{ fontSize: 12, color: colors.textSecondary }}>{k.label}</div>
           </div>
         ))}
       </div>
 
       <div className="dash-grid-2">
         {/* Réseau établissements */}
-        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>
             Réseau établissements ({loadEtabs ? "…" : etabs.length})
           </h3>
           {loadEtabs && [1, 2, 3].map((i) => (
-            <div key={i} style={{ height: 52, backgroundColor: "#F8FAFC", borderRadius: 10, marginBottom: 8, animation: "pulse 1.5s ease-in-out infinite" }} />
+            <div key={i} style={{ height: 52, backgroundColor: colors.bgSurface, borderRadius: 10, marginBottom: 8, animation: "pulse 1.5s ease-in-out infinite" }} />
           ))}
           {!loadEtabs && etabs.map((e) => (
-            <div key={e.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 14px", backgroundColor: "#F8FAFC", borderRadius: 10, marginBottom: 8 }}>
+            <div key={e.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 14px", backgroundColor: colors.bgSurface, borderRadius: 10, marginBottom: 8 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <div style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "#10B981" }} />
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: 13, color: "#0A1628" }}>{e.nom}</div>
-                  <div style={{ fontSize: 11, color: "#9CA3AF" }}>{e.type} · {e.ville}</div>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: colors.navy }}>{e.nom}</div>
+                  <div style={{ fontSize: 11, color: colors.textMuted }}>{e.type} · {e.ville}</div>
                 </div>
               </div>
               <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 8, backgroundColor: "#DCFCE7", color: "#16A34A", fontWeight: 600 }}>actif</span>

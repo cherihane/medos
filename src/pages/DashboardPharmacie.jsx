@@ -1,3 +1,4 @@
+import { colors } from "../theme";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line } from "recharts";
 import Layout from "../components/Layout";
 import KpiCard from "../components/KpiCard";
@@ -39,16 +40,16 @@ export default function DashboardPharmacie() {
 
       <div className="dash-grid-2-1">
         {/* Graphique ventes 7 jours */}
-        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", minWidth: 0 }}>
-          <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", minWidth: 0 }}>
+          <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: colors.navy }}>
             Ventes et ordonnances — 7 derniers jours
           </h3>
           {loadSales ? (
-            <div style={{ height: 240, display: "flex", alignItems: "center", justifyContent: "center", color: "#9CA3AF", fontSize: 13 }}>
+            <div style={{ height: 240, display: "flex", alignItems: "center", justifyContent: "center", color: colors.textMuted, fontSize: 13 }}>
               Chargement…
             </div>
           ) : salesData.every((d) => d.ventes === 0) ? (
-            <div style={{ height: 240, display: "flex", alignItems: "center", justifyContent: "center", color: "#9CA3AF", fontSize: 13 }}>
+            <div style={{ height: 240, display: "flex", alignItems: "center", justifyContent: "center", color: colors.textMuted, fontSize: 13 }}>
               Aucune vente enregistrée sur les 7 derniers jours.
             </div>
           ) : (
@@ -66,10 +67,10 @@ export default function DashboardPharmacie() {
         </div>
 
         {/* Stock critique */}
-        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Stock critique</h3>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Stock critique</h3>
           {loadCrit ? (
-            <div style={{ color: "#9CA3AF", fontSize: 13 }}>Chargement…</div>
+            <div style={{ color: colors.textMuted, fontSize: 13 }}>Chargement…</div>
           ) : critiques.length === 0 ? (
             <div style={{ color: "#10B981", fontSize: 13, fontWeight: 600 }}>Aucun stock en situation critique.</div>
           ) : (
@@ -81,7 +82,7 @@ export default function DashboardPharmacie() {
                 return (
                   <div key={item.id}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>{item.nom}</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: colors.text }}>{item.nom}</span>
                       <span style={{ fontSize: 12, color: "#EF4444", fontWeight: 700 }}>
                         {item.stock_actuel}/{item.stock_minimum}
                       </span>
@@ -89,7 +90,7 @@ export default function DashboardPharmacie() {
                     <div style={{ height: 6, backgroundColor: "#FEE2E2", borderRadius: 4 }}>
                       <div style={{ height: "100%", width: `${pct}%`, backgroundColor: "#EF4444", borderRadius: 4 }} />
                     </div>
-                    <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 2 }}>
+                    <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 2 }}>
                       {item.forme ?? item.categorie ?? "—"}
                     </div>
                   </div>
@@ -101,10 +102,10 @@ export default function DashboardPharmacie() {
       </div>
 
       {/* Tendance ordonnances */}
-      <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginTop: 20 }}>
-        <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Tendance ordonnances</h3>
+      <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginTop: 20 }}>
+        <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Tendance ordonnances</h3>
         {loadSales ? (
-          <div style={{ height: 160, display: "flex", alignItems: "center", justifyContent: "center", color: "#9CA3AF", fontSize: 13 }}>
+          <div style={{ height: 160, display: "flex", alignItems: "center", justifyContent: "center", color: colors.textMuted, fontSize: 13 }}>
             Chargement…
           </div>
         ) : (

@@ -1,3 +1,4 @@
+import { colors } from "../../theme";
 import { useState, useEffect, useMemo } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
 import Layout from "../../components/Layout";
@@ -11,9 +12,9 @@ import { openDocument, tableHTML, infoGridHTML, fetchEtabFromAuth } from "../../
 const MOIS_LABELS = ["Jan", "Fev", "Mar", "Avr", "Mai", "Jun", "Jul", "Aou", "Sep", "Oct", "Nov", "Dec"];
 
 const inputStyle = {
-  width: "100%", padding: "9px 13px", border: "1.5px solid #E5E7EB",
+  width: "100%", padding: "9px 13px", border: "1.5px solid var(--border)",
   borderRadius: 8, fontSize: 13, outline: "none", boxSizing: "border-box",
-  color: "#0A1628", backgroundColor: "white",
+  color: colors.navy, backgroundColor: colors.bgCard,
 };
 
 const RESEND_KEY  = "re_iUaDVQFG_LAX2mHCRxm6rf216167mGdJY";
@@ -189,27 +190,27 @@ function AgirModal({ action, onClose, onSaved, etablissement_id, distributeurNom
 
   return (
     <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-      <div style={{ backgroundColor: "white", borderRadius: 16, width: 500, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+      <div style={{ backgroundColor: colors.bgCard, borderRadius: 16, width: 500, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
         {/* En-tête */}
         <div style={{ padding: "20px 24px 0", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
-            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Passer une commande fabricant</h3>
-            <div style={{ fontSize: 12, color: "#6B7280", marginTop: 3 }}>{action.action}</div>
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: colors.navy }}>Passer une commande fabricant</h3>
+            <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 3 }}>{action.action}</div>
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9CA3AF", flexShrink: 0 }}>×</button>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: colors.textMuted, flexShrink: 0 }}>×</button>
         </div>
 
         <div style={{ padding: "18px 24px" }}>
           {/* Motif IA */}
-          <div style={{ backgroundColor: urgenceBg, borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: "#374151" }}>
+          <div style={{ backgroundColor: urgenceBg, borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: colors.text }}>
             <strong>Prévision IA :</strong> {action.motif}
           </div>
 
           {/* Médicament pré-rempli (lecture seule) */}
           <div style={{ marginBottom: 12 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Médicament concerné</label>
+            <label style={{ fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 4 }}>Médicament concerné</label>
             <input
-              style={{ ...inputStyle, backgroundColor: "#F8FAFC", color: "#6B7280", cursor: "not-allowed" }}
+              style={{ ...inputStyle, backgroundColor: colors.bgSurface, color: colors.textSecondary, cursor: "not-allowed" }}
               value={action.medicament}
               readOnly
             />
@@ -217,11 +218,11 @@ function AgirModal({ action, onClose, onSaved, etablissement_id, distributeurNom
 
           {/* Fabricant */}
           <div style={{ marginBottom: 12 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 4 }}>
               Fabricant <span style={{ color: "#EF4444" }}>*</span>
             </label>
             {loadingFab ? (
-              <div style={{ ...inputStyle, backgroundColor: "#F8FAFC", color: "#9CA3AF" }}>Chargement…</div>
+              <div style={{ ...inputStyle, backgroundColor: colors.bgSurface, color: colors.textMuted }}>Chargement…</div>
             ) : fabricants.length > 0 ? (
               <select style={{ ...inputStyle, cursor: "pointer" }} value={fabricant} onChange={(e) => setFabricant(e.target.value)}>
                 <option value="">— Sélectionner un fabricant —</option>
@@ -239,9 +240,9 @@ function AgirModal({ action, onClose, onSaved, etablissement_id, distributeurNom
 
           {/* Email fabricant */}
           <div style={{ marginBottom: 12 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 4 }}>
               Email du fabricant <span style={{ color: "#EF4444" }}>*</span>
-              <span style={{ fontSize: 10, color: "#6B7280", fontWeight: 400, marginLeft: 6 }}>— un email de commande lui sera envoyé automatiquement</span>
+              <span style={{ fontSize: 10, color: colors.textSecondary, fontWeight: 400, marginLeft: 6 }}>— un email de commande lui sera envoyé automatiquement</span>
             </label>
             <input
               style={inputStyle}
@@ -255,20 +256,20 @@ function AgirModal({ action, onClose, onSaved, etablissement_id, distributeurNom
           {/* Quantité + Date */}
           <div className="form-row-2" style={{ marginBottom: 12 }}>
             <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 4 }}>
                 Quantité (unités) <span style={{ fontSize: 10, color: "#F59E0B", fontWeight: 500 }}>suggérée par IA</span>
               </label>
               <input style={inputStyle} type="number" min="1" value={quantite} onChange={(e) => setQuantite(e.target.value)} />
             </div>
             <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Date de livraison souhaitée</label>
+              <label style={{ fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 4 }}>Date de livraison souhaitée</label>
               <input style={inputStyle} type="date" value={dateLivraison} onChange={(e) => setDateLivraison(e.target.value)} />
             </div>
           </div>
 
           {/* Notes libres */}
           <div style={{ marginBottom: 12 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Instructions particulières</label>
+            <label style={{ fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 4 }}>Instructions particulières</label>
             <input style={inputStyle} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Conditionnement spécifique, urgence, etc." />
           </div>
 
@@ -279,7 +280,7 @@ function AgirModal({ action, onClose, onSaved, etablissement_id, distributeurNom
           )}
 
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-            <button onClick={onClose} style={{ padding: "9px 18px", backgroundColor: "white", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 13, color: "#6B7280", cursor: "pointer" }}>
+            <button onClick={onClose} style={{ padding: "9px 18px", backgroundColor: colors.bgCard, border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 13, color: colors.textSecondary, cursor: "pointer" }}>
               Annuler
             </button>
             <button
@@ -302,7 +303,7 @@ function AgirModal({ action, onClose, onSaved, etablissement_id, distributeurNom
                   ],
                 });
               }}
-              style={{ padding: "9px 16px", backgroundColor: "#F8FAFC", color: "#374151", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+              style={{ padding: "9px 16px", backgroundColor: colors.bgSurface, color: colors.text, border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
             >
               Imprimer
             </button>
@@ -394,19 +395,19 @@ export default function Previsions() {
 
       <div className="kpi-row">
         {kpiCards.map((k) => (
-          <div key={k.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "18px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
+          <div key={k.label} style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "18px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
             <div style={{ fontSize: 22, fontWeight: 800, color: k.color }}>{k.value}</div>
-            <div style={{ fontSize: 12, color: "#6B7280" }}>{k.label}</div>
+            <div style={{ fontSize: 12, color: colors.textSecondary }}>{k.label}</div>
           </div>
         ))}
       </div>
 
-      <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 20, minWidth: 0 }}>
-        <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>CA commandes — 6 derniers mois (FCFA)</h3>
+      <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 20, minWidth: 0 }}>
+        <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: colors.navy }}>CA commandes — 6 derniers mois (FCFA)</h3>
         {loadCmd ? (
-          <div style={{ height: 240, display: "flex", alignItems: "center", justifyContent: "center", color: "#9CA3AF", fontSize: 14 }}>Chargement…</div>
+          <div style={{ height: 240, display: "flex", alignItems: "center", justifyContent: "center", color: colors.textMuted, fontSize: 14 }}>Chargement…</div>
         ) : commandes.length === 0 ? (
-          <div style={{ height: 240, display: "flex", alignItems: "center", justifyContent: "center", color: "#9CA3AF", fontSize: 14 }}>Aucune commande enregistrée.</div>
+          <div style={{ height: 240, display: "flex", alignItems: "center", justifyContent: "center", color: colors.textMuted, fontSize: 14 }}>Aucune commande enregistrée.</div>
         ) : (
           <div style={{ width: "100%", height: 240 }}>
             <ResponsiveContainer width="100%" height="100%">
@@ -426,12 +427,12 @@ export default function Previsions() {
       </div>
 
       <div className="dash-grid-2">
-        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", minWidth: 0 }}>
-          <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Stock actuel vs minimum (unites)</h3>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", minWidth: 0 }}>
+          <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Stock actuel vs minimum (unites)</h3>
           {loadCrit ? (
-            <div style={{ height: 220, display: "flex", alignItems: "center", justifyContent: "center", color: "#9CA3AF", fontSize: 14 }}>Chargement…</div>
+            <div style={{ height: 220, display: "flex", alignItems: "center", justifyContent: "center", color: colors.textMuted, fontSize: 14 }}>Chargement…</div>
           ) : prodData.length === 0 ? (
-            <div style={{ height: 220, display: "flex", alignItems: "center", justifyContent: "center", color: "#9CA3AF", fontSize: 14 }}>Aucun médicament critique.</div>
+            <div style={{ height: 220, display: "flex", alignItems: "center", justifyContent: "center", color: colors.textMuted, fontSize: 14 }}>Aucun médicament critique.</div>
           ) : (
             <div style={{ width: "100%", height: 220 }}>
               <ResponsiveContainer width="100%" height="100%">
@@ -447,19 +448,19 @@ export default function Previsions() {
           )}
         </div>
 
-        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Actions recommandees</h3>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Actions recommandees</h3>
           {loadCrit ? (
-            <div style={{ color: "#9CA3AF", fontSize: 13 }}>Chargement…</div>
+            <div style={{ color: colors.textMuted, fontSize: 13 }}>Chargement…</div>
           ) : actionsRecommandees.length === 0 ? (
-            <div style={{ padding: "32px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>
+            <div style={{ padding: "32px 0", textAlign: "center", color: colors.textMuted, fontSize: 13 }}>
               Aucune action requise. Les stocks sont dans les normes.
             </div>
           ) : null}
           {actionsRecommandees.map((a, i) => (
             <div key={i} style={{ padding: "12px 14px", backgroundColor: a.urgence === "haute" ? "#FEF2F2" : a.urgence === "normale" ? "#FFFBEB" : "#F0F9FF", borderRadius: 10, marginBottom: 10 }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: "#0A1628", marginBottom: 3 }}>{a.action}</div>
-              <div style={{ fontSize: 11, color: "#6B7280", marginBottom: 8 }}>{a.motif}</div>
+              <div style={{ fontWeight: 700, fontSize: 13, color: colors.navy, marginBottom: 3 }}>{a.action}</div>
+              <div style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 8 }}>{a.motif}</div>
               <button
                 onClick={() => setAgirAction(a)}
                 style={{ padding: "4px 12px", backgroundColor: "#F59E0B", color: "white", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600 }}

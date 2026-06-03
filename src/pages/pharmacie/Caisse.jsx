@@ -1,3 +1,4 @@
+import { colors } from "../../theme";
 import { useState, useEffect, useCallback } from "react";
 import Layout from "../../components/Layout";
 import Toast from "../../components/Toast";
@@ -64,12 +65,12 @@ function FondCaisseModal({ auth, date, onSaved, onSkip }) {
 
   return (
     <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ backgroundColor: "white", borderRadius: 16, padding: "28px 32px", width: 440, maxWidth: "95vw", boxShadow: "0 8px 40px rgba(0,0,0,0.18)" }}>
-        <h2 style={{ margin: "0 0 4px", fontSize: 17, fontWeight: 800, color: "#0A1628" }}>Fond de caisse</h2>
-        <p style={{ margin: "0 0 20px", fontSize: 13, color: "#6B7280" }}>
+      <div style={{ backgroundColor: colors.bgCard, borderRadius: 16, padding: "28px 32px", width: 440, maxWidth: "95vw", boxShadow: "0 8px 40px rgba(0,0,0,0.18)" }}>
+        <h2 style={{ margin: "0 0 4px", fontSize: 17, fontWeight: 800, color: colors.navy }}>Fond de caisse</h2>
+        <p style={{ margin: "0 0 20px", fontSize: 13, color: colors.textSecondary }}>
           Saisissez le montant en caisse au début de cette session ({date}).
         </p>
-        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
+        <label style={{ fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 6 }}>
           Montant en caisse (FCFA)
         </label>
         <input
@@ -84,7 +85,7 @@ function FondCaisseModal({ auth, date, onSaved, onSkip }) {
         />
         {err && <div style={{ fontSize: 12, color: "#EF4444", marginBottom: 14 }}>{err}</div>}
         <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={onSkip} style={{ flex: 1, padding: "10px", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", backgroundColor: "white", color: "#374151" }}>
+          <button onClick={onSkip} style={{ flex: 1, padding: "10px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", backgroundColor: colors.bgCard, color: colors.text }}>
             Passer
           </button>
           <button onClick={handleSave} disabled={saving} style={{ flex: 2, padding: "10px", backgroundColor: saving ? "#E5E7EB" : "#3B82F6", color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer" }}>
@@ -509,12 +510,12 @@ function OngletCaisse({ onSaleComplete }) {
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 360px", gap: 20, height: isMobile ? "auto" : "calc(100vh - 220px)" }}>
         {/* Gauche */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <div style={{ backgroundColor: "white", borderRadius: 14, padding: "16px 20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", display: "flex", gap: 10, alignItems: "center" }}>
+          <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "16px 20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", display: "flex", gap: 10, alignItems: "center" }}>
             <input
               placeholder="Rechercher un médicament…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              style={{ flex: 1, padding: "10px 14px", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 14, outline: "none", boxSizing: "border-box" }}
+              style={{ flex: 1, padding: "10px 14px", border: "1.5px solid var(--border)", borderRadius: 10, fontSize: 14, outline: "none", boxSizing: "border-box" }}
             />
             <button
               onClick={() => setShowScanner(true)}
@@ -530,14 +531,14 @@ function OngletCaisse({ onSaleComplete }) {
             </button>
           </div>
 
-          <div style={{ backgroundColor: "white", borderRadius: 14, padding: "20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-            <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 700, color: "#0A1628" }}>
+          <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+            <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 700, color: colors.navy }}>
               Produits disponibles {!loading && `(${medicaments.length})`}
             </h3>
             {loading ? (
               <div className="kpi-grid kpi-grid-4" style={{ gap: 10 }}>
                 {[1,2,3,4,5,6,7,8].map((i) => (
-                  <div key={i} style={{ height: 64, backgroundColor: "#F3F4F6", borderRadius: 10, animation: "pulse 1.5s ease-in-out infinite" }} />
+                  <div key={i} style={{ height: 64, backgroundColor: colors.borderLight, borderRadius: 10, animation: "pulse 1.5s ease-in-out infinite" }} />
                 ))}
               </div>
             ) : (
@@ -556,11 +557,11 @@ function OngletCaisse({ onSaleComplete }) {
                       textAlign: "center",
                       opacity: disabled ? 0.6 : 1,
                     }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: "#0A1628", marginBottom: 4 }}>{m.nom}</div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: colors.navy, marginBottom: 4 }}>{m.nom}</div>
                       <div style={{ fontSize: 12, color: sansPrix ? "#F59E0B" : "#3B82F6", fontWeight: 600 }}>
                         {sansPrix ? "Prix manquant" : `${m.prix_unitaire.toLocaleString()} FCFA`}
                       </div>
-                      <div style={{ fontSize: 10, color: "#9CA3AF" }}>Stock: {m.stock_actuel ?? 0}</div>
+                      <div style={{ fontSize: 10, color: colors.textMuted }}>Stock: {m.stock_actuel ?? 0}</div>
                     </button>
                   );
                 })}
@@ -569,16 +570,16 @@ function OngletCaisse({ onSaleComplete }) {
           </div>
 
           {search && resultats.length > 0 && (
-            <div style={{ backgroundColor: "white", borderRadius: 14, padding: "20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, overflow: "auto" }}>
-              <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 700, color: "#0A1628" }}>Résultats ({resultats.length})</h3>
+            <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, overflow: "auto" }}>
+              <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 700, color: colors.navy }}>Résultats ({resultats.length})</h3>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {resultats.map((m) => {
                   const sansPrix = (m.prix_unitaire ?? 0) === 0;
                   return (
-                    <div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", backgroundColor: "#F8FAFC", borderRadius: 10 }}>
+                    <div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", backgroundColor: colors.bgSurface, borderRadius: 10 }}>
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: 13, color: "#0A1628" }}>{m.nom}</div>
-                        <div style={{ fontSize: 11, color: "#9CA3AF" }}>{m.categorie} · Stock : {m.stock_actuel ?? 0}</div>
+                        <div style={{ fontWeight: 600, fontSize: 13, color: colors.navy }}>{m.nom}</div>
+                        <div style={{ fontSize: 11, color: colors.textMuted }}>{m.categorie} · Stock : {m.stock_actuel ?? 0}</div>
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                         <span style={{ fontWeight: 700, color: sansPrix ? "#F59E0B" : "#374151" }}>
@@ -597,47 +598,47 @@ function OngletCaisse({ onSaleComplete }) {
         </div>
 
         {/* Droite : panier */}
-        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", display: "flex", flexDirection: "column" }}>
-          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Panier</h3>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", display: "flex", flexDirection: "column" }}>
+          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Panier</h3>
 
           <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
             {cart.length === 0 && (
-              <div style={{ textAlign: "center", color: "#9CA3AF", fontSize: 13, padding: 40 }}>
+              <div style={{ textAlign: "center", color: colors.textMuted, fontSize: 13, padding: 40 }}>
                 Aucun article.<br />Cliquez sur un produit pour l'ajouter.
               </div>
             )}
             {cart.map((item) => (
-              <div key={item.id} style={{ padding: "10px 14px", backgroundColor: "#F8FAFC", borderRadius: 10 }}>
+              <div key={item.id} style={{ padding: "10px 14px", backgroundColor: colors.bgSurface, borderRadius: 10 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
-                  <div style={{ fontWeight: 600, fontSize: 13, color: "#0A1628" }}>{item.nom}</div>
-                  <button onClick={() => updateQty(item.id, 0)} style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", fontSize: 14, padding: 0 }}>×</button>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: colors.navy }}>{item.nom}</div>
+                  <button onClick={() => updateQty(item.id, 0)} style={{ background: "none", border: "none", cursor: "pointer", color: colors.textMuted, fontSize: 14, padding: 0 }}>×</button>
                 </div>
-                <div style={{ fontSize: 10, color: "#9CA3AF", marginBottom: 4 }}>{item.prix_unitaire.toLocaleString()} FCFA / unité</div>
+                <div style={{ fontSize: 10, color: colors.textMuted, marginBottom: 4 }}>{item.prix_unitaire.toLocaleString()} FCFA / unité</div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <button onClick={() => updateQty(item.id, item.qty - 1)} style={{ width: 26, height: 26, borderRadius: "50%", border: "1px solid #E5E7EB", background: "white", cursor: "pointer", fontWeight: 700 }}>-</button>
+                    <button onClick={() => updateQty(item.id, item.qty - 1)} style={{ width: 26, height: 26, borderRadius: "50%", border: "1px solid var(--border)", background: "white", cursor: "pointer", fontWeight: 700 }}>-</button>
                     <span style={{ fontSize: 14, fontWeight: 700, width: 24, textAlign: "center" }}>{item.qty}</span>
-                    <button onClick={() => updateQty(item.id, item.qty + 1)} style={{ width: 26, height: 26, borderRadius: "50%", border: "1px solid #E5E7EB", background: "white", cursor: "pointer", fontWeight: 700 }}>+</button>
+                    <button onClick={() => updateQty(item.id, item.qty + 1)} style={{ width: 26, height: 26, borderRadius: "50%", border: "1px solid var(--border)", background: "white", cursor: "pointer", fontWeight: 700 }}>+</button>
                   </div>
-                  <span style={{ fontWeight: 700, color: "#0A1628" }}>{(item.prix_unitaire * item.qty).toLocaleString()} FCFA</span>
+                  <span style={{ fontWeight: 700, color: colors.navy }}>{(item.prix_unitaire * item.qty).toLocaleString()} FCFA</span>
                 </div>
               </div>
             ))}
           </div>
 
-          <div style={{ borderTop: "1px solid #E5E7EB", paddingTop: 16, marginTop: 8 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 13, color: "#6B7280" }}>
+          <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 13, color: colors.textSecondary }}>
               <span>Sous-total ({cart.reduce((s, i) => s + i.qty, 0)} articles)</span>
               <span>{total.toLocaleString()} FCFA</span>
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 18, fontWeight: 800, color: "#0A1628", marginBottom: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 18, fontWeight: 800, color: colors.navy, marginBottom: 16 }}>
               <span>TOTAL</span>
               <span>{total.toLocaleString()} FCFA</span>
             </div>
 
             {/* Mode de paiement */}
             <div style={{ marginBottom: 12 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Mode de paiement</label>
+              <label style={{ fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 6 }}>Mode de paiement</label>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 {[
                   { key: "especes",        label: "Espèces" },
@@ -649,7 +650,7 @@ function OngletCaisse({ onSaleComplete }) {
                 ].map((mode) => (
                   <button key={mode.key} onClick={() => { setPaiement(mode.key); setMontantRecu(""); setMontantEspeces(""); setMontantMobile(""); }} style={{
                     flex: "1 1 auto", padding: "7px 6px", borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: "pointer",
-                    border: paiement === mode.key ? "2px solid #3B82F6" : "1.5px solid #E5E7EB",
+                    border: paiement === mode.key ? "2px solid #3B82F6" : "1.5px solid var(--border)",
                     backgroundColor: paiement === mode.key ? "#EFF6FF" : "white",
                     color: paiement === mode.key ? "#2563EB" : "#6B7280",
                   }}>{mode.label}</button>
@@ -662,12 +663,12 @@ function OngletCaisse({ onSaleComplete }) {
               <div style={{ marginBottom: 12 }}>
                 <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
                   <div style={{ flex: 1 }}>
-                    <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 3 }}>Espèces (FCFA)</label>
-                    <input type="number" min="0" value={montantEspeces} onChange={(e) => setMontantEspeces(e.target.value)} placeholder="0" style={{ width: "100%", padding: "8px 10px", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                    <label style={{ fontSize: 11, fontWeight: 600, color: colors.text, display: "block", marginBottom: 3 }}>Espèces (FCFA)</label>
+                    <input type="number" min="0" value={montantEspeces} onChange={(e) => setMontantEspeces(e.target.value)} placeholder="0" style={{ width: "100%", padding: "8px 10px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 3 }}>Mobile Money (FCFA)</label>
-                    <input type="number" min="0" value={montantMobile} onChange={(e) => setMontantMobile(e.target.value)} placeholder="0" style={{ width: "100%", padding: "8px 10px", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                    <label style={{ fontSize: 11, fontWeight: 600, color: colors.text, display: "block", marginBottom: 3 }}>Mobile Money (FCFA)</label>
+                    <input type="number" min="0" value={montantMobile} onChange={(e) => setMontantMobile(e.target.value)} placeholder="0" style={{ width: "100%", padding: "8px 10px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
                   </div>
                 </div>
                 {mixteInsuffisant && <div style={{ fontSize: 11, color: "#EF4444" }}>Total saisi ({(Number(montantEspeces)+Number(montantMobile)).toLocaleString()} FCFA) inférieur au total ({total.toLocaleString()} FCFA)</div>}
@@ -677,19 +678,19 @@ function OngletCaisse({ onSaleComplete }) {
 
             {/* Assurance / Mutuelle / CNSS */}
             {(paiement === "assurance" || paiement === "cnss") && (
-              <div style={{ marginBottom: 12, backgroundColor: "#F0F4FB", borderRadius: 10, padding: "12px 14px" }}>
-                <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
+              <div style={{ marginBottom: 12, backgroundColor: colors.bg, borderRadius: 10, padding: "12px 14px" }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 6 }}>
                   Taux de couverture {paiement === "cnss" ? "CNSS" : "assurance"} (%)
                 </label>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
-                  <input type="number" min="0" max="100" value={tauxCouverture} onChange={(e) => setTauxCouverture(e.target.value)} style={{ width: 80, padding: "7px 10px", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 13, outline: "none" }} />
-                  <span style={{ fontSize: 13, color: "#6B7280" }}>%</span>
+                  <input type="number" min="0" max="100" value={tauxCouverture} onChange={(e) => setTauxCouverture(e.target.value)} style={{ width: 80, padding: "7px 10px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 13, outline: "none" }} />
+                  <span style={{ fontSize: 13, color: colors.textSecondary }}>%</span>
                 </div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#374151" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: colors.text }}>
                   <span>Part {paiement === "cnss" ? "CNSS" : "assurance"} :</span>
                   <span style={{ fontWeight: 700, color: "#16A34A" }}>{partAssurance.toLocaleString()} FCFA</span>
                 </div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#0A1628", fontWeight: 700, marginTop: 4 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: colors.navy, fontWeight: 700, marginTop: 4 }}>
                   <span>Reste à payer (patient) :</span>
                   <span style={{ color: "#EF4444" }}>{restePatient.toLocaleString()} FCFA</span>
                 </div>
@@ -699,7 +700,7 @@ function OngletCaisse({ onSaleComplete }) {
             {/* Suivi espèces */}
             {paiement === "especes" && (
               <div style={{ marginBottom: 12 }}>
-                <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Montant reçu du client (FCFA)</label>
+                <label style={{ fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 4 }}>Montant reçu du client (FCFA)</label>
                 <input
                   type="number"
                   min="0"
@@ -743,7 +744,7 @@ function OngletCaisse({ onSaleComplete }) {
             {cart.length > 0 && !saving && (
               <button
                 onClick={() => { setCart([]); setMontantRecu(""); }}
-                style={{ width: "100%", marginTop: 8, padding: "10px", backgroundColor: "white", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 13, color: "#6B7280", cursor: "pointer" }}>
+                style={{ width: "100%", marginTop: 8, padding: "10px", backgroundColor: colors.bgCard, border: "1.5px solid var(--border)", borderRadius: 10, fontSize: 13, color: colors.textSecondary, cursor: "pointer" }}>
                 Vider le panier
               </button>
             )}
@@ -814,12 +815,12 @@ function ClotureModal({ date, journal, byMode, totalEncaisse, fondMontant, auth,
 
   return (
     <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ backgroundColor: "white", borderRadius: 16, padding: "28px 32px", width: 480, maxWidth: "95vw", boxShadow: "0 8px 40px rgba(0,0,0,0.18)" }}>
-        <h2 style={{ margin: "0 0 4px", fontSize: 17, fontWeight: 800, color: "#0A1628" }}>Clôture de caisse</h2>
-        <p style={{ margin: "0 0 20px", fontSize: 12, color: "#6B7280" }}>{dateStr}</p>
+      <div style={{ backgroundColor: colors.bgCard, borderRadius: 16, padding: "28px 32px", width: 480, maxWidth: "95vw", boxShadow: "0 8px 40px rgba(0,0,0,0.18)" }}>
+        <h2 style={{ margin: "0 0 4px", fontSize: 17, fontWeight: 800, color: colors.navy }}>Clôture de caisse</h2>
+        <p style={{ margin: "0 0 20px", fontSize: 12, color: colors.textSecondary }}>{dateStr}</p>
 
         {/* Récapitulatif */}
-        <div style={{ backgroundColor: "#F8FAFC", borderRadius: 10, padding: "14px 16px", marginBottom: 20 }}>
+        <div style={{ backgroundColor: colors.bgSurface, borderRadius: 10, padding: "14px 16px", marginBottom: 20 }}>
           <div className="table-scroll"><table style={{ width: "100%", borderCollapse: "collapse" }}>
             <tbody>
               {[
@@ -829,29 +830,29 @@ function ClotureModal({ date, journal, byMode, totalEncaisse, fondMontant, auth,
                 { label: "Autres",       val: totaux.autres },
               ].map((r) => (
                 <tr key={r.label}>
-                  <td style={{ fontSize: 13, color: "#374151", padding: "5px 0" }}>{r.label}</td>
-                  <td style={{ fontSize: 13, fontWeight: 700, color: "#0A1628", textAlign: "right" }}>{r.val.toLocaleString("fr-FR")} FCFA</td>
+                  <td style={{ fontSize: 13, color: colors.text, padding: "5px 0" }}>{r.label}</td>
+                  <td style={{ fontSize: 13, fontWeight: 700, color: colors.navy, textAlign: "right" }}>{r.val.toLocaleString("fr-FR")} FCFA</td>
                 </tr>
               ))}
               {fondMontant != null && (
                 <tr>
-                  <td style={{ fontSize: 12, color: "#6B7280", padding: "5px 0", fontStyle: "italic" }}>Fond de départ</td>
-                  <td style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", textAlign: "right", fontStyle: "italic" }}>{fondMontant.toLocaleString("fr-FR")} FCFA</td>
+                  <td style={{ fontSize: 12, color: colors.textSecondary, padding: "5px 0", fontStyle: "italic" }}>Fond de départ</td>
+                  <td style={{ fontSize: 12, fontWeight: 600, color: colors.textSecondary, textAlign: "right", fontStyle: "italic" }}>{fondMontant.toLocaleString("fr-FR")} FCFA</td>
                 </tr>
               )}
               <tr style={{ borderTop: "2px solid #0A1628" }}>
-                <td style={{ fontSize: 14, fontWeight: 800, color: "#0A1628", paddingTop: 8 }}>TOTAL ENCAISSÉ</td>
+                <td style={{ fontSize: 14, fontWeight: 800, color: colors.navy, paddingTop: 8 }}>TOTAL ENCAISSÉ</td>
                 <td style={{ fontSize: 15, fontWeight: 800, color: "#10B981", textAlign: "right", paddingTop: 8 }}>{totaux.total.toLocaleString("fr-FR")} FCFA</td>
               </tr>
             </tbody>
           </table></div>
-          <div style={{ marginTop: 10, fontSize: 12, color: "#6B7280" }}>Transactions : <strong>{nb}</strong></div>
+          <div style={{ marginTop: 10, fontSize: 12, color: colors.textSecondary }}>Transactions : <strong>{nb}</strong></div>
         </div>
 
         {soldeTheorique != null && (
           <div style={{ backgroundColor: "#DCFCE7", border: "1.5px solid #16A34A", borderRadius: 8, padding: "10px 14px", marginBottom: 12, fontSize: 12 }}>
             <div style={{ fontWeight: 700, color: "#15803D", marginBottom: 2 }}>Solde théorique en caisse</div>
-            <div style={{ fontSize: 11, color: "#374151" }}>
+            <div style={{ fontSize: 11, color: colors.text }}>
               Fond {fondMontant.toLocaleString()} + Espèces {totaux.especes.toLocaleString()} – Monnaie {totalMonnaieRendue.toLocaleString()} = <strong>{soldeTheorique.toLocaleString("fr-FR")} FCFA</strong>
             </div>
           </div>
@@ -860,7 +861,7 @@ function ClotureModal({ date, journal, byMode, totalEncaisse, fondMontant, auth,
           Cette opération est irréversible. La journée sera verrouillée en lecture seule. Confirmez avec votre mot de passe.
         </div>
 
-        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Mot de passe du gérant</label>
+        <label style={{ fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 6 }}>Mot de passe du gérant</label>
         <input
           type="password"
           value={password}
@@ -872,7 +873,7 @@ function ClotureModal({ date, journal, byMode, totalEncaisse, fondMontant, auth,
         {err && <div style={{ fontSize: 12, color: "#EF4444", marginBottom: 12 }}>{err}</div>}
 
         <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={onClose} style={{ flex: 1, padding: "10px", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", backgroundColor: "white", color: "#374151" }}>
+          <button onClick={onClose} style={{ flex: 1, padding: "10px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", backgroundColor: colors.bgCard, color: colors.text }}>
             Annuler
           </button>
           <button onClick={handleCloturer} disabled={saving} style={{ flex: 2, padding: "10px", backgroundColor: saving ? "#E5E7EB" : "#DC2626", color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer" }}>
@@ -977,7 +978,7 @@ function OngletJournal({ refreshKey }) {
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
-          style={{ padding: "8px 12px", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 13 }}
+          style={{ padding: "8px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 13 }}
         />
         <button onClick={load} style={{ padding: "8px 16px", backgroundColor: "#3B82F6", color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
           Actualiser
@@ -1049,8 +1050,8 @@ function OngletJournal({ refreshKey }) {
           { label: "Monnaie rendue", value: `${totalMonnaieRendue.toLocaleString()} FCFA`, color: "#F59E0B" },
           { label: "Espèces à vérifier", value: `${totalEspecesApresMonnaie.toLocaleString()} FCFA`, color: hasEcart ? "#EF4444" : "#10B981" },
         ].map((k) => (
-          <div key={k.label} style={{ backgroundColor: "white", borderRadius: 12, padding: "14px 16px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-            <div style={{ fontSize: 10, color: "#9CA3AF", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.04em" }}>{k.label}</div>
+          <div key={k.label} style={{ backgroundColor: colors.bgCard, borderRadius: 12, padding: "14px 16px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+            <div style={{ fontSize: 10, color: colors.textMuted, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.04em" }}>{k.label}</div>
             <div style={{ fontSize: 16, fontWeight: 800, color: k.color }}>{k.value}</div>
           </div>
         ))}
@@ -1058,21 +1059,21 @@ function OngletJournal({ refreshKey }) {
 
       {/* Récapitulatif espèces à vérifier physiquement */}
       {rowsEspeces.length > 0 && (
-        <div style={{ backgroundColor: "white", borderRadius: 12, padding: "16px 20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", border: "1.5px solid #E5E7EB" }}>
-          <h4 style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 700, color: "#0A1628" }}>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 12, padding: "16px 20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", border: "1.5px solid var(--border)" }}>
+          <h4 style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 700, color: colors.navy }}>
             Récapitulatif espèces — a vérifier physiquement
           </h4>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, fontSize: 13 }}>
-            <div style={{ padding: "8px 12px", backgroundColor: "#F0F4FB", borderRadius: 8 }}>
-              <div style={{ fontSize: 10, color: "#6B7280", marginBottom: 2 }}>Total ventes espèces</div>
+            <div style={{ padding: "8px 12px", backgroundColor: colors.bg, borderRadius: 8 }}>
+              <div style={{ fontSize: 10, color: colors.textSecondary, marginBottom: 2 }}>Total ventes espèces</div>
               <div style={{ fontWeight: 700 }}>{totalEspecesTheorique.toLocaleString()} FCFA</div>
             </div>
             <div style={{ padding: "8px 12px", backgroundColor: "#FFFBEB", borderRadius: 8 }}>
-              <div style={{ fontSize: 10, color: "#6B7280", marginBottom: 2 }}>– Monnaie rendue</div>
+              <div style={{ fontSize: 10, color: colors.textSecondary, marginBottom: 2 }}>– Monnaie rendue</div>
               <div style={{ fontWeight: 700, color: "#D97706" }}>– {totalMonnaieRendue.toLocaleString()} FCFA</div>
             </div>
             <div style={{ padding: "8px 12px", backgroundColor: hasEcart ? "#FEF2F2" : "#DCFCE7", borderRadius: 8, border: `1.5px solid ${hasEcart ? "#EF4444" : "#16A34A"}` }}>
-              <div style={{ fontSize: 10, color: "#6B7280", marginBottom: 2 }}>= Espèces en caisse</div>
+              <div style={{ fontSize: 10, color: colors.textSecondary, marginBottom: 2 }}>= Espèces en caisse</div>
               <div style={{ fontWeight: 800, color: hasEcart ? "#DC2626" : "#16A34A" }}>{totalEspecesApresMonnaie.toLocaleString()} FCFA</div>
             </div>
           </div>
@@ -1081,12 +1082,12 @@ function OngletJournal({ refreshKey }) {
 
       {/* Répartition par mode */}
       {Object.keys(byMode).length > 0 && (
-        <div style={{ backgroundColor: "white", borderRadius: 12, padding: "16px 20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <h4 style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 700, color: "#0A1628" }}>Répartition par mode de paiement</h4>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 12, padding: "16px 20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <h4 style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 700, color: colors.navy }}>Répartition par mode de paiement</h4>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             {Object.entries(byMode).map(([mode, montant]) => (
-              <div key={mode} style={{ padding: "8px 14px", backgroundColor: "#F0F4FB", borderRadius: 8 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>{MODE_LABELS[mode] ?? mode}</span>
+              <div key={mode} style={{ padding: "8px 14px", backgroundColor: colors.bg, borderRadius: 8 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: colors.text }}>{MODE_LABELS[mode] ?? mode}</span>
                 <span style={{ fontSize: 13, fontWeight: 800, color: "#2563EB", marginLeft: 8 }}>{montant.toLocaleString()} FCFA</span>
               </div>
             ))}
@@ -1095,47 +1096,47 @@ function OngletJournal({ refreshKey }) {
       )}
 
       {/* Liste des transactions — lecture seule, immuable */}
-      <div style={{ backgroundColor: "white", borderRadius: 12, padding: "16px 20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+      <div style={{ backgroundColor: colors.bgCard, borderRadius: 12, padding: "16px 20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-          <h4 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#0A1628" }}>
+          <h4 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: colors.navy }}>
             Registre des transactions ({journal.length}) — lecture seule
           </h4>
-          <span style={{ fontSize: 10, fontWeight: 700, color: "#6B7280", padding: "3px 8px", backgroundColor: "#F3F4F6", borderRadius: 6 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: colors.textSecondary, padding: "3px 8px", backgroundColor: colors.borderLight, borderRadius: 6 }}>
             IMMUABLE — aucune modification possible
           </span>
         </div>
-        {loading && <div style={{ color: "#9CA3AF", fontSize: 13 }}>Chargement…</div>}
+        {loading && <div style={{ color: colors.textMuted, fontSize: 13 }}>Chargement…</div>}
         {error && <div style={{ color: "#EF4444", fontSize: 13 }}>Une erreur s'est produite. Veuillez réessayer.</div>}
         {!loading && !error && journal.length === 0 && (
-          <div style={{ color: "#9CA3AF", fontSize: 13, textAlign: "center", padding: 20 }}>Aucune transaction pour cette date.</div>
+          <div style={{ color: colors.textMuted, fontSize: 13, textAlign: "center", padding: 20 }}>Aucune transaction pour cette date.</div>
         )}
         {!loading && journal.map((row, idx) => {
           const heure = new Date(row.created_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
           const ref = shortId(row.id);
           return (
             <div key={row.id} style={{
-              borderBottom: idx < journal.length - 1 ? "1px solid #F3F4F6" : "none",
+              borderBottom: idx < journal.length - 1 ? "1px solid var(--border-light)" : "none",
               padding: "12px 0",
             }}>
               {/* Ligne principale */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <span style={{ fontFamily: "monospace", fontSize: 11, fontWeight: 700, color: "#374151", backgroundColor: "#F3F4F6", padding: "2px 6px", borderRadius: 4 }}>
+                  <span style={{ fontFamily: "monospace", fontSize: 11, fontWeight: 700, color: colors.text, backgroundColor: colors.borderLight, padding: "2px 6px", borderRadius: 4 }}>
                     #{ref}
                   </span>
-                  <span style={{ fontSize: 12, color: "#6B7280" }}>{heure}</span>
+                  <span style={{ fontSize: 12, color: colors.textSecondary }}>{heure}</span>
                   {row.caissier_email && (
-                    <span style={{ fontSize: 11, color: "#9CA3AF" }}>{row.caissier_email}</span>
+                    <span style={{ fontSize: 11, color: colors.textMuted }}>{row.caissier_email}</span>
                   )}
                   <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 10, backgroundColor: "#EFF6FF", color: "#2563EB", fontWeight: 600 }}>
                     {MODE_LABELS[row.mode_paiement] ?? row.mode_paiement}
                   </span>
-                  <span style={{ fontSize: 11, color: "#9CA3AF" }}>{row.nb_articles} art.</span>
+                  <span style={{ fontSize: 11, color: colors.textMuted }}>{row.nb_articles} art.</span>
                 </div>
                 <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 12 }}>
-                  <div style={{ fontSize: 14, fontWeight: 800, color: "#0A1628" }}>{(row.montant_total ?? 0).toLocaleString()} FCFA</div>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: colors.navy }}>{(row.montant_total ?? 0).toLocaleString()} FCFA</div>
                   {row.mode_paiement === "especes" && row.montant_recu != null && (
-                    <div style={{ fontSize: 11, color: "#6B7280" }}>
+                    <div style={{ fontSize: 11, color: colors.textSecondary }}>
                       Reçu : {row.montant_recu.toLocaleString()} FCFA
                       {row.monnaie_rendue != null && row.monnaie_rendue > 0 && (
                         <span style={{ color: "#F59E0B", marginLeft: 4 }}>/ Monnaie : {row.monnaie_rendue.toLocaleString()} FCFA</span>
@@ -1146,9 +1147,9 @@ function OngletJournal({ refreshKey }) {
               </div>
               {/* Détail articles avec prix unitaire */}
               {Array.isArray(row.detail) && row.detail.length > 0 && (
-                <div style={{ marginTop: 4, paddingLeft: 10, borderLeft: "2px solid #E5E7EB" }}>
+                <div style={{ marginTop: 4, paddingLeft: 10, borderLeft: "2px solid var(--border)" }}>
                   {row.detail.map((d, di) => (
-                    <div key={di} style={{ fontSize: 11, color: "#374151", lineHeight: 1.7 }}>
+                    <div key={di} style={{ fontSize: 11, color: colors.text, lineHeight: 1.7 }}>
                       <span style={{ fontWeight: 600 }}>{d.nom}</span>
                       {" — "}
                       {d.qty} × {(d.prix_unitaire ?? 0).toLocaleString()} FCFA
@@ -1176,7 +1177,7 @@ export default function Caisse() {
   return (
     <Layout title="Caisse — Point de Vente" subtitle="Enregistrement des ventes et dispensation">
       {/* Tabs */}
-      <div style={{ display: "flex", gap: 4, marginBottom: 20, backgroundColor: "white", borderRadius: 12, padding: 4, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", width: "fit-content" }}>
+      <div style={{ display: "flex", gap: 4, marginBottom: 20, backgroundColor: colors.bgCard, borderRadius: 12, padding: 4, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", width: "fit-content" }}>
         {[
           { key: "caisse", label: "Caisse" },
           { key: "journal", label: "Journal du gérant" },

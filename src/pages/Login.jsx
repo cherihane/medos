@@ -142,7 +142,7 @@ export default function Login() {
         padding: isMobile ? "32px 20px 40px" : 48,
       }}>
         <div style={{
-          backgroundColor: "white",
+          backgroundColor: colors.bgCard,
           borderRadius: 20,
           padding: isMobile ? "32px 24px" : "40px 44px",
           width: "100%",
@@ -163,18 +163,18 @@ export default function Login() {
                 </svg>
               </div>
               <div>
-                <div style={{ fontSize: 26, fontWeight: 900, color: "#0A1628", letterSpacing: 0.5 }}>MedOS</div>
-                <div style={{ fontSize: 11, color: "#9CA3AF" }}>par le groupe Kela</div>
+                <div style={{ fontSize: 26, fontWeight: 900, color: colors.navy, letterSpacing: 0.5 }}>MedOS</div>
+                <div style={{ fontSize: 11, color: colors.textMuted }}>par le groupe Kela</div>
               </div>
             </div>
           )}
 
-          <h2 style={{ fontSize: 22, fontWeight: 800, color: "#0A1628", marginBottom: 4 }}>Connexion</h2>
-          <p style={{ color: "#6B7280", fontSize: 13, marginBottom: 28 }}>Accédez à votre espace MedOS</p>
+          <h2 style={{ fontSize: 22, fontWeight: 800, color: colors.navy, marginBottom: 4 }}>Connexion</h2>
+          <p style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 28 }}>Accédez à votre espace MedOS</p>
 
           <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
             <div>
-              <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
+              <label style={{ fontSize: 13, fontWeight: 600, color: colors.text, display: "block", marginBottom: 6 }}>
                 Type de structure
               </label>
               <select
@@ -183,11 +183,11 @@ export default function Login() {
                 style={{
                   width: "100%",
                   padding: "11px 14px",
-                  border: "1.5px solid #E5E7EB",
+                  border: "1.5px solid var(--border)",
                   borderRadius: 10,
                   fontSize: 14,
-                  color: "#0A1628",
-                  backgroundColor: "white",
+                  color: colors.navy,
+                  backgroundColor: colors.bgCard,
                   outline: "none",
                   boxSizing: "border-box",
                 }}
@@ -199,7 +199,7 @@ export default function Login() {
             </div>
 
             <div>
-              <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
+              <label style={{ fontSize: 13, fontWeight: 600, color: colors.text, display: "block", marginBottom: 6 }}>
                 Adresse e-mail
               </label>
               <input
@@ -211,7 +211,7 @@ export default function Login() {
                 style={{
                   width: "100%",
                   padding: "11px 14px",
-                  border: "1.5px solid #E5E7EB",
+                  border: "1.5px solid var(--border)",
                   borderRadius: 10,
                   fontSize: 14,
                   outline: "none",
@@ -221,7 +221,7 @@ export default function Login() {
             </div>
 
             <div>
-              <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
+              <label style={{ fontSize: 13, fontWeight: 600, color: colors.text, display: "block", marginBottom: 6 }}>
                 Mot de passe
               </label>
               <input
@@ -233,7 +233,7 @@ export default function Login() {
                 style={{
                   width: "100%",
                   padding: "11px 14px",
-                  border: "1.5px solid #E5E7EB",
+                  border: "1.5px solid var(--border)",
                   borderRadius: 10,
                   fontSize: 14,
                   outline: "none",
@@ -243,7 +243,7 @@ export default function Login() {
             </div>
 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13, color: "#6B7280", cursor: "pointer" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13, color: colors.textSecondary, cursor: "pointer" }}>
                 <input type="checkbox" style={{ accentColor: "#3B82F6" }} />
                 Se souvenir de moi
               </label>
@@ -289,7 +289,7 @@ export default function Login() {
           </form>
 
           <p style={{ textAlign: "center", marginTop: 16, marginBottom: 0 }}>
-            <a href="/inscription" style={{ fontSize: 12, color: "#6B7280", textDecoration: "none" }}
+            <a href="/inscription" style={{ fontSize: 12, color: colors.textSecondary, textDecoration: "none" }}
               onMouseEnter={(e) => e.target.style.color = "#3B82F6"}
               onMouseLeave={(e) => e.target.style.color = "#6B7280"}
             >

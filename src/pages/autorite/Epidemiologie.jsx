@@ -1,3 +1,4 @@
+import { colors } from "../../theme";
 import { useMemo } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import Layout from "../../components/Layout";
@@ -63,19 +64,19 @@ export default function Épidémiologie() {
     <Layout title="Épidémiologie" subtitle="Surveillance épidémiologique et alertes sanitaires">
       <div className="kpi-row">
         {kpis.map((k) => (
-          <div key={k.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "18px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
+          <div key={k.label} style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "18px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
             <div style={{ fontSize: 22, fontWeight: 800, color: k.color }}>{k.value}</div>
-            <div style={{ fontSize: 12, color: "#6B7280" }}>{k.label}</div>
+            <div style={{ fontSize: 12, color: colors.textSecondary }}>{k.label}</div>
           </div>
         ))}
       </div>
 
-      <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 20 }}>
-        <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Alertes par mois — 6 derniers mois</h3>
+      <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 20 }}>
+        <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Alertes par mois — 6 derniers mois</h3>
         {loading ? (
-          <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", color: "#9CA3AF", fontSize: 14 }}>Chargement…</div>
+          <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", color: colors.textMuted, fontSize: 14 }}>Chargement…</div>
         ) : affichees.length === 0 ? (
-          <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", color: "#9CA3AF", fontSize: 14 }}>Aucune alerte enregistrée.</div>
+          <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", color: colors.textMuted, fontSize: 14 }}>Aucune alerte enregistrée.</div>
         ) : (
           <div style={{ width: "100%", height: 220 }}>
             <ResponsiveContainer width="100%" height="100%">
@@ -91,22 +92,22 @@ export default function Épidémiologie() {
       </div>
 
       <div className="dash-grid-2">
-        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Alertes actives</h3>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Alertes actives</h3>
           {loading ? (
-            <div style={{ color: "#9CA3AF", fontSize: 13 }}>Chargement…</div>
+            <div style={{ color: colors.textMuted, fontSize: 13 }}>Chargement…</div>
           ) : affichees.length === 0 ? (
-            <div style={{ padding: "32px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>
+            <div style={{ padding: "32px 0", textAlign: "center", color: colors.textMuted, fontSize: 13 }}>
               Aucune alerte épidémiologique enregistrée.
             </div>
           ) : (
             affichees.slice(0, 8).map((a) => {
               const s = SEVERITE_STYLE[a.severite] ?? SEVERITE_STYLE.faible;
               return (
-                <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "11px 0", borderBottom: "1px solid #F3F4F6" }}>
+                <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "11px 0", borderBottom: "1px solid var(--border-light)" }}>
                   <div style={{ flex: 1, minWidth: 0, marginRight: 10 }}>
-                    <div style={{ fontWeight: 600, fontSize: 13, color: "#0A1628", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.titre ?? "Alerte"}</div>
-                    <div style={{ fontSize: 11, color: "#9CA3AF" }}>{a.type ?? "—"}</div>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: colors.navy, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.titre ?? "Alerte"}</div>
+                    <div style={{ fontSize: 11, color: colors.textMuted }}>{a.type ?? "—"}</div>
                   </div>
                   <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 8, backgroundColor: s.bg, color: s.color, fontWeight: 700, flexShrink: 0 }}>
                     {a.severite ?? "faible"}
@@ -117,12 +118,12 @@ export default function Épidémiologie() {
           )}
         </div>
 
-        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Repartition par severite</h3>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Repartition par severite</h3>
           {loading ? (
-            <div style={{ color: "#9CA3AF", fontSize: 13 }}>Chargement…</div>
+            <div style={{ color: colors.textMuted, fontSize: 13 }}>Chargement…</div>
           ) : affichees.length === 0 ? (
-            <div style={{ padding: "32px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>
+            <div style={{ padding: "32px 0", textAlign: "center", color: colors.textMuted, fontSize: 13 }}>
               Aucune alerte a afficher.
             </div>
           ) : (
@@ -133,7 +134,7 @@ export default function Épidémiologie() {
                 <div key={niv} style={{ padding: "12px 14px", backgroundColor: style.bg, borderRadius: 10, marginBottom: 8 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                     <span style={{ fontSize: 13, fontWeight: 700, color: style.color, textTransform: "capitalize" }}>{niv}</span>
-                    <span style={{ fontSize: 13, fontWeight: 800, color: "#0A1628" }}>{count} alerte{count !== 1 ? "s" : ""}</span>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: colors.navy }}>{count} alerte{count !== 1 ? "s" : ""}</span>
                   </div>
                   <div style={{ height: 6, backgroundColor: "rgba(0,0,0,0.08)", borderRadius: 4 }}>
                     <div style={{ height: "100%", width: `${pct}%`, backgroundColor: style.color, borderRadius: 4 }} />

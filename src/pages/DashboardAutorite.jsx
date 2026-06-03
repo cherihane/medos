@@ -1,3 +1,4 @@
+import { colors } from "../theme";
 import { useMemo } from "react";
 import Layout from "../components/Layout";
 import KpiCard from "../components/KpiCard";
@@ -104,24 +105,24 @@ export default function DashboardAutorite() {
 
       <div className="dash-grid-2" style={{ marginBottom: 20 }}>
         {/* Repartition par ville */}
-        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>
             Structures par ville
           </h3>
           {loadEtabs ? (
-            <div style={{ color: "#9CA3AF", fontSize: 13 }}>Chargement…</div>
+            <div style={{ color: colors.textMuted, fontSize: 13 }}>Chargement…</div>
           ) : parVille.length === 0 ? (
-            <div style={{ color: "#9CA3AF", fontSize: 13 }}>Aucune structure enregistrée.</div>
+            <div style={{ color: colors.textMuted, fontSize: 13 }}>Aucune structure enregistrée.</div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {parVille.map((r) => {
                 const pct = etabs.length > 0 ? Math.round((r.structures / etabs.length) * 100) : 0;
                 return (
-                  <div key={r.ville} style={{ padding: "12px 16px", backgroundColor: "#F8FAFC", borderRadius: 10 }}>
+                  <div key={r.ville} style={{ padding: "12px 16px", backgroundColor: colors.bgSurface, borderRadius: 10 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                       <div>
-                        <span style={{ fontWeight: 700, fontSize: 13, color: "#0A1628" }}>{r.ville}</span>
-                        <span style={{ fontSize: 11, color: "#9CA3AF", marginLeft: 8 }}>
+                        <span style={{ fontWeight: 700, fontSize: 13, color: colors.navy }}>{r.ville}</span>
+                        <span style={{ fontSize: 11, color: colors.textMuted, marginLeft: 8 }}>
                           {r.structures} structure{r.structures > 1 ? "s" : ""}
                         </span>
                       </div>
@@ -130,7 +131,7 @@ export default function DashboardAutorite() {
                     <div style={{ height: 6, backgroundColor: "#E5E7EB", borderRadius: 4 }}>
                       <div style={{ height: "100%", width: `${pct}%`, backgroundColor: "#3B82F6", borderRadius: 4 }} />
                     </div>
-                    <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 4 }}>{r.types}</div>
+                    <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 4 }}>{r.types}</div>
                   </div>
                 );
               })}
@@ -139,13 +140,13 @@ export default function DashboardAutorite() {
         </div>
 
         {/* ODD */}
-        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>
             Objectifs de Developpement Durable (ODD)
           </h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             {oddData.map((o) => (
-              <div key={o.goal} style={{ padding: "14px", backgroundColor: "#F8FAFC", borderRadius: 10 }}>
+              <div key={o.goal} style={{ padding: "14px", backgroundColor: colors.bgSurface, borderRadius: 10 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
                   <div>
                     <span style={{
@@ -154,13 +155,13 @@ export default function DashboardAutorite() {
                     }}>
                       {o.goal}
                     </span>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginTop: 4 }}>{o.label}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: colors.text, marginTop: 4 }}>{o.label}</div>
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <div style={{ fontSize: 20, fontWeight: 800, color: o.progress >= o.target ? "#10B981" : "#F59E0B" }}>
                       {o.progress}%
                     </div>
-                    <div style={{ fontSize: 10, color: "#9CA3AF" }}>cible : {o.target}%</div>
+                    <div style={{ fontSize: 10, color: colors.textMuted }}>cible : {o.target}%</div>
                   </div>
                 </div>
                 <div style={{ height: 8, backgroundColor: "#E5E7EB", borderRadius: 4, position: "relative" }}>
@@ -192,12 +193,12 @@ export default function DashboardAutorite() {
       </div>
 
       {/* Alertes pharmacovigilance */}
-      <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-        <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>
+      <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+        <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>
           Alertes pharmacovigilance et contrefacons
         </h3>
         {loadAlts ? (
-          <div style={{ color: "#9CA3AF", fontSize: 13 }}>Chargement…</div>
+          <div style={{ color: colors.textMuted, fontSize: 13 }}>Chargement…</div>
         ) : alertesPharma.length === 0 ? (
           <div style={{ padding: "20px", textAlign: "center", color: "#10B981", fontSize: 13, fontWeight: 600 }}>
             Aucune alerte de pharmacovigilance ou de contrefacon active.
@@ -205,9 +206,9 @@ export default function DashboardAutorite() {
         ) : (
           <div className="table-scroll"><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
-              <tr style={{ backgroundColor: "#F8FAFC" }}>
+              <tr style={{ backgroundColor: colors.bgSurface }}>
                 {["Titre", "Message", "Severite", "Type", "Date"].map((h) => (
-                  <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontSize: 12, fontWeight: 700, color: "#6B7280", borderBottom: "1px solid #E5E7EB" }}>
+                  <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontSize: 12, fontWeight: 700, color: colors.textSecondary, borderBottom: "1px solid var(--border)" }}>
                     {h}
                   </th>
                 ))}
@@ -217,9 +218,9 @@ export default function DashboardAutorite() {
               {alertesPharma.map((a) => {
                 const s = SEVERITE_STYLE[a.severite] ?? SEVERITE_STYLE.info;
                 return (
-                  <tr key={a.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                    <td style={{ padding: "12px 14px", fontWeight: 600, color: "#0A1628" }}>{a.titre}</td>
-                    <td style={{ padding: "12px 14px", color: "#374151", maxWidth: 260 }}>
+                  <tr key={a.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
+                    <td style={{ padding: "12px 14px", fontWeight: 600, color: colors.navy }}>{a.titre}</td>
+                    <td style={{ padding: "12px 14px", color: colors.text, maxWidth: 260 }}>
                       <span title={a.message}>
                         {(a.message ?? "—").slice(0, 60)}{(a.message?.length ?? 0) > 60 ? "…" : ""}
                       </span>
@@ -232,8 +233,8 @@ export default function DashboardAutorite() {
                         {a.severite}
                       </span>
                     </td>
-                    <td style={{ padding: "12px 14px", color: "#6B7280" }}>{a.type}</td>
-                    <td style={{ padding: "12px 14px", color: "#9CA3AF" }}>{fmtDate(a.created_at)}</td>
+                    <td style={{ padding: "12px 14px", color: colors.textSecondary }}>{a.type}</td>
+                    <td style={{ padding: "12px 14px", color: colors.textMuted }}>{fmtDate(a.created_at)}</td>
                   </tr>
                 );
               })}

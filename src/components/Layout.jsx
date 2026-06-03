@@ -31,13 +31,13 @@ export default function Layout({ children, title, subtitle }) {
             gap: 12,
             marginBottom: 16,
             padding: "10px 0",
-            borderBottom: "1px solid #E5E7EB",
+            borderBottom: `1px solid ${colors.border}`,
           }}>
             <button
               onClick={() => setSidebarOpen(true)}
               style={{
                 background: "none",
-                border: "1.5px solid #E5E7EB",
+                border: `1.5px solid ${colors.border}`,
                 borderRadius: 8,
                 width: 38,
                 height: 38,
@@ -50,12 +50,12 @@ export default function Layout({ children, title, subtitle }) {
                 flexShrink: 0,
               }}
             >
-              <span style={{ display: "block", width: 16, height: 2, backgroundColor: "#0A1628", borderRadius: 1 }} />
-              <span style={{ display: "block", width: 16, height: 2, backgroundColor: "#0A1628", borderRadius: 1 }} />
-              <span style={{ display: "block", width: 16, height: 2, backgroundColor: "#0A1628", borderRadius: 1 }} />
+              <span style={{ display: "block", width: 16, height: 2, backgroundColor: colors.navy, borderRadius: 1 }} />
+              <span style={{ display: "block", width: 16, height: 2, backgroundColor: colors.navy, borderRadius: 1 }} />
+              <span style={{ display: "block", width: 16, height: 2, backgroundColor: colors.navy, borderRadius: 1 }} />
             </button>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 800, fontSize: 15, color: "#0A1628", fontFamily: "inherit" }}>
+              <div style={{ fontWeight: 800, fontSize: 15, color: colors.navy, fontFamily: "inherit" }}>
                 <span style={{ color: "#3B82F6" }}>Med</span>OS
               </div>
             </div>
@@ -65,8 +65,8 @@ export default function Layout({ children, title, subtitle }) {
         {/* Titre de page sur desktop */}
         {title && !isMobile && (
           <div style={{ marginBottom: 24 }}>
-            <h1 style={{ fontSize: 21, fontWeight: 700, color: "#0A1628", margin: 0 }}>{title}</h1>
-            {subtitle && <p style={{ fontSize: 13, color: "#6B7280", margin: "4px 0 0" }}>{subtitle}</p>}
+            <h1 style={{ fontSize: 21, fontWeight: 700, color: colors.navy, margin: 0 }}>{title}</h1>
+            {subtitle && <p style={{ fontSize: 13, color: colors.textSecondary, margin: "4px 0 0" }}>{subtitle}</p>}
             <div style={{ height: 3, width: 36, backgroundColor: "#3B82F6", borderRadius: 2, marginTop: 8 }} />
           </div>
         )}
@@ -74,8 +74,8 @@ export default function Layout({ children, title, subtitle }) {
         {/* Titre de page sur mobile (sous le hamburger) */}
         {title && isMobile && (
           <div style={{ marginBottom: 16 }}>
-            <h1 style={{ fontSize: 18, fontWeight: 700, color: "#0A1628", margin: 0 }}>{title}</h1>
-            {subtitle && <p style={{ fontSize: 12, color: "#6B7280", margin: "3px 0 0" }}>{subtitle}</p>}
+            <h1 style={{ fontSize: 18, fontWeight: 700, color: colors.navy, margin: 0 }}>{title}</h1>
+            {subtitle && <p style={{ fontSize: 12, color: colors.textSecondary, margin: "3px 0 0" }}>{subtitle}</p>}
             <div style={{ height: 3, width: 28, backgroundColor: "#3B82F6", borderRadius: 2, marginTop: 6 }} />
           </div>
         )}

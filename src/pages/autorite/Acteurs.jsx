@@ -1,3 +1,4 @@
+import { colors } from "../../theme";
 import { useState } from "react";
 import Layout from "../../components/Layout";
 import { useAuth } from "../../context/AuthContext";
@@ -8,13 +9,13 @@ import { openDocument, tableHTML, fetchEtabFromAuth } from "../../utils/MedOSDoc
 function InspectionModal({ acteur, onClose }) {
   return (
     <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-      <div style={{ backgroundColor: "white", borderRadius: 16, width: 480, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+      <div style={{ backgroundColor: colors.bgCard, borderRadius: 16, width: 480, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
         <div style={{ padding: "20px 24px 0", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
-            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Fiche d'inspection</h3>
-            <div style={{ fontSize: 12, color: "#6B7280", marginTop: 3 }}>{acteur.nom}</div>
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: colors.navy }}>Fiche d'inspection</h3>
+            <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 3 }}>{acteur.nom}</div>
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9CA3AF" }}>x</button>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: colors.textMuted }}>x</button>
         </div>
         <div style={{ padding: "18px 24px" }}>
           {[
@@ -24,12 +25,12 @@ function InspectionModal({ acteur, onClose }) {
             ["Pays",  acteur.pays ?? "—"],
             ["Statut", acteur.actif ? "Actif" : "Inactif"],
           ].map(([label, val]) => (
-            <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "9px 0", borderBottom: "1px solid #F3F4F6" }}>
-              <span style={{ fontSize: 13, color: "#6B7280" }}>{label}</span>
-              <span style={{ fontSize: 13, fontWeight: 600, color: "#0A1628" }}>{val}</span>
+            <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "9px 0", borderBottom: "1px solid var(--border-light)" }}>
+              <span style={{ fontSize: 13, color: colors.textSecondary }}>{label}</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: colors.navy }}>{val}</span>
             </div>
           ))}
-          <div style={{ marginTop: 16, padding: "12px 14px", backgroundColor: acteur.actif ? "#DCFCE7" : "#FEF2F2", borderRadius: 8, fontSize: 12, color: "#374151" }}>
+          <div style={{ marginTop: 16, padding: "12px 14px", backgroundColor: acteur.actif ? "#DCFCE7" : "#FEF2F2", borderRadius: 8, fontSize: 12, color: colors.text }}>
             <strong>Observation :</strong>{" "}
             {acteur.actif
               ? "Etablissement actif dans le systeme MedOS."
@@ -96,23 +97,23 @@ export default function Acteurs() {
 
       <div className="kpi-row">
         {kpis.map((k) => (
-          <div key={k.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "18px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
+          <div key={k.label} style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "18px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
             <div style={{ fontSize: 22, fontWeight: 800, color: k.color }}>{k.value}</div>
-            <div style={{ fontSize: 12, color: "#6B7280" }}>{k.label}</div>
+            <div style={{ fontSize: 12, color: colors.textSecondary }}>{k.label}</div>
           </div>
         ))}
       </div>
 
-      <div style={{ backgroundColor: "white", borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
-        <div style={{ padding: "16px 20px", borderBottom: "1px solid #E5E7EB", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#0A1628", flexShrink: 0 }}>
+      <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
+        <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: colors.navy, flexShrink: 0 }}>
             Registre des acteurs {!loading && `(${filtered.length})`}
           </h3>
           <input
             placeholder="Rechercher nom, type, ville..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            style={{ padding: "7px 12px", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 12, outline: "none", flex: 1, maxWidth: 300 }}
+            style={{ padding: "7px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 12, outline: "none", flex: 1, maxWidth: 300 }}
           />
           <button
             onClick={async () => { const etab = await fetchEtabFromAuth(auth); exportRegistre(filtered, etab); }}
@@ -124,7 +125,7 @@ export default function Acteurs() {
         </div>
 
         {loading ? (
-          <div style={{ padding: "48px", textAlign: "center", color: "#9CA3AF", fontSize: 14 }}>
+          <div style={{ padding: "48px", textAlign: "center", color: colors.textMuted, fontSize: 14 }}>
             Chargement des acteurs…
           </div>
         ) : etablissements.length === 0 ? (
@@ -132,31 +133,31 @@ export default function Acteurs() {
             <div style={{ marginBottom: 16, color: "#D1D5DB", display: "flex", justifyContent: "center" }}>
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             </div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "#374151", marginBottom: 8 }}>Aucun acteur enregistré</div>
-            <div style={{ fontSize: 13, color: "#9CA3AF" }}>Les établissements enregistrés dans le systeme apparaîtront ici.</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: colors.text, marginBottom: 8 }}>Aucun acteur enregistré</div>
+            <div style={{ fontSize: 13, color: colors.textMuted }}>Les établissements enregistrés dans le systeme apparaîtront ici.</div>
           </div>
         ) : filtered.length === 0 ? (
-          <div style={{ padding: "32px", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>
+          <div style={{ padding: "32px", textAlign: "center", color: colors.textMuted, fontSize: 13 }}>
             Aucun acteur ne correspond a la recherche.
           </div>
         ) : (
           <div className="table-scroll"><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
-              <tr style={{ backgroundColor: "#F8FAFC" }}>
+              <tr style={{ backgroundColor: colors.bgSurface }}>
                 {["Nom", "Type", "Ville", "Pays", "Statut", "Actions"].map((h) => (
-                  <th key={h} style={{ padding: "11px 16px", textAlign: "left", fontSize: 12, fontWeight: 700, color: "#6B7280", borderBottom: "1px solid #E5E7EB" }}>{h}</th>
+                  <th key={h} style={{ padding: "11px 16px", textAlign: "left", fontSize: 12, fontWeight: 700, color: colors.textSecondary, borderBottom: "1px solid var(--border)" }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {filtered.map((a) => (
-                <tr key={a.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                  <td style={{ padding: "13px 16px", fontWeight: 600, color: "#0A1628" }}>{a.nom ?? "—"}</td>
+                <tr key={a.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
+                  <td style={{ padding: "13px 16px", fontWeight: 600, color: colors.navy }}>{a.nom ?? "—"}</td>
                   <td style={{ padding: "13px 16px" }}>
                     <span style={{ padding: "2px 8px", backgroundColor: "#EFF6FF", color: "#2563EB", borderRadius: 8, fontSize: 11, fontWeight: 600 }}>{a.type ?? "—"}</span>
                   </td>
-                  <td style={{ padding: "13px 16px", color: "#6B7280" }}>{a.ville ?? "—"}</td>
-                  <td style={{ padding: "13px 16px", color: "#6B7280" }}>{a.pays ?? "—"}</td>
+                  <td style={{ padding: "13px 16px", color: colors.textSecondary }}>{a.ville ?? "—"}</td>
+                  <td style={{ padding: "13px 16px", color: colors.textSecondary }}>{a.pays ?? "—"}</td>
                   <td style={{ padding: "13px 16px" }}>
                     <span style={{ padding: "3px 10px", backgroundColor: a.actif ? "#DCFCE7" : "#FEF2F2", color: a.actif ? "#16A34A" : "#EF4444", borderRadius: 10, fontSize: 11, fontWeight: 700 }}>
                       {a.actif ? "actif" : "inactif"}
@@ -165,7 +166,7 @@ export default function Acteurs() {
                   <td style={{ padding: "13px 16px" }}>
                     <button
                       onClick={() => setInspected(a)}
-                      style={{ padding: "4px 12px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 6, fontSize: 11, cursor: "pointer" }}
+                      style={{ padding: "4px 12px", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)", borderRadius: 6, fontSize: 11, cursor: "pointer" }}
                     >
                       Inspecter
                     </button>

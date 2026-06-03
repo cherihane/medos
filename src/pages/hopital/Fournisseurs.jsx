@@ -1,3 +1,4 @@
+import { colors } from "../../theme";
 import { useState } from "react";
 import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle } from "../../components/Modal";
@@ -44,7 +45,7 @@ async function printBonCommandeFournisseur({ fournisseur, medicamentNom, quantit
 
 // ── Statuts commandes ─────────────────────────────────────────────────────────
 const STATUT_STYLE = {
-  brouillon:  { bg: "#F3F4F6", color: "#6B7280",  label: "Brouillon" },
+  brouillon:  { bg: "#F3F4F6", color: colors.textSecondary,  label: "Brouillon" },
   envoyee:    { bg: "#FEF9C3", color: "#A16207",  label: "Envoyée" },
   confirmee:  { bg: "#DBEAFE", color: "#2563EB",  label: "Confirmée" },
   en_transit: { bg: "#E0E7FF", color: "#4F46E5",  label: "En transit" },
@@ -57,9 +58,9 @@ function MesCommandesPanel({ etablissement_id }) {
   const { data: commandes, loading } = useCommandesRealtime(etablissement_id);
   if (loading || commandes.length === 0) return null;
   return (
-    <div style={{ backgroundColor: "white", borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 20 }}>
+    <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Mes commandes en cours</h3>
+        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: colors.navy }}>Mes commandes en cours</h3>
         <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10, fontWeight: 700, backgroundColor: "#DCFCE7", color: "#16A34A", padding: "3px 8px", borderRadius: 10 }}>
           <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "#16A34A", display: "inline-block", animation: "livePulse 1.5s ease-in-out infinite" }} />
           TEMPS RÉEL
@@ -67,19 +68,19 @@ function MesCommandesPanel({ etablissement_id }) {
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {commandes.slice(0, 8).map((c) => {
-          const s = STATUT_STYLE[c.statut] || { bg: "#F3F4F6", color: "#6B7280", label: c.statut };
+          const s = STATUT_STYLE[c.statut] || { bg: "#F3F4F6", color: colors.textSecondary, label: c.statut };
           return (
             <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", backgroundColor: s.bg, borderRadius: 10, borderLeft: `3px solid ${s.color}`, animation: "fadeIn 0.3s ease" }}>
               <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: "#0A1628" }}>{c.fournisseurs?.nom ?? "—"}</div>
-                <div style={{ fontSize: 11, color: "#6B7280", marginTop: 2 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: colors.navy }}>{c.fournisseurs?.nom ?? "—"}</div>
+                <div style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
                   {c.reference ?? c.id.slice(0, 8).toUpperCase()} · {new Date(c.date_commande).toLocaleDateString("fr-FR")}
                   {c.notes && ` · ${c.notes.slice(0, 50)}${c.notes.length > 50 ? "…" : ""}`}
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0, marginLeft: 12 }}>
-                <span style={{ fontSize: 13, fontWeight: 800, color: "#374151" }}>{(c.montant_total ?? 0).toLocaleString()} FCFA</span>
-                <span style={{ fontSize: 10, fontWeight: 700, color: s.color, padding: "2px 8px", backgroundColor: "white", borderRadius: 8, whiteSpace: "nowrap" }}>{s.label}</span>
+                <span style={{ fontSize: 13, fontWeight: 800, color: colors.text }}>{(c.montant_total ?? 0).toLocaleString()} FCFA</span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: s.color, padding: "2px 8px", backgroundColor: colors.bgCard, borderRadius: 8, whiteSpace: "nowrap" }}>{s.label}</span>
               </div>
             </div>
           );
@@ -92,18 +93,18 @@ function MesCommandesPanel({ etablissement_id }) {
 // ── Skeleton chargement ───────────────────────────────────────────────────────
 function Skeleton() {
   return (
-    <div style={{ backgroundColor: "white", borderRadius: 16, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", animation: "pulse 1.5s ease-in-out infinite" }}>
+    <div style={{ backgroundColor: colors.bgCard, borderRadius: 16, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", animation: "pulse 1.5s ease-in-out infinite" }}>
       <div style={{ display: "flex", gap: 14, marginBottom: 16 }}>
-        <div style={{ width: 46, height: 46, borderRadius: 12, backgroundColor: "#F3F4F6" }} />
+        <div style={{ width: 46, height: 46, borderRadius: 12, backgroundColor: colors.borderLight }} />
         <div style={{ flex: 1 }}>
-          <div style={{ width: 140, height: 14, backgroundColor: "#F3F4F6", borderRadius: 6, marginBottom: 8 }} />
-          <div style={{ width: 80, height: 12, backgroundColor: "#F3F4F6", borderRadius: 6 }} />
+          <div style={{ width: 140, height: 14, backgroundColor: colors.borderLight, borderRadius: 6, marginBottom: 8 }} />
+          <div style={{ width: 80, height: 12, backgroundColor: colors.borderLight, borderRadius: 6 }} />
         </div>
       </div>
       <div className="form-row-2" style={{ gap: 10, marginBottom: 14 }}>
-        {[1, 2, 3, 4].map((i) => <div key={i} style={{ height: 52, backgroundColor: "#F8FAFC", borderRadius: 10 }} />)}
+        {[1, 2, 3, 4].map((i) => <div key={i} style={{ height: 52, backgroundColor: colors.bgSurface, borderRadius: 10 }} />)}
       </div>
-      <div style={{ height: 48, backgroundColor: "#F8FAFC", borderRadius: 10 }} />
+      <div style={{ height: 48, backgroundColor: colors.bgSurface, borderRadius: 10 }} />
     </div>
   );
 }
@@ -237,13 +238,13 @@ function CommandeModal({ fournisseur, etablissement_id, auth, onClose, onSaved }
 
   const selectStyle = {
     ...inputStyle,
-    backgroundColor: "white",
+    backgroundColor: colors.bgCard,
     cursor: loadingMeds ? "wait" : "pointer",
   };
 
   const readonlyStyle = {
     ...inputStyle,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: colors.bgSurface,
     color: montantTotal > 0 ? "#0A1628" : "#9CA3AF",
     fontWeight: montantTotal > 0 ? 700 : 400,
     cursor: "default",
@@ -270,8 +271,8 @@ function CommandeModal({ fournisseur, etablissement_id, auth, onClose, onSaved }
 
       {/* Prix unitaire affiché si médicament sélectionné */}
       {selectedMed && (
-        <div style={{ fontSize: 12, color: "#6B7280", marginTop: -8, marginBottom: 12, paddingLeft: 2 }}>
-          Prix unitaire : <strong style={{ color: "#0A1628" }}>
+        <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: -8, marginBottom: 12, paddingLeft: 2 }}>
+          Prix unitaire : <strong style={{ color: colors.navy }}>
             {prixUnitaire > 0 ? `${prixUnitaire.toLocaleString("fr-FR")} FCFA / ${selectedMed.unite || "unité"}` : "non renseigné"}
           </strong>
         </div>
@@ -331,11 +332,11 @@ function CommandeModal({ fournisseur, etablissement_id, auth, onClose, onSaved }
         </div>
       )}
       <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", padding: "16px 0 0" }}>
-        <button onClick={onClose} style={{ padding: "9px 18px", background: "white", border: "1.5px solid #E5E7EB", borderRadius: 9, fontSize: 13, color: "#6B7280", cursor: "pointer" }}>Annuler</button>
+        <button onClick={onClose} style={{ padding: "9px 18px", background: "white", border: "1.5px solid var(--border)", borderRadius: 9, fontSize: 13, color: colors.textSecondary, cursor: "pointer" }}>Annuler</button>
         {selectedMed && qty > 0 && (
           <button
             onClick={() => printBonCommandeFournisseur({ fournisseur, medicamentNom: selectedMed.nom, quantite: qty, dateLivraison, notes, montantTotal, auth })}
-            style={{ padding: "9px 16px", background: "#F8FAFC", color: "#374151", border: "1.5px solid #E5E7EB", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+            style={{ padding: "9px 16px", background: "#F8FAFC", color: colors.text, border: "1.5px solid var(--border)", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
           >
             Imprimer
           </button>
@@ -420,7 +421,7 @@ export default function Fournisseurs() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           {/* Filtres */}
-          <div style={{ display: "flex", backgroundColor: "white", borderRadius: 10, padding: 3, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", gap: 2 }}>
+          <div style={{ display: "flex", backgroundColor: colors.bgCard, borderRadius: 10, padding: 3, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", gap: 2 }}>
             {FILTRES.map((f) => (
               <button
                 key={f.key}
@@ -441,7 +442,7 @@ export default function Fournisseurs() {
               </button>
             ))}
           </div>
-          <div style={{ fontSize: 13, color: "#9CA3AF" }}>
+          <div style={{ fontSize: 13, color: colors.textMuted }}>
             {loading ? "Chargement…" : `${total} fournisseur${total !== 1 ? "s" : ""}`}
           </div>
         </div>
@@ -476,7 +477,7 @@ export default function Fournisseurs() {
         {loading && [1, 2, 3, 4].map((i) => <Skeleton key={i} />)}
 
         {!loading && liste.length === 0 && (
-          <div style={{ gridColumn: "1/-1", textAlign: "center", padding: "60px 0", color: "#9CA3AF", fontSize: 14 }}>
+          <div style={{ gridColumn: "1/-1", textAlign: "center", padding: "60px 0", color: colors.textMuted, fontSize: 14 }}>
             {filtre === "inactifs" ? "Aucun fournisseur inactif." : "Aucun fournisseur trouvé."}
           </div>
         )}
@@ -484,7 +485,7 @@ export default function Fournisseurs() {
         {!loading && liste.map((s) => {
           const actif = s.actif !== false;
           return (
-            <div key={s.id} style={{ backgroundColor: "white", borderRadius: 16, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", opacity: actif ? 1 : 0.75 }}>
+            <div key={s.id} style={{ backgroundColor: colors.bgCard, borderRadius: 16, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", opacity: actif ? 1 : 0.75 }}>
 
               {/* En-tête carte */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
@@ -496,8 +497,8 @@ export default function Fournisseurs() {
                     </svg>
                   </div>
                   <div>
-                    <div style={{ fontWeight: 800, fontSize: 15, color: "#0A1628" }}>{s.nom}</div>
-                    <div style={{ fontSize: 12, color: "#9CA3AF" }}>{s.pays || "—"}</div>
+                    <div style={{ fontWeight: 800, fontSize: 15, color: colors.navy }}>{s.nom}</div>
+                    <div style={{ fontSize: 12, color: colors.textMuted }}>{s.pays || "—"}</div>
                   </div>
                 </div>
                 <span style={{ padding: "4px 12px", borderRadius: 12, fontSize: 11, fontWeight: 700, backgroundColor: actif ? "#DCFCE7" : "#F3F4F6", color: actif ? "#16A34A" : "#9CA3AF", flexShrink: 0 }}>
@@ -513,18 +514,18 @@ export default function Fournisseurs() {
                   { label: "Contact",              value: s.contact_nom           || "—" },
                   { label: "Référence",            value: s.id?.slice(0, 8).toUpperCase() },
                 ].map((item) => (
-                  <div key={item.label} style={{ padding: "10px 12px", backgroundColor: "#F8FAFC", borderRadius: 10 }}>
-                    <div style={{ fontSize: 10, color: "#9CA3AF", marginBottom: 2 }}>{item.label}</div>
-                    <div style={{ fontWeight: 700, fontSize: 12, color: "#0A1628" }}>{item.value}</div>
+                  <div key={item.label} style={{ padding: "10px 12px", backgroundColor: colors.bgSurface, borderRadius: 10 }}>
+                    <div style={{ fontSize: 10, color: colors.textMuted, marginBottom: 2 }}>{item.label}</div>
+                    <div style={{ fontWeight: 700, fontSize: 12, color: colors.navy }}>{item.value}</div>
                   </div>
                 ))}
               </div>
 
               {/* Contact email / tél */}
-              <div style={{ padding: "10px 12px", backgroundColor: "#F8FAFC", borderRadius: 10, marginBottom: 14 }}>
-                <div style={{ fontSize: 10, color: "#9CA3AF", marginBottom: 2 }}>Contact</div>
+              <div style={{ padding: "10px 12px", backgroundColor: colors.bgSurface, borderRadius: 10, marginBottom: 14 }}>
+                <div style={{ fontSize: 10, color: colors.textMuted, marginBottom: 2 }}>Contact</div>
                 <div style={{ fontSize: 13, color: "#3B82F6" }}>{s.email || "—"}</div>
-                <div style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>{s.telephone || "—"}</div>
+                <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>{s.telephone || "—"}</div>
               </div>
 
               {/* Actions */}
@@ -539,7 +540,7 @@ export default function Fournisseurs() {
                 )}
                 <button
                   onClick={() => setEditModal(s)}
-                  style={{ flex: 1, padding: "9px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                  style={{ flex: 1, padding: "9px", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
                 >
                   Modifier
                 </button>

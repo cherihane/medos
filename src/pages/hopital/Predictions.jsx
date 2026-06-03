@@ -1,12 +1,13 @@
+import { colors } from "../../theme";
 import { useState } from "react";
 import Layout from "../../components/Layout";
 import { useMedicamentsCritiques, useMedicaments, useFournisseurs } from "../../hooks/useSupabaseData";
 import { insertCommande } from "../../hooks/useMutations";
 
 const inputStyle = {
-  width: "100%", padding: "9px 13px", border: "1.5px solid #E5E7EB",
+  width: "100%", padding: "9px 13px", border: "1.5px solid var(--border)",
   borderRadius: 8, fontSize: 13, outline: "none", boxSizing: "border-box",
-  color: "#0A1628", backgroundColor: "white",
+  color: colors.navy, backgroundColor: colors.bgCard,
 };
 
 function CommanderModal({ medicamentNom, quantiteDefaut, onClose, onSaved }) {
@@ -40,13 +41,13 @@ function CommanderModal({ medicamentNom, quantiteDefaut, onClose, onSaved }) {
 
   return (
     <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-      <div style={{ backgroundColor: "white", borderRadius: 16, width: 420, padding: "24px 28px", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+      <div style={{ backgroundColor: colors.bgCard, borderRadius: 16, width: 420, padding: "24px 28px", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Commander — {medicamentNom}</h3>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9CA3AF" }}>×</button>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: colors.navy }}>Commander — {medicamentNom}</h3>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: colors.textMuted }}>×</button>
         </div>
         <div style={{ marginBottom: 14 }}>
-          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Fournisseur *</label>
+          <label style={{ fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 4 }}>Fournisseur *</label>
           <select
             value={fournisseurId}
             onChange={(e) => setFournisseurId(e.target.value)}
@@ -59,7 +60,7 @@ function CommanderModal({ medicamentNom, quantiteDefaut, onClose, onSaved }) {
           </select>
         </div>
         <div style={{ marginBottom: 14 }}>
-          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Quantité à commander</label>
+          <label style={{ fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 4 }}>Quantité à commander</label>
           <input
             style={inputStyle}
             type="number"
@@ -74,7 +75,7 @@ function CommanderModal({ medicamentNom, quantiteDefaut, onClose, onSaved }) {
           </div>
         )}
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-          <button onClick={onClose} style={{ padding: "9px 18px", backgroundColor: "white", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 13, color: "#6B7280", cursor: "pointer" }}>Annuler</button>
+          <button onClick={onClose} style={{ padding: "9px 18px", backgroundColor: colors.bgCard, border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 13, color: colors.textSecondary, cursor: "pointer" }}>Annuler</button>
           <button onClick={handleSave} disabled={saving} style={{ padding: "9px 18px", backgroundColor: saving ? "#E5E7EB" : "#10B981", color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer" }}>
             {saving ? "Envoi…" : "Passer la commande"}
           </button>
@@ -140,32 +141,32 @@ export default function Predictions() {
           { label: "En alerte",             value: loading ? "…" : predictions.filter(p => p.risque === "alerte").length,         color: "#F59E0B" },
           { label: "Total médicaments",     value: loading ? "…" : allMeds.length,                                                color: "#8B5CF6" },
         ].map((k) => (
-          <div key={k.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "18px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
+          <div key={k.label} style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "18px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
             <div style={{ fontSize: 22, fontWeight: 800, color: k.color }}>{k.value}</div>
-            <div style={{ fontSize: 12, color: "#6B7280" }}>{k.label}</div>
+            <div style={{ fontSize: 12, color: colors.textSecondary }}>{k.label}</div>
           </div>
         ))}
       </div>
 
       <div className="dash-grid-2">
-        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Produits en tension — stock critique</h3>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Produits en tension — stock critique</h3>
           {loading && [1,2,3].map((i) => (
-            <div key={i} style={{ height: 80, backgroundColor: "#F8FAFC", borderRadius: 10, marginBottom: 12, animation: "pulse 1.5s ease-in-out infinite" }} />
+            <div key={i} style={{ height: 80, backgroundColor: colors.bgSurface, borderRadius: 10, marginBottom: 12, animation: "pulse 1.5s ease-in-out infinite" }} />
           ))}
           {!loading && predictions.length === 0 && (
-            <div style={{ color: "#9CA3AF", fontSize: 13, textAlign: "center", padding: 24 }}>Aucun produit en tension</div>
+            <div style={{ color: colors.textMuted, fontSize: 13, textAlign: "center", padding: 24 }}>Aucun produit en tension</div>
           )}
           {!loading && predictions.map((p) => {
             const col = riskColor[p.risque];
             const pct = Math.min(100, Math.round((p.stock / p.demandePrevue) * 100));
             return (
-              <div key={p.medicament} style={{ padding: "14px", borderRadius: 10, backgroundColor: "#F8FAFC", border: `1px solid ${col}22`, marginBottom: 12 }}>
+              <div key={p.medicament} style={{ padding: "14px", borderRadius: 10, backgroundColor: colors.bgSurface, border: `1px solid ${col}22`, marginBottom: 12 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <span style={{ fontWeight: 700, fontSize: 13, color: "#0A1628" }}>{p.medicament}</span>
+                  <span style={{ fontWeight: 700, fontSize: 13, color: colors.navy }}>{p.medicament}</span>
                   <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 12, backgroundColor: col + "20", color: col, fontWeight: 700 }}>{p.risque.toUpperCase()}</span>
                 </div>
-                <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>
+                <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 6 }}>
                   Stock actuel : <strong style={{ color: p.stock < 10 ? "#EF4444" : "#374151" }}>{p.stock}</strong> · Seuil : <strong>{p.demandePrevue}</strong>
                 </div>
                 <div style={{ height: 6, backgroundColor: "#E5E7EB", borderRadius: 4, marginBottom: 6 }}>
@@ -178,30 +179,30 @@ export default function Predictions() {
         </div>
 
         <div>
-          <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 16 }}>
-            <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Insights IA</h3>
+          <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 16 }}>
+            <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Insights IA</h3>
             {[
               { titre: "Tendance ruptures de stock", desc: "Des médicaments essentiels sont en dessous du seuil minimum. Planifier les commandes immédiatement.", impact: "élevé" },
               { titre: "Optimisation des achats", desc: "Regrouper les commandes par fournisseur pour réduire les coûts logistiques.", impact: "modéré" },
               { titre: "Rotation des lots", desc: "Vérifier les dates d'expiration des lots en stock pour éviter les pertes.", impact: "faible" },
             ].map((ins) => (
-              <div key={ins.titre} style={{ padding: "14px", backgroundColor: "#F8FAFC", borderRadius: 10, marginBottom: 10 }}>
+              <div key={ins.titre} style={{ padding: "14px", backgroundColor: colors.bgSurface, borderRadius: 10, marginBottom: 10 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <span style={{ fontWeight: 700, fontSize: 13, color: "#0A1628" }}>{ins.titre}</span>
+                  <span style={{ fontWeight: 700, fontSize: 13, color: colors.navy }}>{ins.titre}</span>
                   <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 10, fontWeight: 700, backgroundColor: ins.impact === "élevé" ? "#FEF2F2" : ins.impact === "modéré" ? "#FFFBEB" : "#DCFCE7", color: ins.impact === "élevé" ? "#EF4444" : ins.impact === "modéré" ? "#D97706" : "#16A34A" }}>{ins.impact}</span>
                 </div>
-                <div style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.6 }}>{ins.desc}</div>
+                <div style={{ fontSize: 12, color: colors.textSecondary, lineHeight: 1.6 }}>{ins.desc}</div>
               </div>
             ))}
           </div>
 
-          <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-            <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Commandes suggérées</h3>
+          <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+            <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Commandes suggérées</h3>
             {!loading && predictions.filter(p => p.risque !== "normal").map((p) => (
-              <div key={p.medicament} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid #F3F4F6" }}>
+              <div key={p.medicament} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--border-light)" }}>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "#0A1628" }}>{p.medicament}</div>
-                  <div style={{ fontSize: 11, color: "#9CA3AF" }}>{p.recommendation}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: colors.navy }}>{p.medicament}</div>
+                  <div style={{ fontSize: 11, color: colors.textMuted }}>{p.recommendation}</div>
                 </div>
                 <button
                   onClick={() => setCommanderModal({ nom: p.medicament, quantite: Math.max(0, (critiques.find(m => m.nom === p.medicament)?.stock_minimum ?? 0) * 3 - p.stock) })}
@@ -212,7 +213,7 @@ export default function Predictions() {
               </div>
             ))}
             {!loading && predictions.filter(p => p.risque !== "normal").length === 0 && (
-              <div style={{ color: "#9CA3AF", fontSize: 13, textAlign: "center", padding: 16 }}>Aucune commande urgente</div>
+              <div style={{ color: colors.textMuted, fontSize: 13, textAlign: "center", padding: 16 }}>Aucune commande urgente</div>
             )}
           </div>
         </div>

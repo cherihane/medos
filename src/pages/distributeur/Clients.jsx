@@ -1,3 +1,4 @@
+import { colors } from "../../theme";
 import { useState } from "react";
 import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
@@ -19,14 +20,14 @@ function FicheModal({ client, onClose }) {
           { label: "Email",     value: client.email || "—" },
           { label: "Adresse",   value: client.adresse || "—" },
         ].map((item) => (
-          <div key={item.label} style={{ padding: "10px 14px", backgroundColor: "#F8FAFC", borderRadius: 10 }}>
-            <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 3 }}>{item.label}</div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#0A1628" }}>{item.value}</div>
+          <div key={item.label} style={{ padding: "10px 14px", backgroundColor: colors.bgSurface, borderRadius: 10 }}>
+            <div style={{ fontSize: 11, color: colors.textMuted, marginBottom: 3 }}>{item.label}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: colors.navy }}>{item.value}</div>
           </div>
         ))}
       </div>
       <div style={{ marginTop: 16 }}>
-        <button onClick={onClose} style={{ width: "100%", padding: "10px", backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: 10, fontSize: 13, cursor: "pointer" }}>Fermer</button>
+        <button onClick={onClose} style={{ width: "100%", padding: "10px", backgroundColor: colors.bgSurface, border: "1px solid var(--border)", borderRadius: 10, fontSize: 13, cursor: "pointer" }}>Fermer</button>
       </div>
     </Modal>
   );
@@ -117,37 +118,37 @@ export default function Clients() {
         </div>
       )}
 
-      <div style={{ backgroundColor: "white", borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
-        <div style={{ padding: "16px 20px", borderBottom: "1px solid #E5E7EB" }}>
-          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#0A1628" }}>
+      <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
+        <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)" }}>
+          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: colors.navy }}>
             Établissements clients ({loading ? "…" : etabs.length})
           </h3>
         </div>
         <div className="table-scroll"><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
-            <tr style={{ backgroundColor: "#F8FAFC" }}>
+            <tr style={{ backgroundColor: colors.bgSurface }}>
               {["Client", "Ville", "Type", "Email", "Statut", "Actions"].map((h) => (
-                <th key={h} style={{ padding: "12px 18px", textAlign: "left", fontSize: 12, fontWeight: 700, color: "#6B7280", borderBottom: "1px solid #E5E7EB" }}>{h}</th>
+                <th key={h} style={{ padding: "12px 18px", textAlign: "left", fontSize: 12, fontWeight: 700, color: colors.textSecondary, borderBottom: "1px solid var(--border)" }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading && [1,2,3,4].map((i) => (
-              <tr key={i} style={{ borderBottom: "1px solid #F3F4F6", animation: "pulse 1.5s ease-in-out infinite" }}>
+              <tr key={i} style={{ borderBottom: "1px solid var(--border-light)", animation: "pulse 1.5s ease-in-out infinite" }}>
                 {[180,100,80,140,60,100].map((w, j) => (
-                  <td key={j} style={{ padding: "14px 18px" }}><div style={{ height: 13, width: w, backgroundColor: "#F3F4F6", borderRadius: 6 }} /></td>
+                  <td key={j} style={{ padding: "14px 18px" }}><div style={{ height: 13, width: w, backgroundColor: colors.borderLight, borderRadius: 6 }} /></td>
                 ))}
               </tr>
             ))}
             {!loading && etabs.length === 0 && (
-              <tr><td colSpan={6} style={{ padding: 40, textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>Aucun établissement</td></tr>
+              <tr><td colSpan={6} style={{ padding: 40, textAlign: "center", color: colors.textMuted, fontSize: 13 }}>Aucun établissement</td></tr>
             )}
             {!loading && etabs.map((c) => (
-              <tr key={c.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                <td style={{ padding: "14px 18px", fontWeight: 600, color: "#0A1628" }}>{c.nom}</td>
-                <td style={{ padding: "14px 18px", color: "#6B7280" }}>{c.ville}</td>
-                <td style={{ padding: "14px 18px", color: "#6B7280", textTransform: "capitalize" }}>{c.type}</td>
-                <td style={{ padding: "14px 18px", color: "#6B7280", fontSize: 12 }}>{c.email ?? "—"}</td>
+              <tr key={c.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
+                <td style={{ padding: "14px 18px", fontWeight: 600, color: colors.navy }}>{c.nom}</td>
+                <td style={{ padding: "14px 18px", color: colors.textSecondary }}>{c.ville}</td>
+                <td style={{ padding: "14px 18px", color: colors.textSecondary, textTransform: "capitalize" }}>{c.type}</td>
+                <td style={{ padding: "14px 18px", color: colors.textSecondary, fontSize: 12 }}>{c.email ?? "—"}</td>
                 <td style={{ padding: "14px 18px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <div style={{ width: 7, height: 7, borderRadius: "50%", backgroundColor: c.actif ? "#10B981" : "#9CA3AF" }} />
@@ -163,7 +164,7 @@ export default function Clients() {
                     </button>
                     <button
                       onClick={() => setFicheModal(c)}
-                      style={{ padding: "4px 12px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
+                      style={{ padding: "4px 12px", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
                       Fiche
                     </button>
                   </div>

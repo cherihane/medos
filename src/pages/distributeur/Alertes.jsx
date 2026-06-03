@@ -1,3 +1,4 @@
+import { colors } from "../../theme";
 import { useState } from "react";
 import Layout from "../../components/Layout";
 import { useAlertesPaginated } from "../../hooks/useSupabaseData";
@@ -44,14 +45,14 @@ export default function AlertesDistributeur() {
           {["tous", "critique", "alerte", "info"].map((f) => (
             <button key={f} onClick={() => setFilter(f)} style={{
               padding: "7px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", textTransform: "capitalize",
-              border: filter === f ? "2px solid #F59E0B" : "1.5px solid #E5E7EB",
+              border: filter === f ? "2px solid #F59E0B" : "1.5px solid var(--border)",
               backgroundColor: filter === f ? "#FFFBEB" : "white",
               color: filter === f ? "#D97706" : "#6B7280",
             }}>{f}</button>
           ))}
           {unreadCount > 0 && <span style={{ padding: "3px 10px", backgroundColor: "#EF4444", color: "white", borderRadius: 12, fontSize: 12, fontWeight: 700 }}>{unreadCount} non lues</span>}
         </div>
-        <button onClick={markAllRead} disabled={markingAll} style={{ padding: "8px 16px", backgroundColor: "white", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 13, color: "#374151", cursor: markingAll ? "wait" : "pointer", fontWeight: 600 }}>
+        <button onClick={markAllRead} disabled={markingAll} style={{ padding: "8px 16px", backgroundColor: colors.bgCard, border: "1.5px solid var(--border)", borderRadius: 10, fontSize: 13, color: colors.text, cursor: markingAll ? "wait" : "pointer", fontWeight: 600 }}>
           {markingAll ? "…" : "Tout marquer lu"}
         </button>
       </div>
@@ -59,10 +60,10 @@ export default function AlertesDistributeur() {
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
       <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 8 }}>
         {loading && [1,2,3].map((i) => (
-          <div key={i} style={{ height: 72, backgroundColor: "#F8FAFC", borderRadius: 14, animation: "pulse 1.5s ease-in-out infinite" }} />
+          <div key={i} style={{ height: 72, backgroundColor: colors.bgSurface, borderRadius: 14, animation: "pulse 1.5s ease-in-out infinite" }} />
         ))}
         {!loading && filtered.length === 0 && (
-          <div style={{ backgroundColor: "white", borderRadius: 14, padding: 40, textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>Aucune alerte</div>
+          <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: 40, textAlign: "center", color: colors.textMuted, fontSize: 13 }}>Aucune alerte</div>
         )}
         {!loading && filtered.map((alert) => {
           const s = severityStyle[alert.severite] ?? severityStyle.info;
@@ -70,17 +71,17 @@ export default function AlertesDistributeur() {
           return (
             <div key={alert.id} style={{ backgroundColor: isRead ? "white" : s.bg, border: `1px solid ${isRead ? "#E5E7EB" : s.border}`, borderRadius: 14, padding: "16px 20px", display: "flex", alignItems: "center", gap: 14, opacity: isRead ? 0.7 : 1 }}>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: isRead ? 500 : 700, color: "#0A1628", marginBottom: 4 }}>{alert.titre}</div>
+                <div style={{ fontSize: 13, fontWeight: isRead ? 500 : 700, color: colors.navy, marginBottom: 4 }}>{alert.titre}</div>
                 {alert.message && alert.message !== alert.titre && (
-                  <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>{alert.message}</div>
+                  <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 4 }}>{alert.message}</div>
                 )}
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 10, fontWeight: 700, backgroundColor: s.bg, color: s.color, border: `1px solid ${s.border}` }}>{alert.severite}</span>
-                  <span style={{ fontSize: 11, color: "#9CA3AF" }}>{alert.type}</span>
-                  <span style={{ fontSize: 12, color: "#9CA3AF" }}>{fmt(alert.created_at)}</span>
+                  <span style={{ fontSize: 11, color: colors.textMuted }}>{alert.type}</span>
+                  <span style={{ fontSize: 12, color: colors.textMuted }}>{fmt(alert.created_at)}</span>
                 </div>
               </div>
-              {!isRead && <button onClick={() => markRead(alert.id)} style={{ padding: "6px 14px", backgroundColor: "white", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 12, color: "#374151", cursor: "pointer" }}>Marquer lu</button>}
+              {!isRead && <button onClick={() => markRead(alert.id)} style={{ padding: "6px 14px", backgroundColor: colors.bgCard, border: "1px solid var(--border)", borderRadius: 8, fontSize: 12, color: colors.text, cursor: "pointer" }}>Marquer lu</button>}
               <div style={{ width: 7, height: 7, borderRadius: "50%", backgroundColor: isRead ? "#D1D5DB" : s.dot }} />
             </div>
           );

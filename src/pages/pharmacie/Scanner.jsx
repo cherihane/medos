@@ -1,3 +1,4 @@
+import { colors } from "../../theme";
 import { useState, useCallback, useEffect, useRef } from "react";
 import Layout from "../../components/Layout";
 import QrScanner from "../../components/QrScanner";
@@ -32,16 +33,16 @@ function HistoriqueItem({ item, onRescan }) {
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 12, padding: "10px 14px",
-      backgroundColor: "#F8FAFC", borderRadius: 10, cursor: "pointer",
+      backgroundColor: colors.bgSurface, borderRadius: 10, cursor: "pointer",
       border: `1px solid ${s.border}`,
     }}
       onClick={() => onRescan(item)}
     >
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "#0A1628", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: colors.navy, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {item.nom || item.lot || "Scan sans libellé"}
         </div>
-        <div style={{ fontSize: 11, color: "#9CA3AF" }}>
+        <div style={{ fontSize: 11, color: colors.textMuted }}>
           {item.lot && <span style={{ fontFamily: "monospace", marginRight: 8 }}>{item.lot}</span>}
           {new Date(item.ts).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
         </div>
@@ -65,22 +66,22 @@ function ResultPanel({ result }) {
       </div>
 
       {/* Détails */}
-      <div style={{ backgroundColor: "#F8FAFC", borderRadius: 12, overflow: "hidden" }}>
+      <div style={{ backgroundColor: colors.bgSurface, borderRadius: 12, overflow: "hidden" }}>
         {Object.entries(result.details).map(([k, v], i, arr) => (
           <div key={k} style={{
             display: "flex", justifyContent: "space-between", alignItems: "flex-start",
             padding: "11px 16px",
-            borderBottom: i < arr.length - 1 ? "1px solid #E5E7EB" : "none",
+            borderBottom: i < arr.length - 1 ? "1px solid var(--border)" : "none",
           }}>
-            <span style={{ fontSize: 12, color: "#6B7280", flexShrink: 0, marginRight: 12 }}>{k}</span>
-            <span style={{ fontSize: 12, fontWeight: 700, color: "#0A1628", textAlign: "right", wordBreak: "break-word" }}>{v}</span>
+            <span style={{ fontSize: 12, color: colors.textSecondary, flexShrink: 0, marginRight: 12 }}>{k}</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: colors.navy, textAlign: "right", wordBreak: "break-word" }}>{v}</span>
           </div>
         ))}
       </div>
 
       {/* Source badge */}
       <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end" }}>
-        <span style={{ fontSize: 10, color: "#9CA3AF", padding: "3px 10px", backgroundColor: "#F3F4F6", borderRadius: 8 }}>
+        <span style={{ fontSize: 10, color: colors.textMuted, padding: "3px 10px", backgroundColor: colors.borderLight, borderRadius: 8 }}>
           Source : {result.source === "supabase" ? "Base MedOS (Supabase)" : result.source === "bdpm" ? "BDPM — Médicaments France" : "Aucune base"}
         </span>
       </div>
@@ -185,11 +186,11 @@ export default function Scanner({ profile = "pharmacie" }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
           {/* Saisie */}
-          <div style={{ backgroundColor: "white", borderRadius: 16, padding: "28px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <div style={{ backgroundColor: colors.bgCard, borderRadius: 16, padding: "28px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Vérifier un médicament</h3>
-                <p style={{ margin: "4px 0 0", fontSize: 12, color: "#6B7280" }}>
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: colors.navy }}>Vérifier un médicament</h3>
+                <p style={{ margin: "4px 0 0", fontSize: 12, color: colors.textSecondary }}>
                   Saisissez le nom et/ou le numéro de lot pour vérification
                 </p>
               </div>
@@ -211,7 +212,7 @@ export default function Scanner({ profile = "pharmacie" }) {
 
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 6 }}>
                   Nom du médicament
                 </label>
                 <input
@@ -219,11 +220,11 @@ export default function Scanner({ profile = "pharmacie" }) {
                   onChange={(e) => { setNomMedicament(e.target.value); reset(); }}
                   onKeyDown={(e) => e.key === "Enter" && handleVerifier()}
                   placeholder="Ex: Amoxicilline 500mg, Doliprane, Artemisinine…"
-                  style={{ width: "100%", padding: "11px 14px", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 14, outline: "none", boxSizing: "border-box", color: "#0A1628" }}
+                  style={{ width: "100%", padding: "11px 14px", border: "1.5px solid var(--border)", borderRadius: 10, fontSize: 14, outline: "none", boxSizing: "border-box", color: colors.navy }}
                 />
               </div>
               <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 6 }}>
                   <span style={{ display: "inline-flex", alignItems: "center" }}>
                     Numéro de lot (optionnel)
                     <Tooltip
@@ -237,7 +238,7 @@ export default function Scanner({ profile = "pharmacie" }) {
                   onChange={(e) => { setNumerolot(e.target.value); reset(); }}
                   onKeyDown={(e) => e.key === "Enter" && handleVerifier()}
                   placeholder="Ex: LOT2024-A12, MED-003…"
-                  style={{ width: "100%", padding: "11px 14px", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 14, outline: "none", boxSizing: "border-box", color: "#0A1628", fontFamily: "monospace" }}
+                  style={{ width: "100%", padding: "11px 14px", border: "1.5px solid var(--border)", borderRadius: 10, fontSize: 14, outline: "none", boxSizing: "border-box", color: colors.navy, fontFamily: "monospace" }}
                 />
               </div>
             </div>
@@ -260,7 +261,7 @@ export default function Scanner({ profile = "pharmacie" }) {
                 ) : "Vérifier l'authenticité"}
               </button>
               {(nomMedicament || numerolot || result) && (
-                <button onClick={handleReset} style={{ padding: "12px 16px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 10, fontSize: 13, cursor: "pointer" }}>
+                <button onClick={handleReset} style={{ padding: "12px 16px", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)", borderRadius: 10, fontSize: 13, cursor: "pointer" }}>
                   Réinitialiser
                 </button>
               )}
@@ -275,12 +276,12 @@ export default function Scanner({ profile = "pharmacie" }) {
 
           {/* Historique */}
           {historique.length > 0 && (
-            <div style={{ backgroundColor: "white", borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+            <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-                <h4 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#0A1628" }}>
+                <h4 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: colors.navy }}>
                   Historique de la session ({historique.length})
                 </h4>
-                <button onClick={() => setHistorique([])} style={{ fontSize: 11, color: "#9CA3AF", background: "none", border: "none", cursor: "pointer" }}>
+                <button onClick={() => setHistorique([])} style={{ fontSize: 11, color: colors.textMuted, background: "none", border: "none", cursor: "pointer" }}>
                   Effacer
                 </button>
               </div>
@@ -294,19 +295,19 @@ export default function Scanner({ profile = "pharmacie" }) {
         </div>
 
         {/* ── Colonne droite : résultat ── */}
-        <div style={{ backgroundColor: "white", borderRadius: 16, padding: "28px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", alignSelf: "flex-start", position: "sticky", top: 20 }}>
-          <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Résultat</h3>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 16, padding: "28px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", alignSelf: "flex-start", position: "sticky", top: 20 }}>
+          <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Résultat</h3>
 
           {!result && !loading && (
-            <div style={{ textAlign: "center", color: "#9CA3AF", paddingTop: 40, paddingBottom: 40 }}>
-              <div style={{ width: 56, height: 56, backgroundColor: "#F0F4FB", borderRadius: 14, margin: "0 auto 14px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ textAlign: "center", color: colors.textMuted, paddingTop: 40, paddingBottom: 40 }}>
+              <div style={{ width: 56, height: 56, backgroundColor: colors.bg, borderRadius: 14, margin: "0 auto 14px", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/>
                   <path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
                   <rect x="7" y="7" width="10" height="10" rx="1"/>
                 </svg>
               </div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: "#374151", marginBottom: 6 }}>En attente de vérification</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: colors.text, marginBottom: 6 }}>En attente de vérification</div>
               <div style={{ fontSize: 12 }}>Saisissez un médicament ou scannez un QR code</div>
             </div>
           )}
@@ -314,8 +315,8 @@ export default function Scanner({ profile = "pharmacie" }) {
           {loading && (
             <div style={{ textAlign: "center", padding: "40px 0" }}>
               <div style={{ width: 40, height: 40, border: "3px solid #E5E7EB", borderTopColor: pStyle.color, borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 16px" }} />
-              <div style={{ fontSize: 14, fontWeight: 600, color: "#374151", marginBottom: 4 }}>Vérification en cours…</div>
-              <div style={{ fontSize: 12, color: "#9CA3AF" }}>Consultation MedOS puis BDPM France</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: colors.text, marginBottom: 4 }}>Vérification en cours…</div>
+              <div style={{ fontSize: 12, color: colors.textMuted }}>Consultation MedOS puis BDPM France</div>
 
               <div style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 8 }}>
                 {[
@@ -323,9 +324,9 @@ export default function Scanner({ profile = "pharmacie" }) {
                   { label: "Consultation BDPM — France",      color: "#2563EB" },
                   { label: "Analyse du résultat",             color: "#8B5CF6" },
                 ].map((step, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", backgroundColor: "#F8FAFC", borderRadius: 8 }}>
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", backgroundColor: colors.bgSurface, borderRadius: 8 }}>
                     <div style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: step.color, animation: `spin ${0.8 + i * 0.3}s linear infinite` }} />
-                    <span style={{ fontSize: 12, color: "#6B7280" }}>{step.label}</span>
+                    <span style={{ fontSize: 12, color: colors.textSecondary }}>{step.label}</span>
                   </div>
                 ))}
               </div>

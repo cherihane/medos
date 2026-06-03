@@ -1,32 +1,33 @@
+import { colors } from "../theme";
 import { Link } from "react-router-dom";
 
 const APP_VERSION = "1.0.0";
 
 const CARD = ({ titre, children }) => (
   <div style={{
-    backgroundColor: "white",
-    border: "1px solid #E5E7EB",
+    backgroundColor: colors.bgCard,
+    border: "1px solid var(--border)",
     borderRadius: 14,
     padding: "24px 28px",
     marginBottom: 20,
   }}>
-    <h2 style={{ fontSize: 14, fontWeight: 700, color: "#0A1628", margin: "0 0 12px", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+    <h2 style={{ fontSize: 14, fontWeight: 700, color: colors.navy, margin: "0 0 12px", textTransform: "uppercase", letterSpacing: "0.06em" }}>
       {titre}
     </h2>
-    <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.8 }}>{children}</div>
+    <div style={{ fontSize: 13, color: colors.text, lineHeight: 1.8 }}>{children}</div>
   </div>
 );
 
 const INFO = ({ label, value }) => (
-  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #F3F4F6" }}>
-    <span style={{ fontSize: 12, color: "#6B7280" }}>{label}</span>
-    <span style={{ fontSize: 12, fontWeight: 600, color: "#0A1628" }}>{value}</span>
+  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--border-light)" }}>
+    <span style={{ fontSize: 12, color: colors.textSecondary }}>{label}</span>
+    <span style={{ fontSize: 12, fontWeight: 600, color: colors.navy }}>{value}</span>
   </div>
 );
 
 export default function APropos() {
   return (
-    <div style={{ minHeight: "100vh", backgroundColor: "#F8FAFC", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+    <div style={{ minHeight: "100vh", backgroundColor: colors.bgSurface, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
       {/* Header */}
       <div className="legal-header" style={{ backgroundColor: "#0A1628", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <Link to="/" style={{ textDecoration: "none" }}>
@@ -52,10 +53,10 @@ export default function APropos() {
               <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
             </svg>
           </div>
-          <h1 style={{ fontSize: 28, fontWeight: 900, color: "#0A1628", margin: "0 0 6px" }}>
+          <h1 style={{ fontSize: 28, fontWeight: 900, color: colors.navy, margin: "0 0 6px" }}>
             <span style={{ color: "#3B82F6" }}>Med</span>OS
           </h1>
-          <p style={{ fontSize: 14, color: "#6B7280", margin: 0 }}>
+          <p style={{ fontSize: 14, color: colors.textSecondary, margin: 0 }}>
             Intelligence Médicale Africaine
           </p>
         </div>
@@ -96,17 +97,17 @@ export default function APropos() {
             ["Distributeur","Gestion entrepot, livraisons, tracabilite, previsions"],
             ["Autorite",    "Vue nationale, epidemiologie, lutte anti-contrefacons, ODD"],
           ].map(([role, desc]) => (
-            <div key={role} style={{ padding: "8px 0", borderBottom: "1px solid #F3F4F6" }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: "#0A1628" }}>{role}</span>
-              <span style={{ fontSize: 12, color: "#6B7280", marginLeft: 10 }}>{desc}</span>
+            <div key={role} style={{ padding: "8px 0", borderBottom: "1px solid var(--border-light)" }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: colors.navy }}>{role}</span>
+              <span style={{ fontSize: 12, color: colors.textSecondary, marginLeft: 10 }}>{desc}</span>
             </div>
           ))}
         </CARD>
 
-        <div style={{ marginTop: 40, paddingTop: 24, borderTop: "1px solid #E5E7EB", display: "flex", gap: 16, flexWrap: "wrap" }}>
-          <Link to="/"               style={{ fontSize: 12, color: "#6B7280", textDecoration: "none" }}>Retour a l'accueil</Link>
-          <Link to="/cgu"            style={{ fontSize: 12, color: "#6B7280", textDecoration: "none" }}>Conditions d'utilisation</Link>
-          <Link to="/confidentialite" style={{ fontSize: 12, color: "#6B7280", textDecoration: "none" }}>Confidentialite</Link>
+        <div style={{ marginTop: 40, paddingTop: 24, borderTop: "1px solid var(--border)", display: "flex", gap: 16, flexWrap: "wrap" }}>
+          <Link to="/"               style={{ fontSize: 12, color: colors.textSecondary, textDecoration: "none" }}>Retour a l'accueil</Link>
+          <Link to="/cgu"            style={{ fontSize: 12, color: colors.textSecondary, textDecoration: "none" }}>Conditions d'utilisation</Link>
+          <Link to="/confidentialite" style={{ fontSize: 12, color: colors.textSecondary, textDecoration: "none" }}>Confidentialite</Link>
         </div>
       </div>
     </div>
