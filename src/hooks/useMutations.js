@@ -322,3 +322,15 @@ export async function fetchGardes(etablissement_id, dateDebut, dateFin) {
 export async function updatePatientTriage(id, triage) {
   return run(supabase.from("patients").update({ triage }).eq("id", id).select().single());
 }
+
+// ─── Membres du personnel ─────────────────────────────────────────────────────
+export async function fetchMembresPersonnel(etablissement_id) {
+  let q = supabase
+    .from("membres_personnel")
+    .select("id, email, role_interne, actif")
+    .eq("actif", true)
+    .order("email");
+  if (etablissement_id) q = q.eq("etablissement_id", etablissement_id);
+  const { data } = await q;
+  return data ?? [];
+}
