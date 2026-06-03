@@ -1,9 +1,9 @@
 /**
  * Patients — Module Hôpital
- * v2 : services médicaux, comptes rendus, hover card, badges urgence, historique
+ * v3 : dossier médical chronologique, alertes interactions
  */
 import { colors } from "../../theme";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import Layout from "../../components/Layout";
@@ -13,6 +13,7 @@ import { insertPatient, insertOrdonnance, upsertHospitalisation, fetchHospitalis
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../supabaseClient";
 import { openDocument, tableHTML, infoGridHTML, alertBannerHTML, signatureRowHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
+import { INTERACTIONS_MEDICAMENTEUSES, CONTRE_INDICATIONS_ANTECEDENTS } from "../../data/interactions";
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 const ACCENT = "#10B981";
@@ -363,10 +364,22 @@ function ModalNouvelleOrdonnance({ patient, etablissement_id, medecinNom, medica
 
   const setLigne = (id, k, v) => setLignes((ls) => ls.map((l) => l.id === id ? { ...l, [k]: v } : l));
 
+  // Alertes interactions calculées en temps réel
+  const lignesAvecNom = useMemo(() => lignes.map((l) => {
+    const med = medicaments.find((m) => m.id === l.medicament_id);
+    return { ...l, nom: med?.nom ?? "" };
+  }), [lignes, medicaments]);
+
+  const warnings = useMemo(() => checkInteractions(lignesAvecNom, patient?.antecedents), [lignesAvecNom, patient]);
+
   const handleSave = async () => {
     setErr(null);
     const valides = lignes.filter((l) => l.medicament_id && l.posologie.trim());
     if (!valides.length) { setErr("Ajoutez au moins un médicament avec posologie."); return; }
+    if (warnings.some((w) => w.niveau === "contre-indication")) {
+      const ok = window.confirm("Des contre-indications ont ete detectees. Confirmer quand meme ?");
+      if (!ok) return;
+    }
     setSaving(true);
     try {
       const lignesDetail = valides.map((l) => {
@@ -426,6 +439,19 @@ function ModalNouvelleOrdonnance({ patient, etablissement_id, medecinNom, medica
             <label style={labelSt}>Instructions complémentaires</label>
             <input style={inputSt} value={instructions} onChange={(e) => setInstr(e.target.value)} placeholder="À prendre avec de la nourriture, éviter le soleil…" />
           </div>
+          {/* Alertes interactions */}
+          {warnings.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              {warnings.map((w, i) => (
+                <div key={i} style={{ padding: "10px 14px", marginBottom: 6, borderRadius: 8,
+                  borderLeft: `4px solid ${w.niveau === "contre-indication" ? "#EF4444" : "#F59E0B"}`,
+                  backgroundColor: w.niveau === "contre-indication" ? "#FEF2F2" : "#FFFBEB",
+                  fontSize: 12, color: w.niveau === "contre-indication" ? "#DC2626" : "#92400E" }}>
+                  <strong>{w.niveau === "contre-indication" ? "Contre-indication" : "Precaution"} :</strong> {w.message}
+                </div>
+              ))}
+            </div>
+          )}
           {err && <div style={{ marginTop: 10, padding: "8px 12px", background: "#FEF2F2", borderRadius: 8, fontSize: 12, color: "#DC2626" }}>{err}</div>}
         </div>
         <div style={{ display: "flex", gap: 10, padding: "14px 26px", borderTop: "1px solid var(--border-light)", flexShrink: 0 }}>
@@ -531,12 +557,158 @@ const STATUT_ORD = {
   expiree: { bg: "#F3F4F6", color: colors.textMuted },
 };
 
+// ── Dossier médical — agrégation chronologique ─────────────────────────────
+async function fetchDossierMedical(patient_id) {
+  const [cRes, oRes, hRes, cvRes, dRes, fRes, eRes] = await Promise.all([
+    supabase.from("consultations").select("*").eq("patient_id", patient_id).order("created_at", { ascending: false }),
+    supabase.from("ordonnances").select("*").eq("patient_id", patient_id).order("date_emission", { ascending: false }),
+    supabase.from("hospitalisations").select("*").eq("patient_id", patient_id).order("date_entree", { ascending: false }),
+    supabase.from("constantes_vitales").select("*").eq("patient_id", patient_id).order("created_at", { ascending: false }),
+    supabase.from("dispensations").select("*, medicaments(nom)").eq("patient_id", patient_id).order("created_at", { ascending: false }),
+    supabase.from("factures_hopital").select("*").eq("patient_id", patient_id).order("date_facture", { ascending: false }),
+    supabase.from("examens").select("*").eq("patient_id", patient_id).order("created_at", { ascending: false }),
+  ]);
+  const events = [
+    ...(cRes.data  ?? []).map((e) => ({ ...e, _type: "consultation",    _date: e.created_at })),
+    ...(oRes.data  ?? []).map((e) => ({ ...e, _type: "ordonnance",      _date: e.date_emission ?? e.created_at })),
+    ...(hRes.data  ?? []).map((e) => ({ ...e, _type: "hospitalisation", _date: e.date_entree  ?? e.created_at })),
+    ...(cvRes.data ?? []).map((e) => ({ ...e, _type: "constante",       _date: e.created_at })),
+    ...(dRes.data  ?? []).map((e) => ({ ...e, _type: "dispensation",    _date: e.created_at })),
+    ...(fRes.data  ?? []).map((e) => ({ ...e, _type: "facture",         _date: e.date_facture ?? e.created_at })),
+    ...(eRes.data  ?? []).map((e) => ({ ...e, _type: "examen",          _date: e.created_at })),
+  ].sort((a, b) => new Date(b._date) - new Date(a._date));
+  return events;
+}
+
+const DOSSIER_TYPES = {
+  consultation:    { label: "Consultation",    color: "#10B981" },
+  ordonnance:      { label: "Ordonnance",      color: "#3B82F6" },
+  hospitalisation: { label: "Hospitalisation", color: "#EF4444" },
+  constante:       { label: "Constante",       color: "#F59E0B" },
+  dispensation:    { label: "Dispensation",    color: "#8B5CF6" },
+  facture:         { label: "Facture",         color: "#6B7280" },
+  examen:          { label: "Examen",          color: "#06B6D4" },
+};
+
+function fmtDateEvt(d) {
+  if (!d) return "—";
+  return new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function EventCard({ evt }) {
+  const cfg = DOSSIER_TYPES[evt._type] ?? { label: evt._type, color: "#6B7280" };
+  let content = null;
+
+  if (evt._type === "consultation") {
+    content = (
+      <>
+        <div style={{ fontSize: 12 }}><strong>Service :</strong> {evt.service} {evt.medecin_nom ? `— ${evt.medecin_nom}` : ""}</div>
+        {evt.motif && <div style={{ fontSize: 12 }}><strong>Motif :</strong> {evt.motif}</div>}
+        <div style={{ fontSize: 12 }}><strong>Statut :</strong> {evt.statut}</div>
+      </>
+    );
+  } else if (evt._type === "ordonnance") {
+    let lignes = [];
+    try { lignes = JSON.parse(evt.notes ?? "{}").lignes ?? []; } catch { /* noop */ }
+    content = (
+      <>
+        <div style={{ fontSize: 12 }}><strong>Ref :</strong> {evt.reference ?? "—"} — <strong>Statut :</strong> {evt.statut}</div>
+        {lignes.length > 0 && <div style={{ fontSize: 12 }}>{lignes.map((l) => `${l.nom} ${l.posologie}`).join(", ")}</div>}
+      </>
+    );
+  } else if (evt._type === "hospitalisation") {
+    content = (
+      <>
+        <div style={{ fontSize: 12 }}><strong>Service :</strong> {evt.service ?? "—"} — Lit {evt.lit ?? "?"} Ch. {evt.chambre ?? "?"}</div>
+        <div style={{ fontSize: 12 }}><strong>Entree :</strong> {fmtDateEvt(evt.date_entree)} — <strong>Sortie prevue :</strong> {fmtDateEvt(evt.date_sortie_prevue)}</div>
+        <div style={{ fontSize: 12 }}><strong>Statut :</strong> {evt.statut}</div>
+      </>
+    );
+  } else if (evt._type === "constante") {
+    const alertes = [
+      evt.temperature < 36 || evt.temperature > 38.5 ? "T: " + evt.temperature + "C" : null,
+      evt.pouls < 50 || evt.pouls > 100 ? "Pouls: " + evt.pouls : null,
+      evt.saturation_o2 < 95 ? "SpO2: " + evt.saturation_o2 + "%" : null,
+    ].filter(Boolean);
+    content = (
+      <>
+        <div style={{ fontSize: 12, display: "flex", flexWrap: "wrap", gap: 10 }}>
+          {evt.temperature  != null && <span>T: {evt.temperature}C</span>}
+          {evt.tension_systolique != null && <span>TA: {evt.tension_systolique}/{evt.tension_diastolique}</span>}
+          {evt.pouls != null && <span>Pouls: {evt.pouls}</span>}
+          {evt.saturation_o2 != null && <span>SpO2: {evt.saturation_o2}%</span>}
+        </div>
+        {alertes.length > 0 && (
+          <div style={{ fontSize: 11, color: "#EF4444", fontWeight: 700, marginTop: 3 }}>Hors normes: {alertes.join(" | ")}</div>
+        )}
+      </>
+    );
+  } else if (evt._type === "dispensation") {
+    content = (
+      <div style={{ fontSize: 12 }}>
+        <strong>Medicament :</strong> {evt.medicaments?.nom ?? "—"} — <strong>Qte :</strong> {evt.quantite} — <strong>Voie :</strong> {evt.voie ?? "—"}
+        {evt.prescripteur && <span> — <strong>Prescrit par :</strong> {evt.prescripteur}</span>}
+      </div>
+    );
+  } else if (evt._type === "facture") {
+    content = (
+      <div style={{ fontSize: 12 }}>
+        <strong>Facture :</strong> {evt.numero_facture ?? "—"} — <strong>Montant :</strong> {(evt.montant_total ?? 0).toLocaleString("fr-FR")} FCFA — <strong>Statut :</strong> {evt.statut}
+      </div>
+    );
+  } else if (evt._type === "examen") {
+    content = (
+      <>
+        <div style={{ fontSize: 12 }}><strong>{evt.type_examen}</strong>{evt.libelle ? ` — ${evt.libelle}` : ""} {evt.urgence ? <span style={{ color: "#EF4444", fontWeight: 700 }}>URGENT</span> : ""}</div>
+        {evt.resultat_texte && <div style={{ fontSize: 12 }}><strong>Resultat :</strong> {evt.resultat_texte.slice(0, 80)}{evt.resultat_texte.length > 80 ? "…" : ""}</div>}
+        {evt.interpretation && <span style={{ fontSize: 11, fontWeight: 700, padding: "1px 7px", borderRadius: 6, backgroundColor: evt.interpretation === "normal" ? "#DCFCE7" : evt.interpretation === "critique" ? "#FEF2F2" : "#FEF3C7", color: evt.interpretation === "normal" ? "#16A34A" : evt.interpretation === "critique" ? "#DC2626" : "#D97706" }}>{evt.interpretation}</span>}
+      </>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", gap: 12, marginBottom: 14 }}>
+      <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <div style={{ width: 12, height: 12, borderRadius: "50%", backgroundColor: cfg.color, marginTop: 3 }} />
+        <div style={{ width: 2, flex: 1, backgroundColor: "#E5E7EB", marginTop: 4 }} />
+      </div>
+      <div style={{ flex: 1, background: "white", border: `1px solid #F3F4F6`, borderRadius: 10, padding: "10px 14px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+          <span style={{ fontSize: 11, fontWeight: 800, color: cfg.color, textTransform: "uppercase", letterSpacing: "0.04em" }}>{cfg.label}</span>
+          <span style={{ fontSize: 11, color: "#9CA3AF" }}>{fmtDateEvt(evt._date)}</span>
+        </div>
+        {content}
+      </div>
+    </div>
+  );
+}
+
+// ── Alertes interactions medicamenteuses ──────────────────────────────────────
+function checkInteractions(lignes, antecedents) {
+  const warnings = [];
+  const noms = lignes.map((l) => (l.nom || "").toLowerCase());
+  INTERACTIONS_MEDICAMENTEUSES.forEach(({ meds, niveau, message }) => {
+    const match0 = noms.some((n) => n.includes(meds[0]));
+    const match1 = noms.some((n) => n.includes(meds[1]));
+    if (match0 && match1) warnings.push({ niveau, message });
+  });
+  const ants = (antecedents ?? []).map((a) => a.toLowerCase());
+  CONTRE_INDICATIONS_ANTECEDENTS.forEach(({ antecedent, medicaments, message }) => {
+    const hasAnt = ants.some((a) => a.includes(antecedent));
+    const hasMed = medicaments.some((m) => noms.some((n) => n.includes(m)));
+    if (hasAnt && hasMed) warnings.push({ niveau: "contre-indication", message });
+  });
+  return warnings;
+}
+
 function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medicaments, onClose, onPatientUpdated, auth }) {
-  const [onglet, setOnglet]           = useState("infos");
+  const [onglet, setOnglet]           = useState("dossier");
   const [ordonnances, setOrdonnances] = useState([]);
   const [comptes, setComptes]         = useState([]);
   const [constantes, setConstantes]   = useState([]);
   const [hospi, setHospi]             = useState(null);
+  const [dossier, setDossier]         = useState([]);
+  const [filtreDossier, setFiltreDossier] = useState("Tous");
   const [loading, setLoading]         = useState(true);
   const [showOrd, setShowOrd]         = useState(false);
   const [showCR, setShowCR]           = useState(false);
@@ -554,15 +726,17 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
   const charger = useCallback(async () => {
     setLoading(true);
     try {
-      const [{ data: ords }, { data: crs }, constData, hospiData] = await Promise.all([
+      const [{ data: ords }, { data: crs }, constData, hospiData, dossierData] = await Promise.all([
         supabase.from("ordonnances").select("id, reference, statut, date_emission, date_expiration, medecin_nom, notes").eq("patient_id", patient.id).order("date_emission", { ascending: false }),
         supabase.from("comptes_rendus").select("*").eq("patient_id", patient.id).order("date_consultation", { ascending: false }),
         fetchConstantes(patient.id),
         fetchHospitalisation(patient.id),
+        fetchDossierMedical(patient.id),
       ]);
       setOrdonnances(ords ?? []);
       setComptes(crs ?? []);
       setConstantes(constData);
+      setDossier(dossierData);
       if (hospiData) {
         setHospi(hospiData);
         setHospiForm((f) => ({ ...f, statut: hospiData.statut ?? "ambulatoire", chambre: hospiData.chambre ?? "", lit: hospiData.lit ?? "", date_entree: hospiData.date_entree ?? "", date_sortie_prevue: hospiData.date_sortie_prevue ?? "", motif_hospitalisation: hospiData.motif_hospitalisation ?? "" }));
@@ -621,7 +795,10 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
   };
 
   const svcColor = SERVICE_COLOR[patient.service] ?? "#6B7280";
+  const dossierFiltres = filtreDossier === "Tous" ? dossier : dossier.filter((e) => e._type === filtreDossier);
+
   const onglets  = [
+    ["dossier", `Dossier (${dossier.length})`],
     ["infos", "Informations"],
     ["hospitalisation", "Hospitalisation"],
     ["constantes", `Constantes (${constantes.length})`],
@@ -715,6 +892,58 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
             {smsError && (
               <div style={{ marginBottom: 12, padding: "10px 14px", backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, fontSize: 13, color: "#DC2626" }}>
                 {smsError}
+              </div>
+            )}
+
+            {/* ── Dossier médical ── */}
+            {onglet === "dossier" && (
+              <div>
+                {/* Filtres par type */}
+                <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
+                  {["Tous", ...Object.keys(DOSSIER_TYPES)].map((t) => (
+                    <button key={t} onClick={() => setFiltreDossier(t)}
+                      style={{ padding: "4px 12px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 700,
+                        backgroundColor: filtreDossier === t ? (DOSSIER_TYPES[t]?.color ?? ACCENT) : "#F3F4F6",
+                        color: filtreDossier === t ? "white" : "#374151" }}>
+                      {DOSSIER_TYPES[t]?.label ?? "Tous"}
+                    </button>
+                  ))}
+                </div>
+                {/* Bouton imprimer dossier */}
+                <div style={{ marginBottom: 16 }}>
+                  <button
+                    onClick={async () => {
+                      const etab = await fetchEtabFromAuth(auth);
+                      const sections = [];
+                      const infoRows = [["Prenom", patient.prenom], ["Nom", patient.nom], ["Date naissance", patient.date_naissance ?? "—"], ["Groupe sanguin", patient.groupe_sanguin ?? "—"]];
+                      sections.push({ titre: "Informations patient", html: tableHTML(["Champ", "Valeur"], infoRows) });
+                      if ((patient.antecedents ?? []).length > 0) {
+                        sections.push({ titre: "Antecedents", html: alertBannerHTML(patient.antecedents.join(", "), "warning") });
+                      }
+                      Object.entries(DOSSIER_TYPES).forEach(([t, cfg]) => {
+                        const evts = dossier.filter((e) => e._type === t);
+                        if (evts.length === 0) return;
+                        let rows = [];
+                        if (t === "consultation") rows = evts.map((e) => [fmtDateEvt(e._date), e.service, e.medecin_nom ?? "—", e.motif ?? "—", e.statut]);
+                        else if (t === "ordonnance") rows = evts.map((e) => [fmtDateEvt(e._date), e.reference ?? "—", e.statut]);
+                        else if (t === "hospitalisation") rows = evts.map((e) => [fmtDateEvt(e._date), e.service ?? "—", `Lit ${e.lit ?? "?"} Ch.${e.chambre ?? "?"}`, e.statut]);
+                        else if (t === "constante") rows = evts.map((e) => [fmtDateEvt(e._date), e.temperature ?? "—", `${e.tension_systolique ?? "—"}/${e.tension_diastolique ?? "—"}`, e.pouls ?? "—", e.saturation_o2 ?? "—"]);
+                        else if (t === "examen") rows = evts.map((e) => [fmtDateEvt(e._date), e.type_examen, e.statut, e.interpretation ?? "—"]);
+                        else if (t === "facture") rows = evts.map((e) => [fmtDateEvt(e._date), e.numero_facture ?? "—", String(e.montant_total ?? 0), e.statut]);
+                        else rows = evts.map((e) => [fmtDateEvt(e._date), JSON.stringify(e).slice(0, 60)]);
+                        const headers = t === "constante" ? ["Date", "Temp.", "TA", "Pouls", "SpO2"] : t === "examen" ? ["Date", "Type", "Statut", "Interpretation"] : t === "facture" ? ["Date", "Reference", "Montant", "Statut"] : ["Date", ...Array(rows[0]?.length - 1 ?? 0).fill("—")];
+                        sections.push({ titre: cfg.label, html: tableHTML(headers, rows) });
+                      });
+                      openDocument({ titre: `Dossier medical — ${patient.prenom} ${patient.nom}`, etablissement: etab, sections });
+                    }}
+                    style={{ padding: "6px 14px", background: "#1D4ED8", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                    Imprimer le dossier complet
+                  </button>
+                </div>
+                {/* Timeline */}
+                {loading && <div style={{ color: colors.textMuted, fontSize: 13 }}>Chargement...</div>}
+                {!loading && dossierFiltres.length === 0 && <div style={{ fontSize: 13, color: colors.textMuted }}>Aucun evenement dans le dossier</div>}
+                {!loading && dossierFiltres.map((evt, i) => <EventCard key={evt.id ?? i} evt={evt} />)}
               </div>
             )}
 
