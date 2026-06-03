@@ -53,8 +53,8 @@ function StockRow({ med }) {
     <div key={med.id}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
         <div>
-          <span style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>{med.nom}</span>
-          <span style={{ fontSize: 10, color: "#9CA3AF", marginLeft: 6 }}>{med.categorie}</span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: colors.text }}>{med.nom}</span>
+          <span style={{ fontSize: 10, color: colors.textMuted, marginLeft: 6 }}>{med.categorie}</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <SeveriteBadge pct={pct} />
@@ -63,7 +63,7 @@ function StockRow({ med }) {
           </span>
         </div>
       </div>
-      <div style={{ height: 6, backgroundColor: "#F3F4F6", borderRadius: 4 }}>
+      <div style={{ height: 6, backgroundColor: colors.borderLight, borderRadius: 4 }}>
         <div style={{
           height: "100%",
           width: `${pct}%`,
@@ -72,7 +72,7 @@ function StockRow({ med }) {
           transition: "width 0.4s",
         }} />
       </div>
-      <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 3 }}>
+      <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 3 }}>
         {med.prix_unitaire?.toLocaleString()} FCFA / {med.unite || "unité"}
       </div>
     </div>
@@ -85,7 +85,7 @@ function Skeleton({ height = 16, width = "100%", mb = 8 }) {
     <div style={{
       height,
       width,
-      backgroundColor: "#F3F4F6",
+      backgroundColor: colors.borderLight,
       borderRadius: 6,
       marginBottom: mb,
       animation: "pulse 1.5s ease-in-out infinite",
@@ -134,7 +134,7 @@ function KpiSection() {
     return (
       <div className="kpi-row">
         {[1, 2, 3, 4].map((i) => (
-          <div key={i} style={{ flex: 1, backgroundColor: "white", borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <div key={i} style={{ flex: 1, backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
             <Skeleton height={36} width={36} mb={12} />
             <Skeleton height={28} width="60%" mb={8} />
             <Skeleton height={14} width="80%" mb={0} />
@@ -151,7 +151,7 @@ function KpiSection() {
           key={k.label}
           onClick={() => navigate(k.to)}
           style={{
-            backgroundColor: "white", borderRadius: 14, padding: "20px 24px",
+            backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px 24px",
             boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1,
             borderLeft: `4px solid ${k.color}`,
             cursor: "pointer",
@@ -170,7 +170,7 @@ function KpiSection() {
               }}>{k.change}</span>
             )}
           </div>
-          <div style={{ fontSize: 12, color: "#6B7280" }}>{k.label}</div>
+          <div style={{ fontSize: 12, color: colors.textSecondary }}>{k.label}</div>
         </div>
       ))}
     </div>
@@ -182,9 +182,9 @@ function StockCritiquePanel() {
   const { data, loading, error } = useMedicamentsCritiques(6);
 
   return (
-    <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+    <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Stock Critique</h3>
+        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: colors.navy }}>Stock Critique</h3>
         {!loading && !error && (
           <span style={{ fontSize: 11, fontWeight: 700, backgroundColor: "#FEF2F2", color: "#DC2626", padding: "3px 8px", borderRadius: 10 }}>
             {data.length} produit{data.length !== 1 ? "s" : ""}
@@ -199,7 +199,7 @@ function StockCritiquePanel() {
       )}
 
       {error && !loading && (
-        <div style={{ fontSize: 12, color: "#9CA3AF", textAlign: "center", padding: "20px 0" }}>
+        <div style={{ fontSize: 12, color: colors.textMuted, textAlign: "center", padding: "20px 0" }}>
           Connexion Supabase requise
         </div>
       )}
@@ -233,12 +233,12 @@ export default function DashboardPharmacie() {
       <KpiSection />
 
       <div className="dash-grid-2-1">
-        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", minWidth: 0 }}>
-          <h3 style={{ margin: "0 0 12px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", minWidth: 0 }}>
+          <h3 style={{ margin: "0 0 12px", fontSize: 15, fontWeight: 700, color: colors.navy }}>
             Ventes — 7 derniers jours
           </h3>
-          <div style={{ height: 240, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "#F8FAFC", borderRadius: 10 }}>
-            <p style={{ color: "#9CA3AF", fontSize: 13, textAlign: "center", margin: 0 }}>
+          <div style={{ height: 240, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: colors.bgSurface, borderRadius: 10 }}>
+            <p style={{ color: colors.textMuted, fontSize: 13, textAlign: "center", margin: 0 }}>
               Données de ventes disponibles après enregistrement<br />des transactions en caisse.
             </p>
           </div>
@@ -248,9 +248,9 @@ export default function DashboardPharmacie() {
       </div>
 
       <div className="dash-grid-2" style={{ marginTop: 20 }}>
-        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <h3 style={{ margin: "0 0 8px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Tendance ordonnances</h3>
-          <p style={{ margin: 0, fontSize: 13, color: "#9CA3AF" }}>L'historique des ordonnances apparaîtra ici au fil des dispensations enregistrées.</p>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <h3 style={{ margin: "0 0 8px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Tendance ordonnances</h3>
+          <p style={{ margin: 0, fontSize: 13, color: colors.textMuted }}>L'historique des ordonnances apparaîtra ici au fil des dispensations enregistrées.</p>
         </div>
         <PredictionsIA />
       </div>

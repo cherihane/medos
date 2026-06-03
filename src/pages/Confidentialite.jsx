@@ -1,15 +1,16 @@
+import { colors } from "../theme";
 import { Link } from "react-router-dom";
 
 const SECTION = ({ titre, children }) => (
   <section style={{ marginBottom: 32 }}>
-    <h2 style={{ fontSize: 16, fontWeight: 700, color: "#0A1628", marginBottom: 10, marginTop: 0 }}>{titre}</h2>
-    <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.8 }}>{children}</div>
+    <h2 style={{ fontSize: 16, fontWeight: 700, color: colors.navy, marginBottom: 10, marginTop: 0 }}>{titre}</h2>
+    <div style={{ fontSize: 13, color: colors.text, lineHeight: 1.8 }}>{children}</div>
   </section>
 );
 
 export default function Confidentialite() {
   return (
-    <div style={{ minHeight: "100vh", backgroundColor: "#F8FAFC", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+    <div style={{ minHeight: "100vh", backgroundColor: colors.bgSurface, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
       {/* Header */}
       <div className="legal-header" style={{ backgroundColor: "#0A1628", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <Link to="/" style={{ textDecoration: "none" }}>
@@ -21,10 +22,10 @@ export default function Confidentialite() {
 
       <div className="legal-content">
         <div style={{ marginBottom: 36 }}>
-          <h1 style={{ fontSize: 26, fontWeight: 800, color: "#0A1628", margin: "0 0 6px" }}>
+          <h1 style={{ fontSize: 26, fontWeight: 800, color: colors.navy, margin: "0 0 6px" }}>
             Politique de Confidentialite
           </h1>
-          <p style={{ fontSize: 12, color: "#9CA3AF", margin: 0 }}>
+          <p style={{ fontSize: 12, color: colors.textMuted, margin: 0 }}>
             Version 1.0 — En vigueur depuis le 1er janvier 2025
           </p>
         </div>
@@ -130,10 +131,10 @@ export default function Confidentialite() {
           </p>
         </SECTION>
 
-        <div style={{ marginTop: 40, paddingTop: 24, borderTop: "1px solid #E5E7EB", display: "flex", gap: 16, flexWrap: "wrap" }}>
-          <Link to="/"    style={{ fontSize: 12, color: "#6B7280", textDecoration: "none" }}>Retour a l'accueil</Link>
-          <Link to="/cgu" style={{ fontSize: 12, color: "#6B7280", textDecoration: "none" }}>Conditions d'utilisation</Link>
-          <Link to="/a-propos" style={{ fontSize: 12, color: "#6B7280", textDecoration: "none" }}>A propos</Link>
+        <div style={{ marginTop: 40, paddingTop: 24, borderTop: "1px solid var(--border)", display: "flex", gap: 16, flexWrap: "wrap" }}>
+          <Link to="/"    style={{ fontSize: 12, color: colors.textSecondary, textDecoration: "none" }}>Retour a l'accueil</Link>
+          <Link to="/cgu" style={{ fontSize: 12, color: colors.textSecondary, textDecoration: "none" }}>Conditions d'utilisation</Link>
+          <Link to="/a-propos" style={{ fontSize: 12, color: colors.textSecondary, textDecoration: "none" }}>A propos</Link>
         </div>
       </div>
     </div>

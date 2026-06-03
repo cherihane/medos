@@ -1,3 +1,4 @@
+import { colors } from "../../theme";
 import { useState } from "react";
 import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
@@ -21,11 +22,11 @@ function formatDate(iso) {
 
 function Skeleton() {
   return (
-    <div style={{ padding: "14px 20px", display: "flex", alignItems: "center", gap: 14, borderBottom: "1px solid #F3F4F6", animation: "pulse 1.5s ease-in-out infinite" }}>
-      <div style={{ width: 40, height: 40, borderRadius: "50%", backgroundColor: "#F3F4F6", flexShrink: 0 }} />
+    <div style={{ padding: "14px 20px", display: "flex", alignItems: "center", gap: 14, borderBottom: "1px solid var(--border-light)", animation: "pulse 1.5s ease-in-out infinite" }}>
+      <div style={{ width: 40, height: 40, borderRadius: "50%", backgroundColor: colors.borderLight, flexShrink: 0 }} />
       <div style={{ flex: 1 }}>
-        <div style={{ width: "55%", height: 14, backgroundColor: "#F3F4F6", borderRadius: 6, marginBottom: 6 }} />
-        <div style={{ width: "40%", height: 11, backgroundColor: "#F3F4F6", borderRadius: 6 }} />
+        <div style={{ width: "55%", height: 14, backgroundColor: colors.borderLight, borderRadius: 6, marginBottom: 6 }} />
+        <div style={{ width: "40%", height: 11, backgroundColor: colors.borderLight, borderRadius: 6 }} />
       </div>
     </div>
   );
@@ -146,10 +147,10 @@ export default function Patients() {
 
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 360px", gap: 20 }}>
         {/* ── Liste ── */}
-        <div style={{ backgroundColor: "white", borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
-          <div style={{ padding: "16px 20px", borderBottom: "1px solid #E5E7EB" }}>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
+          <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#0A1628" }}>
+              <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: colors.navy }}>
                 Patients ({loading ? "…" : total})
               </h3>
               <div style={{ display: "flex", gap: 8 }}>
@@ -157,7 +158,7 @@ export default function Patients() {
                   placeholder="Rechercher…"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  style={{ padding: "7px 14px", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 13, outline: "none", width: 200 }}
+                  style={{ padding: "7px 14px", border: "1.5px solid var(--border)", borderRadius: 10, fontSize: 13, outline: "none", width: 200 }}
                 />
                 <button
                   onClick={() => setModal("add")}
@@ -190,7 +191,7 @@ export default function Patients() {
             <div style={{ padding: "20px", fontSize: 13, color: "#DC2626", textAlign: "center" }}>Une erreur s'est produite. Veuillez réessayer.</div>
           )}
           {!loading && !error && patients.length === 0 && (
-            <div style={{ padding: "40px 20px", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>
+            <div style={{ padding: "40px 20px", textAlign: "center", color: colors.textMuted, fontSize: 13 }}>
               {search ? "Aucun patient trouvé" : "Aucun patient dans la base de données"}
             </div>
           )}
@@ -205,7 +206,7 @@ export default function Patients() {
                 onClick={() => setSelected(p)}
                 style={{
                   padding: "14px 20px", display: "flex", alignItems: "center", gap: 14,
-                  cursor: "pointer", borderBottom: "1px solid #F3F4F6",
+                  cursor: "pointer", borderBottom: "1px solid var(--border-light)",
                   backgroundColor: selected?.id === p.id ? "#EFF6FF" : "white",
                   transition: "background 0.15s",
                 }}
@@ -219,8 +220,8 @@ export default function Patients() {
                   {initials}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: "#0A1628" }}>{p.prenom} {p.nom}</div>
-                  <div style={{ fontSize: 12, color: "#9CA3AF" }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: colors.navy }}>{p.prenom} {p.nom}</div>
+                  <div style={{ fontSize: 12, color: colors.textMuted }}>
                     {age} ans · Gr. {p.groupe_sanguin || "—"} · {p.telephone || "—"}
                   </div>
                 </div>
@@ -231,10 +232,10 @@ export default function Patients() {
         </div>
 
         {/* ── Fiche patient ── */}
-        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
           {!selected ? (
-            <div style={{ textAlign: "center", color: "#9CA3AF", fontSize: 13, paddingTop: 60 }}>
-              <div style={{ width: 48, height: 48, backgroundColor: "#F0F4FB", borderRadius: 12, margin: "0 auto 12px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ textAlign: "center", color: colors.textMuted, fontSize: 13, paddingTop: 60 }}>
+              <div style={{ width: 48, height: 48, backgroundColor: colors.bg, borderRadius: 12, margin: "0 auto 12px", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
                 </svg>
@@ -253,10 +254,10 @@ export default function Patients() {
                 }}>
                   {selected.prenom?.[0]}{selected.nom?.[0]}
                 </div>
-                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "#0A1628" }}>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: colors.navy }}>
                   {selected.prenom} {selected.nom}
                 </h3>
-                <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 2 }}>
+                <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>
                   ID : {selected.id?.slice(0, 8).toUpperCase()}
                 </div>
               </div>
@@ -269,15 +270,15 @@ export default function Patients() {
                 { label: "Email",          value: selected.email || "—" },
                 { label: "Enregistré le",  value: formatDate(selected.created_at) },
               ].map((item) => (
-                <div key={item.label} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #F3F4F6" }}>
-                  <span style={{ fontSize: 13, color: "#6B7280" }}>{item.label}</span>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: "#0A1628" }}>{item.value}</span>
+                <div key={item.label} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid var(--border-light)" }}>
+                  <span style={{ fontSize: 13, color: colors.textSecondary }}>{item.label}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: colors.navy }}>{item.value}</span>
                 </div>
               ))}
 
               {selected.antecedents?.length > 0 && (
                 <div style={{ marginTop: 14 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 8 }}>Antécédents</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: colors.text, marginBottom: 8 }}>Antécédents</div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                     {selected.antecedents.map((m) => (
                       <span key={m} style={{ padding: "4px 12px", backgroundColor: "#FFFBEB", color: "#F59E0B", borderRadius: 10, fontSize: 12, fontWeight: 700 }}>{m}</span>

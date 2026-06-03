@@ -40,23 +40,23 @@ export const colors = {
   distributeur: "#F59E0B",
   autorite:     "#8B5CF6",
 
-  // Neutres
-  navy:          "#0A1628",   // dark primary
+  // Neutres — referencent les CSS custom properties pour reactivite dark mode
+  navy:          "var(--text-heavy)",
   navyMid:       "#1E3A5F",
-  text:          "#374151",
-  textSecondary: "#6B7280",
-  textMuted:     "#9CA3AF",
+  text:          "var(--text)",
+  textSecondary: "var(--text-light)",
+  textMuted:     "var(--text-muted)",
   textDisabled:  "#D1D5DB",
 
   // Backgrounds
-  bg:            "#F0F4FB",
-  bgCard:        "white",
-  bgSurface:     "#F8FAFC",
-  bgHover:       "#F9FAFB",
+  bg:            "var(--bg)",
+  bgCard:        "var(--bg-card)",
+  bgSurface:     "var(--bg-surface)",
+  bgHover:       "var(--bg-hover)",
 
   // Bordures
-  border:        "#E5E7EB",
-  borderLight:   "#F3F4F6",
+  border:        "var(--border)",
+  borderLight:   "var(--border-light)",
 };
 
 // ── Espacement ────────────────────────────────────────────────────────────────
@@ -83,8 +83,8 @@ export const radius = {
 // ── Ombres ────────────────────────────────────────────────────────────────────
 
 export const shadow = {
-  sm:  "0 1px 4px rgba(0,0,0,0.06)",
-  md:  "0 4px 16px rgba(0,0,0,0.08)",
+  sm:  "var(--shadow-sm)",
+  md:  "var(--shadow-md)",
   lg:  "0 8px 32px rgba(0,0,0,0.12)",
   xl:  "0 24px 80px rgba(0,0,0,0.18)",
 };
@@ -156,13 +156,13 @@ export function btnStyle({ disabled = false, danger = false, size = "md" } = {})
 export const inputStyle = {
   width:           "100%",
   padding:         "10px 12px",
-  border:          `1.5px solid ${colors.border}`,
+  border:          "1.5px solid var(--input-border)",
   borderRadius:    radius.md,
   fontSize:        font.base,
   outline:         "none",
   boxSizing:       "border-box",
-  color:           colors.navy,
-  backgroundColor: colors.bgCard,
+  color:           "var(--text-heavy)",
+  backgroundColor: "var(--input-bg)",
   fontFamily:      "inherit",
 };
 

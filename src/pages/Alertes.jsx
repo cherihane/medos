@@ -1,3 +1,4 @@
+import { colors } from "../theme";
 import { useState, useEffect } from "react";
 import Layout from "../components/Layout";
 import { useAlertesRealtime } from "../hooks/useSupabaseData";
@@ -79,7 +80,7 @@ export default function Alertes() {
               onClick={() => setFilter(f)}
               style={{
                 padding: "7px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer",
-                border: filter === f ? "2px solid #3B82F6" : "1.5px solid #E5E7EB",
+                border: filter === f ? "2px solid #3B82F6" : "1.5px solid var(--border)",
                 backgroundColor: filter === f ? "#EFF6FF" : "white",
                 color: filter === f ? "#2563EB" : "#6B7280",
                 textTransform: "capitalize",
@@ -101,9 +102,9 @@ export default function Alertes() {
           onClick={markAllRead}
           disabled={saving || unreadCount === 0}
           style={{
-            padding: "8px 16px", backgroundColor: "white",
-            border: "1.5px solid #E5E7EB", borderRadius: 10,
-            fontSize: 13, color: "#374151", cursor: unreadCount === 0 ? "default" : "pointer",
+            padding: "8px 16px", backgroundColor: colors.bgCard,
+            border: "1.5px solid var(--border)", borderRadius: 10,
+            fontSize: 13, color: colors.text, cursor: unreadCount === 0 ? "default" : "pointer",
             fontWeight: 600, opacity: unreadCount === 0 ? 0.5 : 1,
           }}
         >
@@ -122,20 +123,20 @@ export default function Alertes() {
             }}
           >
             <div style={{ fontSize: 24, fontWeight: 800, color: s.color }}>{s.value}</div>
-            <div style={{ fontSize: 12, color: "#6B7280" }}>{s.label}</div>
+            <div style={{ fontSize: 12, color: colors.textSecondary }}>{s.label}</div>
           </div>
         ))}
       </div>
 
       {/* Liste des alertes */}
       {loading ? (
-        <div style={{ textAlign: "center", padding: "48px", color: "#9CA3AF", fontSize: 14 }}>
+        <div style={{ textAlign: "center", padding: "48px", color: colors.textMuted, fontSize: 14 }}>
           Chargement des alertes…
         </div>
       ) : filtered.length === 0 ? (
         <div style={{
-          textAlign: "center", padding: "48px", backgroundColor: "white",
-          borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", color: "#9CA3AF", fontSize: 14,
+          textAlign: "center", padding: "48px", backgroundColor: colors.bgCard,
+          borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", color: colors.textMuted, fontSize: 14,
         }}>
           {filter === "tous"
             ? "Aucune alerte active."
@@ -168,12 +169,12 @@ export default function Alertes() {
                 <div style={{ flex: 1 }}>
                   <div style={{
                     fontSize: 14, fontWeight: alert.lu ? 500 : 700,
-                    color: "#0A1628", marginBottom: 4,
+                    color: colors.navy, marginBottom: 4,
                   }}>
                     {alert.titre}
                   </div>
                   {alert.message && (
-                    <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>
+                    <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 4 }}>
                       {alert.message}
                     </div>
                   )}
@@ -184,7 +185,7 @@ export default function Alertes() {
                     }}>
                       {alert.severite}
                     </span>
-                    <span style={{ fontSize: 12, color: "#9CA3AF" }}>
+                    <span style={{ fontSize: 12, color: colors.textMuted }}>
                       {fmtDate(alert.created_at)}
                     </span>
                   </div>
@@ -194,9 +195,9 @@ export default function Alertes() {
                   <button
                     onClick={() => markRead(alert.id)}
                     style={{
-                      padding: "6px 14px", backgroundColor: "white",
-                      border: "1px solid #E5E7EB", borderRadius: 8,
-                      fontSize: 12, color: "#374151", cursor: "pointer", flexShrink: 0,
+                      padding: "6px 14px", backgroundColor: colors.bgCard,
+                      border: "1px solid var(--border)", borderRadius: 8,
+                      fontSize: 12, color: colors.text, cursor: "pointer", flexShrink: 0,
                     }}
                   >
                     Marquer lu

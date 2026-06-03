@@ -1,3 +1,4 @@
+import { colors } from "../../theme";
 import { useState } from "react";
 import Layout from "../../components/Layout";
 import { useEtablissements } from "../../hooks/useSupabaseData";
@@ -39,13 +40,13 @@ function CleModal({ onClose }) {
 
   return (
     <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-      <div style={{ backgroundColor: "white", borderRadius: 16, width: 500, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+      <div style={{ backgroundColor: colors.bgCard, borderRadius: 16, width: 500, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
         <div style={{ padding: "20px 24px 0", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
-            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Nouvelle clé API générée</h3>
-            <div style={{ fontSize: 12, color: "#6B7280", marginTop: 3 }}>Copiez cette clé maintenant — elle ne sera plus affichée.</div>
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: colors.navy }}>Nouvelle clé API générée</h3>
+            <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 3 }}>Copiez cette clé maintenant — elle ne sera plus affichée.</div>
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9CA3AF" }}>×</button>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: colors.textMuted }}>×</button>
         </div>
         <div style={{ padding: "18px 24px" }}>
           <div style={{ backgroundColor: "#0A1628", borderRadius: 10, padding: "14px 16px", marginBottom: 14, display: "flex", alignItems: "center", gap: 12 }}>
@@ -87,29 +88,29 @@ export default function API() {
       {showCle && <CleModal onClose={() => setShowCle(false)} />}
       <div className="kpi-row">
         {kpis.map((k) => (
-          <div key={k.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "18px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
+          <div key={k.label} style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "18px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
             <div style={{ fontSize: 22, fontWeight: 800, color: k.color }}>{k.value}</div>
-            <div style={{ fontSize: 12, color: "#6B7280" }}>{k.label}</div>
+            <div style={{ fontSize: 12, color: colors.textSecondary }}>{k.label}</div>
           </div>
         ))}
       </div>
 
       <div className="dash-grid-2-1">
-        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Endpoints disponibles</h3>
-            <span style={{ fontSize: 12, color: "#9CA3AF" }}>Version 1.0 · Base URL : api.medos.ci</span>
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: colors.navy }}>Endpoints disponibles</h3>
+            <span style={{ fontSize: 12, color: colors.textMuted }}>Version 1.0 · Base URL : api.medos.ci</span>
           </div>
 
           {endpoints.map((ep) => {
             const mc = methodColor[ep.method];
             return (
-              <div key={ep.path} style={{ padding: "14px 16px", backgroundColor: "#F8FAFC", borderRadius: 10, marginBottom: 10, display: "flex", alignItems: "center", gap: 14 }}>
+              <div key={ep.path} style={{ padding: "14px 16px", backgroundColor: colors.bgSurface, borderRadius: 10, marginBottom: 10, display: "flex", alignItems: "center", gap: 14 }}>
                 <span style={{ fontSize: 11, fontWeight: 800, padding: "3px 10px", borderRadius: 6, backgroundColor: mc.bg, color: mc.color, flexShrink: 0, width: 44, textAlign: "center" }}>
                   {ep.method}
                 </span>
-                <code style={{ fontSize: 12, color: "#374151", fontFamily: "monospace", flex: 1 }}>{ep.path}</code>
-                <span style={{ fontSize: 12, color: "#6B7280", flex: 2 }}>{ep.desc}</span>
+                <code style={{ fontSize: 12, color: colors.text, fontFamily: "monospace", flex: 1 }}>{ep.path}</code>
+                <span style={{ fontSize: 12, color: colors.textSecondary, flex: 2 }}>{ep.desc}</span>
                 <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 8, fontWeight: 700, backgroundColor: ep.status === "stable" ? "#DCFCE7" : "#FFFBEB", color: ep.status === "stable" ? "#16A34A" : "#D97706" }}>
                   {ep.status}
                 </span>
@@ -119,10 +120,10 @@ export default function API() {
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-            <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Authentification</h3>
+          <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+            <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Authentification</h3>
             <div style={{ backgroundColor: "#0A1628", borderRadius: 10, padding: "16px", marginBottom: 14 }}>
-              <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 6 }}>Exemple de requête</div>
+              <div style={{ fontSize: 11, color: colors.textMuted, marginBottom: 6 }}>Exemple de requête</div>
               <code style={{ fontSize: 11, color: "#10B981", fontFamily: "monospace", display: "block", lineHeight: 1.8 }}>
                 curl https://api.medos.ci/v1/<br />
                 -H "Authorization: Bearer<br />
@@ -135,22 +136,22 @@ export default function API() {
             </button>
           </div>
 
-          <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", maxHeight: 280, overflowY: "auto" }}>
-            <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>
+          <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", maxHeight: 280, overflowY: "auto" }}>
+            <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 700, color: colors.navy }}>
               Organisations connectees {!loadEtab && `(${etablissements.length})`}
             </h3>
             {loadEtab ? (
-              <div style={{ color: "#9CA3AF", fontSize: 13 }}>Chargement…</div>
+              <div style={{ color: colors.textMuted, fontSize: 13 }}>Chargement…</div>
             ) : etablissements.length === 0 ? (
-              <div style={{ padding: "20px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>
+              <div style={{ padding: "20px 0", textAlign: "center", color: colors.textMuted, fontSize: 13 }}>
                 Aucune organisation enregistrée.
               </div>
             ) : (
               etablissements.map((e) => (
-                <div key={e.id} style={{ display: "flex", justifyContent: "space-between", padding: "9px 0", borderBottom: "1px solid #F3F4F6" }}>
+                <div key={e.id} style={{ display: "flex", justifyContent: "space-between", padding: "9px 0", borderBottom: "1px solid var(--border-light)" }}>
                   <div>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: "#0A1628" }}>{e.nom ?? "—"}</div>
-                    <div style={{ fontSize: 10, color: "#9CA3AF" }}>{e.type ?? "—"}{e.ville ? ` · ${e.ville}` : ""}</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: colors.navy }}>{e.nom ?? "—"}</div>
+                    <div style={{ fontSize: 10, color: colors.textMuted }}>{e.type ?? "—"}{e.ville ? ` · ${e.ville}` : ""}</div>
                   </div>
                   <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 8, fontWeight: 700, backgroundColor: e.actif ? "#DCFCE7" : "#F3F4F6", color: e.actif ? "#16A34A" : "#9CA3AF" }}>
                     {e.actif ? "actif" : "inactif"}

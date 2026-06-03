@@ -1,3 +1,4 @@
+import { colors } from "../../theme";
 import { useMemo } from "react";
 import Layout from "../../components/Layout";
 import { useEtablissements } from "../../hooks/useSupabaseData";
@@ -44,27 +45,27 @@ export default function Cartographie() {
     <Layout title="Cartographie" subtitle="Geolocalisation des structures de sante sur le territoire national">
       <div className="kpi-row">
         {kpis.map((k) => (
-          <div key={k.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "16px 20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
+          <div key={k.label} style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "16px 20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
             <div style={{ fontSize: 20, fontWeight: 800, color: k.color }}>{k.value}</div>
-            <div style={{ fontSize: 12, color: "#6B7280" }}>{k.label}</div>
+            <div style={{ fontSize: 12, color: colors.textSecondary }}>{k.label}</div>
           </div>
         ))}
       </div>
 
       <div className="dash-grid-2-1">
         {/* Zone carte */}
-        <div style={{ backgroundColor: "white", borderRadius: 16, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Carte des etablissements</h3>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 16, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Carte des etablissements</h3>
 
           {loading ? (
-            <div style={{ height: 400, display: "flex", alignItems: "center", justifyContent: "center", color: "#9CA3AF", fontSize: 14 }}>
+            <div style={{ height: 400, display: "flex", alignItems: "center", justifyContent: "center", color: colors.textMuted, fontSize: 14 }}>
               Chargement…
             </div>
           ) : etablissements.length === 0 ? (
-            <div style={{ height: 400, backgroundColor: "#F8FAFC", borderRadius: 12, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}>
+            <div style={{ height: 400, backgroundColor: colors.bgSurface, borderRadius: 12, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}>
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="1.5"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-              <div style={{ fontSize: 15, fontWeight: 700, color: "#374151" }}>Aucun etablissement connecte dans votre region</div>
-              <div style={{ fontSize: 13, color: "#9CA3AF" }}>Les structures apparaîtront ici une fois enregistrées dans le systeme.</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: colors.text }}>Aucun etablissement connecte dans votre region</div>
+              <div style={{ fontSize: 13, color: colors.textMuted }}>Les structures apparaîtront ici une fois enregistrées dans le systeme.</div>
             </div>
           ) : (
             <div style={{ width: "100%", height: 400, backgroundColor: "#E8F4F0", borderRadius: 12, position: "relative", overflow: "hidden" }}>
@@ -76,10 +77,10 @@ export default function Cartographie() {
               ))}
               <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 8 }}>
                 <div style={{ fontSize: 22, fontWeight: 800, color: "#8B5CF6" }}>{etablissements.length}</div>
-                <div style={{ fontSize: 13, color: "#6B7280" }}>établissement{etablissements.length > 1 ? "s" : ""} enregistré{etablissements.length > 1 ? "s" : ""}</div>
-                <div style={{ fontSize: 12, color: "#9CA3AF" }}>{villes} ville{villes > 1 ? "s" : ""}</div>
+                <div style={{ fontSize: 13, color: colors.textSecondary }}>établissement{etablissements.length > 1 ? "s" : ""} enregistré{etablissements.length > 1 ? "s" : ""}</div>
+                <div style={{ fontSize: 12, color: colors.textMuted }}>{villes} ville{villes > 1 ? "s" : ""}</div>
               </div>
-              <div style={{ position: "absolute", bottom: 12, right: 12, fontSize: 11, color: "#9CA3AF", backgroundColor: "rgba(255,255,255,0.8)", padding: "4px 8px", borderRadius: 6 }}>
+              <div style={{ position: "absolute", bottom: 12, right: 12, fontSize: 11, color: colors.textMuted, backgroundColor: "rgba(255,255,255,0.8)", padding: "4px 8px", borderRadius: 6 }}>
                 Vue par ville — {villes} zone{villes > 1 ? "s" : ""} couverte{villes > 1 ? "s" : ""}
               </div>
             </div>
@@ -88,42 +89,42 @@ export default function Cartographie() {
 
         {/* Panneau lateral */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <div style={{ backgroundColor: "white", borderRadius: 14, padding: "20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-            <h4 style={{ margin: "0 0 14px", fontSize: 13, fontWeight: 700, color: "#0A1628" }}>Types d'etablissements</h4>
+          <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+            <h4 style={{ margin: "0 0 14px", fontSize: 13, fontWeight: 700, color: colors.navy }}>Types d'etablissements</h4>
             {Object.entries(TYPE_COLORS).map(([type, color]) => (
               <div key={type} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                 <div style={{ width: 10, height: 10, borderRadius: "50%", backgroundColor: color }} />
-                <span style={{ fontSize: 12, color: "#374151", textTransform: "capitalize" }}>{type}</span>
+                <span style={{ fontSize: 12, color: colors.text, textTransform: "capitalize" }}>{type}</span>
               </div>
             ))}
-            <div style={{ borderTop: "1px solid #E5E7EB", marginTop: 12, paddingTop: 12 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", marginBottom: 8 }}>Statut</div>
+            <div style={{ borderTop: "1px solid var(--border)", marginTop: 12, paddingTop: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: colors.textSecondary, marginBottom: 8 }}>Statut</div>
               {[["Actif", "#10B981"], ["Inactif", "#EF4444"]].map(([s, c]) => (
                 <div key={s} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                   <div style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: c }} />
-                  <span style={{ fontSize: 11, color: "#6B7280" }}>{s}</span>
+                  <span style={{ fontSize: 11, color: colors.textSecondary }}>{s}</span>
                 </div>
               ))}
             </div>
           </div>
 
-          <div style={{ backgroundColor: "white", borderRadius: 14, padding: "20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, overflowY: "auto", maxHeight: 320 }}>
-            <h4 style={{ margin: "0 0 14px", fontSize: 13, fontWeight: 700, color: "#0A1628" }}>
+          <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, overflowY: "auto", maxHeight: 320 }}>
+            <h4 style={{ margin: "0 0 14px", fontSize: 13, fontWeight: 700, color: colors.navy }}>
               Structures {!loading && `(${etablissements.length})`}
             </h4>
             {loading ? (
-              <div style={{ color: "#9CA3AF", fontSize: 13 }}>Chargement…</div>
+              <div style={{ color: colors.textMuted, fontSize: 13 }}>Chargement…</div>
             ) : etablissements.length === 0 ? (
-              <div style={{ color: "#9CA3AF", fontSize: 13 }}>Aucun établissement enregistré.</div>
+              <div style={{ color: colors.textMuted, fontSize: 13 }}>Aucun établissement enregistré.</div>
             ) : (
               parVille.map(([ville, liste]) => (
                 <div key={ville} style={{ marginBottom: 14 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>{ville}</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: colors.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>{ville}</div>
                   {liste.map((e) => (
-                    <div key={e.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "1px solid #F3F4F6" }}>
+                    <div key={e.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "1px solid var(--border-light)" }}>
                       <div>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: "#0A1628" }}>{e.nom}</div>
-                        <div style={{ fontSize: 10, color: "#9CA3AF" }}>{e.type ?? "—"}</div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: colors.navy }}>{e.nom}</div>
+                        <div style={{ fontSize: 10, color: colors.textMuted }}>{e.type ?? "—"}</div>
                       </div>
                       <div style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: e.actif ? "#10B981" : "#EF4444", flexShrink: 0 }} />
                     </div>

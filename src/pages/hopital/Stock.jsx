@@ -1,3 +1,4 @@
+import { colors } from "../../theme";
 import { useState } from "react";
 import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
@@ -148,7 +149,7 @@ export default function Stock() {
           {["tous", "critique", "alerte", "normal"].map((f) => (
             <button key={f} onClick={() => setFilter(f)} style={{
               padding: "7px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", textTransform: "capitalize",
-              border: filter === f ? "2px solid #10B981" : "1.5px solid #E5E7EB",
+              border: filter === f ? "2px solid #10B981" : "1.5px solid var(--border)",
               backgroundColor: filter === f ? "#DCFCE7" : "white",
               color: filter === f ? "#16A34A" : "#6B7280",
             }}>{f}</button>
@@ -166,9 +167,9 @@ export default function Stock() {
           { label: "Valeur stock",      value: loading ? "…" : `${(valeurStock / 1000000).toFixed(1)}M FCFA`, color: "#3B82F6" },
           { label: "En alerte",         value: loading ? "…" : withStatut.filter(p => p.statut === "alerte").length, color: "#F59E0B" },
         ].map((s) => (
-          <div key={s.label} style={{ backgroundColor: "white", padding: "14px 20px", borderRadius: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${s.color}` }}>
+          <div key={s.label} style={{ backgroundColor: colors.bgCard, padding: "14px 20px", borderRadius: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${s.color}` }}>
             <div style={{ fontSize: 22, fontWeight: 800, color: s.color }}>{s.value}</div>
-            <div style={{ fontSize: 12, color: "#6B7280" }}>{s.label}</div>
+            <div style={{ fontSize: 12, color: colors.textSecondary }}>{s.label}</div>
           </div>
         ))}
       </div>
@@ -179,36 +180,36 @@ export default function Stock() {
         </div>
       )}
 
-      <div style={{ backgroundColor: "white", borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
+      <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
         <div className="table-scroll"><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
-            <tr style={{ backgroundColor: "#F8FAFC" }}>
+            <tr style={{ backgroundColor: colors.bgSurface }}>
               {["Produit", "DCI / Forme", "Stock actuel", "Stock min.", "Prix unitaire", "Catégorie", "Statut", "Actions"].map((h) => (
-                <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: 12, fontWeight: 700, color: "#6B7280", borderBottom: "1px solid #E5E7EB" }}>{h}</th>
+                <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: 12, fontWeight: 700, color: colors.textSecondary, borderBottom: "1px solid var(--border)" }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading && [1,2,3,4,5].map((i) => (
-              <tr key={i} style={{ borderBottom: "1px solid #F3F4F6", animation: "pulse 1.5s ease-in-out infinite" }}>
+              <tr key={i} style={{ borderBottom: "1px solid var(--border-light)", animation: "pulse 1.5s ease-in-out infinite" }}>
                 {[180,120,60,60,100,100,70,80].map((w, j) => (
-                  <td key={j} style={{ padding: "13px 16px" }}><div style={{ height: 13, width: w, backgroundColor: "#F3F4F6", borderRadius: 6 }} /></td>
+                  <td key={j} style={{ padding: "13px 16px" }}><div style={{ height: 13, width: w, backgroundColor: colors.borderLight, borderRadius: 6 }} /></td>
                 ))}
               </tr>
             ))}
             {!loading && filtered.length === 0 && (
-              <tr><td colSpan={8} style={{ padding: 40, textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>Aucun produit trouvé</td></tr>
+              <tr><td colSpan={8} style={{ padding: 40, textAlign: "center", color: colors.textMuted, fontSize: 13 }}>Aucun produit trouvé</td></tr>
             )}
             {!loading && filtered.map((p) => {
               const s = statusStyle[p.statut];
               return (
-                <tr key={p.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                  <td style={{ padding: "13px 16px", fontWeight: 600, color: "#0A1628" }}>{p.nom}</td>
-                  <td style={{ padding: "13px 16px", color: "#6B7280" }}>{p.dci ?? "—"}{p.forme ? ` · ${p.forme}` : ""}</td>
+                <tr key={p.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
+                  <td style={{ padding: "13px 16px", fontWeight: 600, color: colors.navy }}>{p.nom}</td>
+                  <td style={{ padding: "13px 16px", color: colors.textSecondary }}>{p.dci ?? "—"}{p.forme ? ` · ${p.forme}` : ""}</td>
                   <td style={{ padding: "13px 16px", fontWeight: 700, color: (p.stock_actuel ?? 0) < (p.stock_minimum ?? 0) ? "#EF4444" : "#374151" }}>{p.stock_actuel ?? 0}</td>
-                  <td style={{ padding: "13px 16px", color: "#9CA3AF" }}>{p.stock_minimum ?? 0}</td>
-                  <td style={{ padding: "13px 16px", color: "#6B7280" }}>{(p.prix_unitaire ?? 0).toLocaleString()} FCFA</td>
-                  <td style={{ padding: "13px 16px", color: "#6B7280" }}>{p.categorie ?? "—"}</td>
+                  <td style={{ padding: "13px 16px", color: colors.textMuted }}>{p.stock_minimum ?? 0}</td>
+                  <td style={{ padding: "13px 16px", color: colors.textSecondary }}>{(p.prix_unitaire ?? 0).toLocaleString()} FCFA</td>
+                  <td style={{ padding: "13px 16px", color: colors.textSecondary }}>{p.categorie ?? "—"}</td>
                   <td style={{ padding: "13px 16px" }}>
                     <span style={{ padding: "3px 10px", backgroundColor: s.bg, color: s.color, borderRadius: 10, fontSize: 11, fontWeight: 700 }}>{s.label}</span>
                   </td>

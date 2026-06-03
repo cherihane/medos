@@ -1,3 +1,4 @@
+import { colors } from "../../theme";
 import { useMemo } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import Layout from "../../components/Layout";
@@ -78,19 +79,19 @@ export default function Rapports() {
     <Layout title="Rapports Hospitaliers" subtitle="Tableaux de bord et rapports de performance">
       <div className="kpi-row">
         {kpis.map((k) => (
-          <div key={k.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "18px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
+          <div key={k.label} style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "18px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
             <div style={{ fontSize: 22, fontWeight: 800, color: k.color }}>{k.value}</div>
-            <div style={{ fontSize: 12, color: "#6B7280" }}>{k.label}</div>
+            <div style={{ fontSize: 12, color: colors.textSecondary }}>{k.label}</div>
           </div>
         ))}
       </div>
 
-      <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 20, minWidth: 0 }}>
-        <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Ordonnances mensuelles</h3>
+      <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 20, minWidth: 0 }}>
+        <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Ordonnances mensuelles</h3>
         {loading ? (
-          <div style={{ height: 220, display: "flex", alignItems: "center", justifyContent: "center", color: "#9CA3AF", fontSize: 14 }}>Chargement…</div>
+          <div style={{ height: 220, display: "flex", alignItems: "center", justifyContent: "center", color: colors.textMuted, fontSize: 14 }}>Chargement…</div>
         ) : ordonnances.length === 0 ? (
-          <div style={{ height: 220, display: "flex", alignItems: "center", justifyContent: "center", color: "#9CA3AF", fontSize: 14 }}>Aucune ordonnance enregistrée.</div>
+          <div style={{ height: 220, display: "flex", alignItems: "center", justifyContent: "center", color: colors.textMuted, fontSize: 14 }}>Aucune ordonnance enregistrée.</div>
         ) : (
           <div style={{ width: "100%", height: 220 }}>
             <ResponsiveContainer width="100%" height="100%">
@@ -105,9 +106,9 @@ export default function Rapports() {
         )}
       </div>
 
-      <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+      <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Synthese</h3>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: colors.navy }}>Synthese</h3>
           <button
             onClick={async () => { const etab = await fetchEtabFromAuth(auth); exportRapportGlobal(etab, monthlyData, kpis); }}
             style={{ padding: "7px 16px", backgroundColor: "#10B981", color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
@@ -117,23 +118,23 @@ export default function Rapports() {
         </div>
 
         {loading ? (
-          <div style={{ padding: "32px", textAlign: "center", color: "#9CA3AF", fontSize: 14 }}>Chargement…</div>
+          <div style={{ padding: "32px", textAlign: "center", color: colors.textMuted, fontSize: 14 }}>Chargement…</div>
         ) : (
           <div className="dash-grid-2">
             <div style={{ padding: "16px", backgroundColor: "#F0FDF4", borderRadius: 10 }}>
-              <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>Ordonnances ce mois</div>
+              <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 4 }}>Ordonnances ce mois</div>
               <div style={{ fontSize: 24, fontWeight: 800, color: "#10B981" }}>{ordMoisActuel.length}</div>
             </div>
             <div style={{ padding: "16px", backgroundColor: "#EFF6FF", borderRadius: 10 }}>
-              <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>Medicaments en base</div>
+              <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 4 }}>Medicaments en base</div>
               <div style={{ fontSize: 24, fontWeight: 800, color: "#3B82F6" }}>{medicaments.length}</div>
             </div>
             <div style={{ padding: "16px", backgroundColor: "#F5F3FF", borderRadius: 10 }}>
-              <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>Taux de disponibilite</div>
+              <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 4 }}>Taux de disponibilite</div>
               <div style={{ fontSize: 24, fontWeight: 800, color: "#8B5CF6" }}>{tauxDispo}%</div>
             </div>
             <div style={{ padding: "16px", backgroundColor: ruptures > 0 ? "#FEF2F2" : "#F0FDF4", borderRadius: 10 }}>
-              <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>Ruptures de stock</div>
+              <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 4 }}>Ruptures de stock</div>
               <div style={{ fontSize: 24, fontWeight: 800, color: ruptures > 0 ? "#EF4444" : "#10B981" }}>{ruptures}</div>
             </div>
           </div>

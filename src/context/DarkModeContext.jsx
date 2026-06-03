@@ -4,13 +4,25 @@ const DarkModeContext = createContext({ dark: false, toggleDark: () => {} });
 
 export function DarkModeProvider({ children }) {
   const [dark, setDark] = useState(() => {
-    try { return localStorage.getItem("medos_dark") === "1"; }
+    try {
+      const saved = localStorage.getItem("medos_dark") === "1";
+      // Applique immediatement la classe pour eviter le flash blanc au chargement
+      if (saved) document.documentElement.classList.add("dark");
+      return saved;
+    }
     catch { return false; }
   });
 
   useEffect(() => {
     try { localStorage.setItem("medos_dark", dark ? "1" : "0"); }
     catch {}
+    // Applique la classe "dark" sur <html> — les CSS vars :root.dark s'activent
+    if (dark) {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+    // Garde aussi data-theme pour compatibilite avec les regles CSS existantes
     document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
   }, [dark]);
 

@@ -1,3 +1,4 @@
+import { colors } from "../theme";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
@@ -5,13 +6,13 @@ import { supabase } from "../supabaseClient";
 const inputStyle = {
   width: "100%",
   padding: "11px 14px",
-  border: "1.5px solid #E5E7EB",
+  border: "1.5px solid var(--border)",
   borderRadius: 10,
   fontSize: 14,
   outline: "none",
   boxSizing: "border-box",
-  color: "#0A1628",
-  backgroundColor: "white",
+  color: colors.navy,
+  backgroundColor: colors.bgCard,
 };
 
 export default function ReinitialisationMotDePasse() {
@@ -82,7 +83,7 @@ export default function ReinitialisationMotDePasse() {
   return (
     <div style={{
       minHeight: "100vh",
-      backgroundColor: "#F0F4FB",
+      backgroundColor: colors.bg,
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
@@ -90,7 +91,7 @@ export default function ReinitialisationMotDePasse() {
       padding: 20,
     }}>
       <div style={{
-        backgroundColor: "white",
+        backgroundColor: colors.bgCard,
         borderRadius: 20,
         padding: "48px 44px",
         boxShadow: "0 4px 24px rgba(0,0,0,0.08)",
@@ -107,10 +108,10 @@ export default function ReinitialisationMotDePasse() {
               <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
             </svg>
           </div>
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: "#0A1628" }}>
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: colors.navy }}>
             Nouveau mot de passe
           </h1>
-          <p style={{ margin: "8px 0 0", fontSize: 13, color: "#6B7280" }}>
+          <p style={{ margin: "8px 0 0", fontSize: 13, color: colors.textSecondary }}>
             Choisissez un mot de passe sécurisé pour votre compte MedOS.
           </p>
         </div>
@@ -169,7 +170,7 @@ export default function ReinitialisationMotDePasse() {
         {!success && tokenReady && (
           <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
             <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: colors.text, marginBottom: 6 }}>
                 Nouveau mot de passe
               </label>
               <input
@@ -183,7 +184,7 @@ export default function ReinitialisationMotDePasse() {
             </div>
 
             <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: colors.text, marginBottom: 6 }}>
                 Confirmer le mot de passe
               </label>
               <input
@@ -215,7 +216,7 @@ export default function ReinitialisationMotDePasse() {
                     );
                   })}
                 </div>
-                <div style={{ fontSize: 11, color: "#9CA3AF" }}>
+                <div style={{ fontSize: 11, color: colors.textMuted }}>
                   {password.length < 8 ? "Trop court" : password.length < 10 ? "Acceptable" : password.length >= 12 && /[A-Z]/.test(password) && /[0-9]/.test(password) ? "Très sécurisé" : "Bon"}
                 </div>
               </div>
@@ -258,7 +259,7 @@ export default function ReinitialisationMotDePasse() {
                 onClick={() => navigate("/")}
                 style={{
                   background: "none", border: "none",
-                  color: "#9CA3AF", fontSize: 12,
+                  color: colors.textMuted, fontSize: 12,
                   cursor: "pointer", textDecoration: "underline",
                 }}
               >

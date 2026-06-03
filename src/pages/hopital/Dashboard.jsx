@@ -44,7 +44,7 @@ function severiteStyle(severite) {
 function Skeleton({ height = 16, width = "100%", mb = 8 }) {
   return (
     <div style={{
-      height, width, backgroundColor: "#F3F4F6", borderRadius: 6, marginBottom: mb,
+      height, width, backgroundColor: colors.borderLight, borderRadius: 6, marginBottom: mb,
       animation: "pulse 1.5s ease-in-out infinite",
     }} />
   );
@@ -67,7 +67,7 @@ function KpiSection() {
     return (
       <div className="kpi-row">
         {[1, 2, 3, 4].map((i) => (
-          <div key={i} style={{ flex: 1, backgroundColor: "white", borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <div key={i} style={{ flex: 1, backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
             <Skeleton height={36} width={36} mb={12} />
             <Skeleton height={28} width="60%" mb={8} />
             <Skeleton height={14} width="80%" mb={0} />
@@ -84,7 +84,7 @@ function KpiSection() {
           key={k.label}
           onClick={() => navigate(k.to)}
           style={{
-            backgroundColor: "white", borderRadius: 14, padding: "20px 24px",
+            backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px 24px",
             boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1,
             borderLeft: `4px solid ${k.color}`,
             cursor: "pointer",
@@ -102,7 +102,7 @@ function KpiSection() {
               }}>{k.change}</span>
             )}
           </div>
-          <div style={{ fontSize: 12, color: "#6B7280" }}>{k.label}</div>
+          <div style={{ fontSize: 12, color: colors.textSecondary }}>{k.label}</div>
         </div>
       ))}
     </div>
@@ -117,9 +117,9 @@ function AlertesPanel() {
   const isLive  = !loading && !error && data.length > 0;
 
   return (
-    <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+    <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Alertes actives</h3>
+        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: colors.navy }}>Alertes actives</h3>
         <span style={{
           fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10,
           backgroundColor: isLive ? "#DCFCE7" : "#F3F4F6",
@@ -132,7 +132,7 @@ function AlertesPanel() {
       {loading && [1,2,3].map((i) => <Skeleton key={i} height={44} mb={8} />)}
 
       {!loading && alertes.length === 0 && (
-        <div style={{ fontSize: 13, color: "#9CA3AF", textAlign: "center", padding: "20px 0" }}>
+        <div style={{ fontSize: 13, color: colors.textMuted, textAlign: "center", padding: "20px 0" }}>
           Aucune alerte active
         </div>
       )}
@@ -145,9 +145,9 @@ function AlertesPanel() {
             borderRadius: 10, marginBottom: 8, backgroundColor: bg,
             borderLeft: `4px solid ${border}`,
           }}>
-            <span style={{ fontSize: 13, color: "#374151", fontWeight: 500 }}>{a.titre}</span>
+            <span style={{ fontSize: 13, color: colors.text, fontWeight: 500 }}>{a.titre}</span>
             {a.message && a.message !== a.titre && (
-              <span style={{ fontSize: 11, color: "#6B7280", marginTop: 2 }}>{a.message}</span>
+              <span style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>{a.message}</span>
             )}
           </div>
         );
@@ -163,18 +163,18 @@ function PatientsPanel() {
   const recent = data.slice(0, 5);
 
   return (
-    <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+    <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Patients enregistrés</h3>
+        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: colors.navy }}>Patients enregistrés</h3>
         {!loading && (
-          <span style={{ fontSize: 12, color: "#6B7280" }}>{data.length} total</span>
+          <span style={{ fontSize: 12, color: colors.textSecondary }}>{data.length} total</span>
         )}
       </div>
 
       {loading && [1,2,3].map((i) => <Skeleton key={i} height={40} mb={8} />)}
 
       {!loading && recent.length === 0 && (
-        <div style={{ fontSize: 12, color: "#9CA3AF", textAlign: "center", padding: "20px 0" }}>
+        <div style={{ fontSize: 12, color: colors.textMuted, textAlign: "center", padding: "20px 0" }}>
           Aucun patient enregistré
         </div>
       )}
@@ -184,7 +184,7 @@ function PatientsPanel() {
           {recent.map((p) => (
             <div key={p.id} style={{
               display: "flex", justifyContent: "space-between", alignItems: "center",
-              padding: "10px 0", borderBottom: "1px solid #F3F4F6",
+              padding: "10px 0", borderBottom: "1px solid var(--border-light)",
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <div style={{
@@ -196,17 +196,17 @@ function PatientsPanel() {
                   {p.prenom?.[0]}{p.nom?.[0]}
                 </div>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "#0A1628" }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: colors.navy }}>
                     {p.prenom} {p.nom}
                   </div>
-                  <div style={{ fontSize: 11, color: "#9CA3AF" }}>
+                  <div style={{ fontSize: 11, color: colors.textMuted }}>
                     {p.antecedents?.length > 0 ? p.antecedents.join(", ") : "Aucun antécédent"}
                   </div>
                 </div>
               </div>
               <span style={{
                 fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 8,
-                backgroundColor: "#F3F4F6", color: "#6B7280",
+                backgroundColor: colors.borderLight, color: colors.textSecondary,
               }}>
                 {p.groupe_sanguin || "—"}
               </span>
@@ -216,8 +216,8 @@ function PatientsPanel() {
       )}
 
       {/* Occupation des services */}
-      <h3 style={{ margin: "20px 0 14px", fontSize: 14, fontWeight: 700, color: "#0A1628" }}>Occupation des services</h3>
-      <div style={{ fontSize: 13, color: "#9CA3AF", textAlign: "center", padding: "16px 0" }}>
+      <h3 style={{ margin: "20px 0 14px", fontSize: 14, fontWeight: 700, color: colors.navy }}>Occupation des services</h3>
+      <div style={{ fontSize: 13, color: colors.textMuted, textAlign: "center", padding: "16px 0" }}>
         Aucune donnée d'occupation disponible.<br />
         <span style={{ fontSize: 12 }}>Connectez un module de gestion des lits pour afficher les taux en temps réel.</span>
       </div>
@@ -244,9 +244,9 @@ export default function DashboardHopital() {
       </div>
 
       <div className="dash-grid-2" style={{ marginTop: 20 }}>
-        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <h3 style={{ margin: "0 0 8px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Dispensation médicaments</h3>
-          <p style={{ margin: 0, fontSize: 13, color: "#9CA3AF" }}>Données de dispensation disponibles après enregistrement des ventes en caisse.</p>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <h3 style={{ margin: "0 0 8px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Dispensation médicaments</h3>
+          <p style={{ margin: 0, fontSize: 13, color: colors.textMuted }}>Données de dispensation disponibles après enregistrement des ventes en caisse.</p>
         </div>
         <PredictionsIA />
       </div>

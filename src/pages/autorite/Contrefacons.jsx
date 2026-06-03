@@ -1,3 +1,4 @@
+import { colors } from "../../theme";
 import { useState } from "react";
 import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
@@ -129,9 +130,9 @@ export default function Contrefacons() {
           { label: "Alertes",            value: loading ? "…" : incidents.filter(i => i.severite === "alerte").length,    color: "#8B5CF6" },
           { label: "Informations",       value: loading ? "…" : incidents.filter(i => i.severite === "info").length,      color: "#10B981" },
         ].map((k) => (
-          <div key={k.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "18px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
+          <div key={k.label} style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "18px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
             <div style={{ fontSize: 22, fontWeight: 800, color: k.color }}>{k.value}</div>
-            <div style={{ fontSize: 12, color: "#6B7280" }}>{k.label}</div>
+            <div style={{ fontSize: 12, color: colors.textSecondary }}>{k.label}</div>
           </div>
         ))}
       </div>
@@ -142,9 +143,9 @@ export default function Contrefacons() {
         </div>
       )}
 
-      <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+      <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
-          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: colors.navy }}>
             Incidents enregistrés ({loading ? "…" : incidents.length})
           </h3>
           <button
@@ -156,34 +157,34 @@ export default function Contrefacons() {
 
         <div className="table-scroll"><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
-            <tr style={{ backgroundColor: "#F8FAFC" }}>
+            <tr style={{ backgroundColor: colors.bgSurface }}>
               {["Date", "Titre", "Type", "Gravité", "Actions"].map((h) => (
-                <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontSize: 12, fontWeight: 700, color: "#6B7280", borderBottom: "1px solid #E5E7EB" }}>{h}</th>
+                <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontSize: 12, fontWeight: 700, color: colors.textSecondary, borderBottom: "1px solid var(--border)" }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading && [1,2,3].map((i) => (
-              <tr key={i} style={{ borderBottom: "1px solid #F3F4F6", animation: "pulse 1.5s ease-in-out infinite" }}>
+              <tr key={i} style={{ borderBottom: "1px solid var(--border-light)", animation: "pulse 1.5s ease-in-out infinite" }}>
                 {[80,200,100,80,120].map((w, j) => (
-                  <td key={j} style={{ padding: "12px 14px" }}><div style={{ height: 13, width: w, backgroundColor: "#F3F4F6", borderRadius: 6 }} /></td>
+                  <td key={j} style={{ padding: "12px 14px" }}><div style={{ height: 13, width: w, backgroundColor: colors.borderLight, borderRadius: 6 }} /></td>
                 ))}
               </tr>
             ))}
             {!loading && incidents.length === 0 && (
-              <tr><td colSpan={5} style={{ padding: 40, textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>Aucun incident de contrefaçon enregistré</td></tr>
+              <tr><td colSpan={5} style={{ padding: 40, textAlign: "center", color: colors.textMuted, fontSize: 13 }}>Aucun incident de contrefaçon enregistré</td></tr>
             )}
             {!loading && incidents.map((inc) => {
               const g = graviteStyle[inc.severite] ?? graviteStyle.info;
               const isActioning = actioning === inc.id;
               return (
-                <tr key={inc.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                  <td style={{ padding: "12px 14px", color: "#9CA3AF", fontSize: 12 }}>{fmt(inc.created_at)}</td>
-                  <td style={{ padding: "12px 14px", fontWeight: 600, color: "#0A1628" }}>
+                <tr key={inc.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
+                  <td style={{ padding: "12px 14px", color: colors.textMuted, fontSize: 12 }}>{fmt(inc.created_at)}</td>
+                  <td style={{ padding: "12px 14px", fontWeight: 600, color: colors.navy }}>
                     {inc.titre}
-                    {inc.message && <div style={{ fontSize: 11, color: "#6B7280", marginTop: 2, fontWeight: 400 }}>{inc.message.slice(0, 80)}{inc.message.length > 80 ? "…" : ""}</div>}
+                    {inc.message && <div style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2, fontWeight: 400 }}>{inc.message.slice(0, 80)}{inc.message.length > 80 ? "…" : ""}</div>}
                   </td>
-                  <td style={{ padding: "12px 14px", color: "#6B7280" }}>{inc.type}</td>
+                  <td style={{ padding: "12px 14px", color: colors.textSecondary }}>{inc.type}</td>
                   <td style={{ padding: "12px 14px" }}>
                     <span style={{ padding: "3px 10px", backgroundColor: g.bg, color: g.color, borderRadius: 10, fontSize: 11, fontWeight: 700 }}>{inc.severite}</span>
                   </td>

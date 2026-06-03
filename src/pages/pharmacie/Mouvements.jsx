@@ -1,3 +1,4 @@
+import { colors } from "../../theme";
 import { useState, useEffect, useCallback } from "react";
 import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
@@ -17,10 +18,10 @@ function todayISO() { return new Date().toISOString().slice(0, 10); }
 
 function Skeleton() {
   return [1, 2, 3, 4, 5].map((i) => (
-    <tr key={i} style={{ borderBottom: "1px solid #F3F4F6", animation: "pulse 1.5s ease-in-out infinite" }}>
+    <tr key={i} style={{ borderBottom: "1px solid var(--border-light)", animation: "pulse 1.5s ease-in-out infinite" }}>
       {[140, 80, 60, 80, 120, 90, 100].map((w, j) => (
         <td key={j} style={{ padding: "13px 16px" }}>
-          <div style={{ height: 13, width: w, backgroundColor: "#F3F4F6", borderRadius: 6 }} />
+          <div style={{ height: 13, width: w, backgroundColor: colors.borderLight, borderRadius: 6 }} />
         </td>
       ))}
     </tr>
@@ -103,7 +104,7 @@ function ReceptionModal({ medicaments, fournisseurs, auth, onClose, onSaved }) {
         </div>
       )}
       <ModalFooter>
-        <button onClick={onClose} style={{ padding: "9px 20px", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", backgroundColor: "white", color: "#374151" }}>
+        <button onClick={onClose} style={{ padding: "9px 20px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", backgroundColor: colors.bgCard, color: colors.text }}>
           Annuler
         </button>
         <button onClick={handleSave} disabled={saving} style={{ padding: "9px 20px", backgroundColor: saving ? "#E5E7EB" : "#10B981", color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer" }}>

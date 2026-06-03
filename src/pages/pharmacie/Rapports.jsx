@@ -1,3 +1,4 @@
+import { colors } from "../../theme";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import * as XLSX from "xlsx";
 import Layout from "../../components/Layout";
@@ -241,7 +242,7 @@ function ExportBtn({ label, desc, color, onClick }) {
       }}
     >
       <span style={{ fontSize: 13, fontWeight: 700, color }}>{label}</span>
-      <span style={{ fontSize: 11, color: "#6B7280", marginTop: 3 }}>{desc}</span>
+      <span style={{ fontSize: 11, color: colors.textSecondary, marginTop: 3 }}>{desc}</span>
     </button>
   );
 }
@@ -306,9 +307,9 @@ export default function Rapports() {
       {/* ── KPI ── */}
       <div className="kpi-row">
         {kpis.map((k) => (
-          <div key={k.label} style={{ backgroundColor: "white", padding: "18px 22px", borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
+          <div key={k.label} style={{ backgroundColor: colors.bgCard, padding: "18px 22px", borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
             <div style={{ fontSize: 22, fontWeight: 800, color: k.color }}>{k.value}</div>
-            <div style={{ fontSize: 12, color: "#6B7280" }}>{k.label}</div>
+            <div style={{ fontSize: 12, color: colors.textSecondary }}>{k.label}</div>
             <div style={{ fontSize: 11, color: k.color, marginTop: 4, fontWeight: 600 }}>{k.pct}</div>
           </div>
         ))}
@@ -316,10 +317,10 @@ export default function Rapports() {
 
       <div className="dash-grid-2-1" style={{ marginBottom: 20 }}>
         {/* Stock par catégorie */}
-        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", minWidth: 0 }}>
-          <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Stock par catégorie</h3>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", minWidth: 0 }}>
+          <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Stock par catégorie</h3>
           {loading ? (
-            <div style={{ height: 220, backgroundColor: "#F8FAFC", borderRadius: 8, animation: "pulse 1.5s ease-in-out infinite" }} />
+            <div style={{ height: 220, backgroundColor: colors.bgSurface, borderRadius: 8, animation: "pulse 1.5s ease-in-out infinite" }} />
           ) : (
             <div style={{ width: "100%", height: 220 }}>
               <ResponsiveContainer width="100%" height="100%">
@@ -335,10 +336,10 @@ export default function Rapports() {
         </div>
 
         {/* Répartition catégories */}
-        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Catégories</h3>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Catégories</h3>
           {loading ? (
-            <div style={{ height: 160, backgroundColor: "#F8FAFC", borderRadius: 8, animation: "pulse 1.5s ease-in-out infinite" }} />
+            <div style={{ height: 160, backgroundColor: colors.bgSurface, borderRadius: 8, animation: "pulse 1.5s ease-in-out infinite" }} />
           ) : (
             <>
               <div style={{ width: "100%", height: 160 }}>
@@ -355,7 +356,7 @@ export default function Rapports() {
                 {pieData.map((d, i) => (
                   <div key={d.name} style={{ display: "flex", alignItems: "center", gap: 4 }}>
                     <div style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: COLORS[i % COLORS.length] }} />
-                    <span style={{ fontSize: 11, color: "#6B7280" }}>{d.name} ({d.value})</span>
+                    <span style={{ fontSize: 11, color: colors.textSecondary }}>{d.name} ({d.value})</span>
                   </div>
                 ))}
               </div>
@@ -366,31 +367,31 @@ export default function Rapports() {
 
       {/* Alertes par type + rapports */}
       <div className="dash-grid-2">
-        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Alertes par type</h3>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Alertes par type</h3>
           {loading ? (
-            [1,2,3].map((i) => <div key={i} style={{ height: 36, backgroundColor: "#F8FAFC", borderRadius: 8, marginBottom: 8, animation: "pulse 1.5s ease-in-out infinite" }} />)
+            [1,2,3].map((i) => <div key={i} style={{ height: 36, backgroundColor: colors.bgSurface, borderRadius: 8, marginBottom: 8, animation: "pulse 1.5s ease-in-out infinite" }} />)
           ) : Object.entries(byType).length === 0 ? (
-            <div style={{ color: "#9CA3AF", fontSize: 13 }}>Aucune alerte active</div>
+            <div style={{ color: colors.textMuted, fontSize: 13 }}>Aucune alerte active</div>
           ) : (
             Object.entries(byType).map(([type, count]) => (
-              <div key={type} style={{ display: "flex", justifyContent: "space-between", padding: "10px 14px", backgroundColor: "#F8FAFC", borderRadius: 8, marginBottom: 8 }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: "#374151", textTransform: "capitalize" }}>{type}</span>
+              <div key={type} style={{ display: "flex", justifyContent: "space-between", padding: "10px 14px", backgroundColor: colors.bgSurface, borderRadius: 8, marginBottom: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: colors.text, textTransform: "capitalize" }}>{type}</span>
                 <span style={{ fontSize: 13, fontWeight: 800, color: "#EF4444" }}>{count}</span>
               </div>
             ))
           )}
         </div>
 
-        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Rapports disponibles</h3>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Rapports disponibles</h3>
           {rapportsDispo.map((r) => (
-            <div key={r.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 0", borderBottom: "1px solid #F3F4F6" }}>
+            <div key={r.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 0", borderBottom: "1px solid var(--border-light)" }}>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#0A1628" }}>{r.name}</div>
-                <div style={{ fontSize: 11, color: "#9CA3AF" }}>{r.date} · {r.pages}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: colors.navy }}>{r.name}</div>
+                <div style={{ fontSize: 11, color: colors.textMuted }}>{r.date} · {r.pages}</div>
               </div>
-              <button onClick={async () => { const etab = await fetchEtabFromAuth(auth); exportRapport(r.name, { medicaments, alertes, patients }, etab); }} style={{ padding: "6px 14px", backgroundColor: "#F8FAFC", color: "#374151", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>
+              <button onClick={async () => { const etab = await fetchEtabFromAuth(auth); exportRapport(r.name, { medicaments, alertes, patients }, etab); }} style={{ padding: "6px 14px", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>
                 Exporter
               </button>
             </div>
@@ -398,8 +399,8 @@ export default function Rapports() {
         </div>
       </div>
       {/* ── Exports avances ── */}
-      <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginTop: 20 }}>
-        <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Exports avances</h3>
+      <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginTop: 20 }}>
+        <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Exports avances</h3>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
           <ExportBtn
             label="CSV — Journal des ventes"

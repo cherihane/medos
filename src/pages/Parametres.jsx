@@ -90,27 +90,27 @@ const ROLES_INTERNES = {
 const inputStyle = {
   width: "100%",
   padding: "9px 13px",
-  border: "1.5px solid #E5E7EB",
+  border: "1.5px solid var(--border)",
   borderRadius: 8,
   fontSize: 13,
   outline: "none",
   boxSizing: "border-box",
-  color: "#0A1628",
-  backgroundColor: "white",
+  color: colors.navy,
+  backgroundColor: colors.bgCard,
 };
 
 const readonlyInputStyle = {
   ...inputStyle,
-  backgroundColor: "#F8FAFC",
-  color: "#6B7280",
+  backgroundColor: colors.bgSurface,
+  color: colors.textSecondary,
   cursor: "default",
 };
 
 function Card({ title, children, action }) {
   return (
-    <div style={{ backgroundColor: "white", borderRadius: 14, padding: "22px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 20 }}>
+    <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "22px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
-        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>{title}</h3>
+        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: colors.navy }}>{title}</h3>
         {action}
       </div>
       {children}
@@ -121,7 +121,7 @@ function Card({ title, children, action }) {
 function Field({ label, required, children }) {
   return (
     <div style={{ marginBottom: 14 }}>
-      <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 5 }}>
+      <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: colors.text, marginBottom: 5 }}>
         {label}{required && <span style={{ color: "#EF4444", marginLeft: 2 }}>*</span>}
       </label>
       {children}
@@ -153,7 +153,7 @@ function PermissionsCheckboxes({ role, selected, onChange }) {
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-        <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#374151" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, fontWeight: 700, color: colors.text }}>
           <input
             type="checkbox"
             checked={allChecked}
@@ -251,7 +251,7 @@ function SectionEtablissement({ etablissement_id }) {
 
   if (!etab) return (
     <Card title="Informations de l'établissement">
-      <div style={{ color: "#9CA3AF", fontSize: 13 }}>Chargement…</div>
+      <div style={{ color: colors.textMuted, fontSize: 13 }}>Chargement…</div>
     </Card>
   );
 
@@ -300,7 +300,7 @@ function SectionEtablissement({ etablissement_id }) {
 
         {editing && (
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
-            <button onClick={handleCancel} style={{ padding: "8px 18px", backgroundColor: "white", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 13, color: "#6B7280", cursor: "pointer" }}>
+            <button onClick={handleCancel} style={{ padding: "8px 18px", backgroundColor: colors.bgCard, border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 13, color: colors.textSecondary, cursor: "pointer" }}>
               Annuler
             </button>
             <button onClick={handleSave} disabled={saving} style={{ padding: "8px 18px", backgroundColor: saving ? "#E5E7EB" : "#10B981", color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer" }}>
@@ -477,8 +477,8 @@ function SectionPersonnel({ etablissement_id, role }) {
       >
         {/* ── Formulaire d'invitation ── */}
         {showInvite && (
-          <div style={{ backgroundColor: "#F8FAFC", borderRadius: 10, padding: "18px", marginBottom: 20, border: "1px solid #E5E7EB" }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#0A1628", marginBottom: 14 }}>Nouvelle invitation</div>
+          <div style={{ backgroundColor: colors.bgSurface, borderRadius: 10, padding: "18px", marginBottom: 20, border: "1px solid var(--border)" }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: colors.navy, marginBottom: 14 }}>Nouvelle invitation</div>
 
             <Row>
               <Field label="Email professionnel" required>
@@ -504,10 +504,10 @@ function SectionPersonnel({ etablissement_id, role }) {
 
             {/* Permissions */}
             <div style={{ marginBottom: 14 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 8 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: colors.text, marginBottom: 8 }}>
                 Pages accessibles <span style={{ color: "#EF4444" }}>*</span>
                 {inviteRole && (
-                  <span style={{ marginLeft: 8, fontSize: 11, color: "#6B7280", fontWeight: 400 }}>
+                  <span style={{ marginLeft: 8, fontSize: 11, color: colors.textSecondary, fontWeight: 400 }}>
                     — pré-remplies selon le rôle, modifiables
                   </span>
                 )}
@@ -519,7 +519,7 @@ function SectionPersonnel({ etablissement_id, role }) {
                   onChange={setInvitePerms}
                 />
               ) : (
-                <div style={{ fontSize: 12, color: "#9CA3AF" }}>Sélectionnez d'abord un rôle.</div>
+                <div style={{ fontSize: 12, color: colors.textMuted }}>Sélectionnez d'abord un rôle.</div>
               )}
             </div>
 
@@ -542,22 +542,22 @@ function SectionPersonnel({ etablissement_id, role }) {
         )}
 
         {/* ── Liste des membres ── */}
-        {loading && <div style={{ color: "#9CA3AF", fontSize: 13 }}>Chargement…</div>}
+        {loading && <div style={{ color: colors.textMuted, fontSize: 13 }}>Chargement…</div>}
         {!loading && membres.length === 0 && (
-          <div style={{ textAlign: "center", color: "#9CA3AF", fontSize: 13, padding: "24px 0" }}>
+          <div style={{ textAlign: "center", color: colors.textMuted, fontSize: 13, padding: "24px 0" }}>
             Aucun membre. Invitez votre premier collaborateur.
           </div>
         )}
         {!loading && membres.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {membres.map((m) => (
-              <div key={m.id} style={{ border: "1.5px solid #E5E7EB", borderRadius: 10, overflow: "hidden", opacity: m.actif ? 1 : 0.65 }}>
+              <div key={m.id} style={{ border: "1.5px solid var(--border)", borderRadius: 10, overflow: "hidden", opacity: m.actif ? 1 : 0.65 }}>
                 {/* Ligne principale */}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 160px auto auto auto", gap: 12, alignItems: "center", padding: "10px 14px", backgroundColor: m.actif ? "#F8FAFC" : "#F3F4F6" }}>
                   {/* Email */}
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "#0A1628" }}>{m.email}</div>
-                    <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: colors.navy }}>{m.email}</div>
+                    <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 1 }}>
                       {m.invitation_acceptee ? "Compte actif" : "Invitation en attente"}
                     </div>
                   </div>
@@ -567,7 +567,7 @@ function SectionPersonnel({ etablissement_id, role }) {
                     value={m.role_interne || ""}
                     disabled={!m.actif || updatingId === m.id}
                     onChange={(e) => handleChangeRole(m, e.target.value)}
-                    style={{ padding: "5px 8px", border: "1.5px solid #E5E7EB", borderRadius: 6, fontSize: 12, color: "#374151", cursor: m.actif ? "pointer" : "default", backgroundColor: "white" }}
+                    style={{ padding: "5px 8px", border: "1.5px solid var(--border)", borderRadius: 6, fontSize: 12, color: colors.text, cursor: m.actif ? "pointer" : "default", backgroundColor: colors.bgCard }}
                   >
                     {rolesDisponibles.map((r) => <option key={r} value={r}>{r}</option>)}
                   </select>
@@ -589,7 +589,7 @@ function SectionPersonnel({ etablissement_id, role }) {
                   <button
                     disabled={updatingId === m.id}
                     onClick={() => handleToggleActif(m)}
-                    style={{ padding: "5px 10px", borderRadius: 7, border: "1.5px solid", fontSize: 11, fontWeight: 600, cursor: updatingId === m.id ? "not-allowed" : "pointer", backgroundColor: "white", borderColor: m.actif ? "#FECACA" : "#D1FAE5", color: m.actif ? "#DC2626" : "#16A34A", whiteSpace: "nowrap" }}
+                    style={{ padding: "5px 10px", borderRadius: 7, border: "1.5px solid", fontSize: 11, fontWeight: 600, cursor: updatingId === m.id ? "not-allowed" : "pointer", backgroundColor: colors.bgCard, borderColor: m.actif ? "#FECACA" : "#D1FAE5", color: m.actif ? "#DC2626" : "#16A34A", whiteSpace: "nowrap" }}
                   >
                     {updatingId === m.id ? "…" : m.actif ? "Désactiver" : "Réactiver"}
                   </button>
@@ -597,14 +597,14 @@ function SectionPersonnel({ etablissement_id, role }) {
 
                 {/* Résumé permissions (toujours visible) */}
                 {editPermsId !== m.id && (
-                  <div style={{ padding: "6px 14px 8px", backgroundColor: "white", borderTop: "1px solid #F3F4F6", fontSize: 11, color: "#6B7280" }}>
+                  <div style={{ padding: "6px 14px 8px", backgroundColor: colors.bgCard, borderTop: "1px solid var(--border-light)", fontSize: 11, color: colors.textSecondary }}>
                     <span style={{ fontWeight: 600 }}>Accès : </span>{permsSummary(m)}
                   </div>
                 )}
 
                 {/* Panel édition permissions inline */}
                 {editPermsId === m.id && (
-                  <div style={{ padding: "14px 16px", backgroundColor: "white", borderTop: "1.5px solid #BFDBFE" }}>
+                  <div style={{ padding: "14px 16px", backgroundColor: colors.bgCard, borderTop: "1.5px solid #BFDBFE" }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: "#1D4ED8", marginBottom: 10 }}>
                       Modifier les permissions de {m.email}
                     </div>
@@ -616,7 +616,7 @@ function SectionPersonnel({ etablissement_id, role }) {
                     <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>
                       <button
                         onClick={() => setEditPermsId(null)}
-                        style={{ padding: "7px 16px", backgroundColor: "white", border: "1.5px solid #E5E7EB", borderRadius: 7, fontSize: 12, color: "#6B7280", cursor: "pointer" }}
+                        style={{ padding: "7px 16px", backgroundColor: colors.bgCard, border: "1.5px solid var(--border)", borderRadius: 7, fontSize: 12, color: colors.textSecondary, cursor: "pointer" }}
                       >
                         Annuler
                       </button>
@@ -636,9 +636,9 @@ function SectionPersonnel({ etablissement_id, role }) {
         )}
 
         {/* Note explicative */}
-        <div style={{ marginTop: 18, padding: "12px 14px", backgroundColor: "#F0F4FB", borderRadius: 10, border: "1px solid #DBEAFE" }}>
+        <div style={{ marginTop: 18, padding: "12px 14px", backgroundColor: colors.bg, borderRadius: 10, border: "1px solid #DBEAFE" }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: "#1D4ED8", marginBottom: 3 }}>Fonctionnement des permissions</div>
-          <div style={{ fontSize: 12, color: "#374151", lineHeight: 1.6 }}>
+          <div style={{ fontSize: 12, color: colors.text, lineHeight: 1.6 }}>
             Les permissions définissent exactement les pages visibles dans le menu de chaque membre.
             Elles sont appliquées dès la prochaine connexion du membre.
             Le rôle interne sert uniquement de catégorie — ce sont les cases cochées qui déterminent l'accès réel.
@@ -653,12 +653,12 @@ function SectionPersonnel({ etablissement_id, role }) {
 function SectionApparence() {
   const { dark, toggleDark } = useDarkMode();
   return (
-    <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px 28px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 24 }}>
-      <h2 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Apparence</h2>
+    <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px 28px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 24 }}>
+      <h2 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Apparence</h2>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>Mode sombre</div>
-          <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 2 }}>Fond #0F172A, cards #1E293B — reposant pour les longues sessions</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: colors.text }}>Mode sombre</div>
+          <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>Fond #0F172A, cards #1E293B — reposant pour les longues sessions</div>
         </div>
         <button
           onClick={toggleDark}
@@ -670,7 +670,7 @@ function SectionApparence() {
         >
           <div style={{
             position: "absolute", top: 3, left: dark ? 27 : 3, width: 22, height: 22,
-            borderRadius: "50%", backgroundColor: "white", boxShadow: "0 1px 4px rgba(0,0,0,0.2)",
+            borderRadius: "50%", backgroundColor: colors.bgCard, boxShadow: "0 1px 4px rgba(0,0,0,0.2)",
             transition: "left 0.2s",
           }} />
         </button>

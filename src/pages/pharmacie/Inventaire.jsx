@@ -1,3 +1,4 @@
+import { colors } from "../../theme";
 import { useState, useMemo } from "react";
 import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
@@ -28,10 +29,10 @@ const statusStyle = {
 
 function SkeletonRow() {
   return (
-    <tr style={{ borderBottom: "1px solid #F3F4F6", animation: "pulse 1.5s ease-in-out infinite" }}>
+    <tr style={{ borderBottom: "1px solid var(--border-light)", animation: "pulse 1.5s ease-in-out infinite" }}>
       {[80, 160, 90, 60, 100, 120, 80, 70, 100].map((w, i) => (
         <td key={i} style={{ padding: "13px 16px" }}>
-          <div style={{ height: 13, width: w, backgroundColor: "#F3F4F6", borderRadius: 6 }} />
+          <div style={{ height: 13, width: w, backgroundColor: colors.borderLight, borderRadius: 6 }} />
         </td>
       ))}
     </tr>
@@ -344,39 +345,39 @@ function ImportModal({ auth, onClose, onImported }) {
 
   return (
     <Modal title="Importer un inventaire CSV / Excel" onClose={onClose} width={640}>
-      <p style={{ fontSize: 12, color: "#6B7280", margin: "0 0 14px" }}>
-        Colonnes attendues : <code style={{ backgroundColor: "#F3F4F6", padding: "1px 5px", borderRadius: 4, fontSize: 11 }}>nom, catégorie, stock_actuel, stock_minimum, prix_unitaire, date_peremption</code>
+      <p style={{ fontSize: 12, color: colors.textSecondary, margin: "0 0 14px" }}>
+        Colonnes attendues : <code style={{ backgroundColor: colors.borderLight, padding: "1px 5px", borderRadius: 4, fontSize: 11 }}>nom, catégorie, stock_actuel, stock_minimum, prix_unitaire, date_peremption</code>
       </p>
       <input type="file" accept=".csv,.xlsx,.xls" onChange={handleFile} style={{ fontSize: 13, marginBottom: 14 }} />
       {err && <div style={{ fontSize: 12, color: "#EF4444", backgroundColor: "#FEF2F2", padding: "8px 12px", borderRadius: 8, marginBottom: 12 }}>{err}</div>}
       {preview && preview.length > 0 && (
         <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 8 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: colors.text, marginBottom: 8 }}>
             Aperçu — {rows.length} ligne{rows.length !== 1 ? "s" : ""} détectée{rows.length !== 1 ? "s" : ""}
           </div>
           <div className="table-scroll">
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
-                <tr style={{ backgroundColor: "#F8FAFC" }}>
+                <tr style={{ backgroundColor: colors.bgSurface }}>
                   {["Nom", "Catégorie", "Stock", "Minimum", "Prix unitaire", "Péremption"].map((h) => (
-                    <th key={h} style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, color: "#6B7280", fontSize: 11 }}>{h}</th>
+                    <th key={h} style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, color: colors.textSecondary, fontSize: 11 }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {preview.map((r, i) => (
-                  <tr key={i} style={{ borderBottom: "1px solid #F3F4F6" }}>
+                  <tr key={i} style={{ borderBottom: "1px solid var(--border-light)" }}>
                     <td style={{ padding: "6px 10px", fontWeight: 600 }}>{r.nom}</td>
-                    <td style={{ padding: "6px 10px", color: "#6B7280" }}>{r.categorie ?? "—"}</td>
+                    <td style={{ padding: "6px 10px", color: colors.textSecondary }}>{r.categorie ?? "—"}</td>
                     <td style={{ padding: "6px 10px" }}>{r.stock_actuel}</td>
                     <td style={{ padding: "6px 10px" }}>{r.stock_minimum}</td>
                     <td style={{ padding: "6px 10px" }}>{r.prix_unitaire.toLocaleString()} FCFA</td>
-                    <td style={{ padding: "6px 10px", color: "#6B7280" }}>{r.date_peremption ?? "—"}</td>
+                    <td style={{ padding: "6px 10px", color: colors.textSecondary }}>{r.date_peremption ?? "—"}</td>
                   </tr>
                 ))}
                 {rows.length > 5 && (
                   <tr>
-                    <td colSpan={6} style={{ padding: "6px 10px", color: "#9CA3AF", fontSize: 11 }}>… et {rows.length - 5} autre{rows.length - 5 !== 1 ? "s" : ""} ligne{rows.length - 5 !== 1 ? "s" : ""}</td>
+                    <td colSpan={6} style={{ padding: "6px 10px", color: colors.textMuted, fontSize: 11 }}>… et {rows.length - 5} autre{rows.length - 5 !== 1 ? "s" : ""} ligne{rows.length - 5 !== 1 ? "s" : ""}</td>
                   </tr>
                 )}
               </tbody>
@@ -385,7 +386,7 @@ function ImportModal({ auth, onClose, onImported }) {
         </div>
       )}
       <ModalFooter>
-        <button onClick={onClose} style={{ padding: "9px 20px", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", backgroundColor: "white", color: "#374151" }}>Annuler</button>
+        <button onClick={onClose} style={{ padding: "9px 20px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", backgroundColor: colors.bgCard, color: colors.text }}>Annuler</button>
         <button onClick={handleImport} disabled={rows.length === 0 || saving} style={{ padding: "9px 20px", backgroundColor: rows.length === 0 || saving ? "#E5E7EB" : "#3B82F6", color: rows.length === 0 || saving ? "#9CA3AF" : "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: rows.length === 0 || saving ? "not-allowed" : "pointer" }}>
           {saving ? "Import en cours…" : `Importer ${rows.length > 0 ? rows.length + " produits" : ""}`}
         </button>
@@ -466,7 +467,7 @@ export default function Inventaire() {
           {["tous", "normal", "alerte", "critique"].map((f) => (
             <button key={f} onClick={() => setFilter(f)} style={{
               padding: "7px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer",
-              border: filter === f ? "2px solid #3B82F6" : "1.5px solid #E5E7EB",
+              border: filter === f ? "2px solid #3B82F6" : "1.5px solid var(--border)",
               backgroundColor: filter === f ? "#EFF6FF" : "white",
               color: filter === f ? "#2563EB" : "#6B7280",
               textTransform: "capitalize",
@@ -480,7 +481,7 @@ export default function Inventaire() {
             placeholder="Rechercher…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            style={{ padding: "8px 14px", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 13, outline: "none", width: 220 }}
+            style={{ padding: "8px 14px", border: "1.5px solid var(--border)", borderRadius: 10, fontSize: 13, outline: "none", width: 220 }}
           />
           <button
             onClick={() => setShowImport(true)}
@@ -503,9 +504,9 @@ export default function Inventaire() {
           { label: "En alerte",       value: loading ? "…" : counts.alerte,    color: "#F59E0B" },
           { label: "Stock normal",    value: loading ? "…" : counts.normal,    color: "#10B981" },
         ].map((s) => (
-          <div key={s.label} style={{ backgroundColor: "white", padding: "14px 20px", borderRadius: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${s.color}` }}>
+          <div key={s.label} style={{ backgroundColor: colors.bgCard, padding: "14px 20px", borderRadius: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${s.color}` }}>
             <div style={{ fontSize: 22, fontWeight: 800, color: s.color }}>{s.value}</div>
-            <div style={{ fontSize: 12, color: "#6B7280" }}>{s.label}</div>
+            <div style={{ fontSize: 12, color: colors.textSecondary }}>{s.label}</div>
           </div>
         ))}
       </div>
@@ -517,12 +518,12 @@ export default function Inventaire() {
       )}
 
       {/* ── Tableau ── */}
-      <div style={{ backgroundColor: "white", borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
+      <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
         <div className="table-scroll"><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
-            <tr style={{ backgroundColor: "#F8FAFC" }}>
+            <tr style={{ backgroundColor: colors.bgSurface }}>
               {["Code", "Produit", "Catégorie", "Stock", "Seuil min", "Prix unitaire", "Forme", "Statut", "Actions"].map((h) => (
-                <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: 12, fontWeight: 700, color: "#6B7280", borderBottom: "1px solid #E5E7EB" }}>{h}</th>
+                <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: 12, fontWeight: 700, color: colors.textSecondary, borderBottom: "1px solid var(--border)" }}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -530,7 +531,7 @@ export default function Inventaire() {
             {loading && [1, 2, 3, 4, 5].map((i) => <SkeletonRow key={i} />)}
             {!loading && !error && filtered.length === 0 && (
               <tr>
-                <td colSpan={9} style={{ padding: "40px", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>
+                <td colSpan={9} style={{ padding: "40px", textAlign: "center", color: colors.textMuted, fontSize: 13 }}>
                   {search || filter !== "tous" ? "Aucun médicament correspond aux filtres" : "Aucun médicament dans la base de données"}
                 </td>
               </tr>
@@ -539,11 +540,11 @@ export default function Inventaire() {
               const s = statusStyle[m.statut];
               const stockColor = m.statut === "critique" ? "#EF4444" : m.statut === "alerte" ? "#F59E0B" : "#374151";
               return (
-                <tr key={m.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                  <td style={{ padding: "13px 16px", color: "#9CA3AF", fontSize: 12, fontFamily: "monospace" }}>{m.code || "—"}</td>
+                <tr key={m.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
+                  <td style={{ padding: "13px 16px", color: colors.textMuted, fontSize: 12, fontFamily: "monospace" }}>{m.code || "—"}</td>
                   <td style={{ padding: "13px 16px" }}>
-                    <div style={{ fontWeight: 600, color: "#0A1628" }}>{m.nom}</div>
-                    {m.dci && <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 1 }}>{m.dci}</div>}
+                    <div style={{ fontWeight: 600, color: colors.navy }}>{m.nom}</div>
+                    {m.dci && <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 1 }}>{m.dci}</div>}
                   </td>
                   <td style={{ padding: "13px 16px" }}>
                     <span style={{ padding: "3px 10px", backgroundColor: "#EFF6FF", color: "#2563EB", borderRadius: 10, fontSize: 11, fontWeight: 600 }}>
@@ -551,11 +552,11 @@ export default function Inventaire() {
                     </span>
                   </td>
                   <td style={{ padding: "13px 16px", fontWeight: 800, color: stockColor, fontSize: 15 }}>{m.stock_actuel ?? "—"}</td>
-                  <td style={{ padding: "13px 16px", color: "#6B7280", fontSize: 12 }}>{m.stock_minimum ?? "—"}</td>
-                  <td style={{ padding: "13px 16px", color: "#374151" }}>
+                  <td style={{ padding: "13px 16px", color: colors.textSecondary, fontSize: 12 }}>{m.stock_minimum ?? "—"}</td>
+                  <td style={{ padding: "13px 16px", color: colors.text }}>
                     {m.prix_unitaire != null ? `${m.prix_unitaire.toLocaleString()} FCFA` : "—"}
                   </td>
-                  <td style={{ padding: "13px 16px", color: "#6B7280" }}>{m.forme || "—"}</td>
+                  <td style={{ padding: "13px 16px", color: colors.textSecondary }}>{m.forme || "—"}</td>
                   <td style={{ padding: "13px 16px" }}>
                     <span style={{ padding: "3px 10px", backgroundColor: s.bg, color: s.color, borderRadius: 10, fontSize: 11, fontWeight: 700 }}>{s.label}</span>
                   </td>

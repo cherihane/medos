@@ -1,3 +1,4 @@
+import { colors } from "../theme";
 import { useMemo } from "react";
 import Layout from "../components/Layout";
 import { useCommandes } from "../hooks/useSupabaseData";
@@ -7,7 +8,7 @@ const STATUT_STYLE = {
   en_transit: { bg: "#DBEAFE", color: "#2563EB", label: "En transit" },
   confirmee:  { bg: "#EDE9FE", color: "#7C3AED", label: "Confirmee" },
   envoyee:    { bg: "#FEF9C3", color: "#A16207", label: "Envoyee" },
-  brouillon:  { bg: "#F3F4F6", color: "#6B7280", label: "Brouillon" },
+  brouillon:  { bg: "#F3F4F6", color: colors.textSecondary, label: "Brouillon" },
   annulee:    { bg: "#FEE2E2", color: "#DC2626", label: "Annulee" },
 };
 
@@ -53,26 +54,26 @@ export default function Credits() {
     <Layout title="Commandes et Credits">
       <div className="kpi-row">
         {stats.map((s) => (
-          <div key={s.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${s.color}` }}>
+          <div key={s.label} style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${s.color}` }}>
             <div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{loading ? "…" : s.value}</div>
-            <div style={{ fontSize: 12, color: "#6B7280", marginTop: 4 }}>{s.label}</div>
+            <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>{s.label}</div>
           </div>
         ))}
       </div>
 
       {loading ? (
-        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "48px", textAlign: "center", color: "#9CA3AF", fontSize: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "48px", textAlign: "center", color: colors.textMuted, fontSize: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
           Chargement des commandes…
         </div>
       ) : commandes.length === 0 ? (
-        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "64px 24px", textAlign: "center", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "64px 24px", textAlign: "center", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
           <div style={{ fontSize: 48, marginBottom: 16, color: "#D1D5DB" }}>
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg>
           </div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: "#374151", marginBottom: 8 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: colors.text, marginBottom: 8 }}>
             Aucune commande enregistrée
           </div>
-          <div style={{ fontSize: 13, color: "#9CA3AF", marginBottom: 20 }}>
+          <div style={{ fontSize: 13, color: colors.textMuted, marginBottom: 20 }}>
             Les commandes passées auprès des fournisseurs apparaîtront ici.
           </div>
         </div>
@@ -85,7 +86,7 @@ export default function Credits() {
               <div
                 key={c.id}
                 style={{
-                  backgroundColor: "white",
+                  backgroundColor: colors.bgCard,
                   borderRadius: 14,
                   padding: "20px 24px",
                   boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
@@ -94,10 +95,10 @@ export default function Credits() {
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
                   <div>
-                    <div style={{ fontWeight: 800, fontSize: 15, color: "#0A1628", marginBottom: 2 }}>
+                    <div style={{ fontWeight: 800, fontSize: 15, color: colors.navy, marginBottom: 2 }}>
                       {c.etablissements?.nom ?? "Client inconnu"}
                     </div>
-                    <div style={{ fontSize: 12, color: "#9CA3AF" }}>
+                    <div style={{ fontSize: 12, color: colors.textMuted }}>
                       {c.reference ?? "—"}
                       {c.fournisseurs?.nom ? ` · via ${c.fournisseurs.nom}` : ""}
                       {c.etablissements?.ville ? ` · ${c.etablissements.ville}` : ""}
@@ -117,18 +118,18 @@ export default function Credits() {
 
                 <div style={{ display: "flex", gap: 24, fontSize: 13 }}>
                   <div>
-                    <div style={{ color: "#9CA3AF", fontSize: 11, marginBottom: 2 }}>Montant</div>
-                    <div style={{ fontWeight: 800, color: "#0A1628", fontSize: 15 }}>
+                    <div style={{ color: colors.textMuted, fontSize: 11, marginBottom: 2 }}>Montant</div>
+                    <div style={{ fontWeight: 800, color: colors.navy, fontSize: 15 }}>
                       {fmtMontant(c.montant_total)}
                     </div>
                   </div>
                   <div>
-                    <div style={{ color: "#9CA3AF", fontSize: 11, marginBottom: 2 }}>Date commande</div>
-                    <div style={{ fontWeight: 600, color: "#374151" }}>{fmtDate(c.date_commande)}</div>
+                    <div style={{ color: colors.textMuted, fontSize: 11, marginBottom: 2 }}>Date commande</div>
+                    <div style={{ fontWeight: 600, color: colors.text }}>{fmtDate(c.date_commande)}</div>
                   </div>
                   {c.date_livraison_prevue && (
                     <div>
-                      <div style={{ color: "#9CA3AF", fontSize: 11, marginBottom: 2 }}>Livraison prevue</div>
+                      <div style={{ color: colors.textMuted, fontSize: 11, marginBottom: 2 }}>Livraison prevue</div>
                       <div style={{ fontWeight: 600, color: enRetard ? "#F59E0B" : "#374151" }}>
                         {fmtDate(c.date_livraison_prevue)}
                       </div>
@@ -137,7 +138,7 @@ export default function Credits() {
                 </div>
 
                 {c.notes && (
-                  <div style={{ marginTop: 10, fontSize: 12, color: "#6B7280", fontStyle: "italic" }}>
+                  <div style={{ marginTop: 10, fontSize: 12, color: colors.textSecondary, fontStyle: "italic" }}>
                     {c.notes}
                   </div>
                 )}

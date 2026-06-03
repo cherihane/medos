@@ -3,6 +3,7 @@
  * Même moteur de vérification que Scanner pharmacie/hôpital,
  * adapté au contexte distributeur avec liste des lots MedOS.
  */
+import { colors } from "../../theme";
 import { useState, useCallback, useEffect, useRef } from "react";
 import Layout from "../../components/Layout";
 import QrScanner from "../../components/QrScanner";
@@ -94,9 +95,9 @@ export default function Tracabilite() {
 
         {/* ── Gauche : scanner ── */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <div style={{ backgroundColor: "white", borderRadius: 16, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <div style={{ backgroundColor: colors.bgCard, borderRadius: 16, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Scanner un produit</h3>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: colors.navy }}>Scanner un produit</h3>
               <button
                 onClick={() => setShowCamera(true)}
                 style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", backgroundColor: "#FFFBEB", color: "#D97706", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
@@ -126,14 +127,14 @@ export default function Tracabilite() {
                 onChange={(e) => { setNomMedicament(e.target.value); reset(); }}
                 onKeyDown={(e) => e.key === "Enter" && handleVerifier()}
                 placeholder="Nom du médicament…"
-                style={{ padding: "10px 14px", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 13, outline: "none", color: "#0A1628" }}
+                style={{ padding: "10px 14px", border: "1.5px solid var(--border)", borderRadius: 10, fontSize: 13, outline: "none", color: colors.navy }}
               />
               <input
                 value={numerolot}
                 onChange={(e) => { setNumerolot(e.target.value); reset(); }}
                 onKeyDown={(e) => e.key === "Enter" && handleVerifier()}
                 placeholder="Numéro de lot (optionnel)…"
-                style={{ padding: "10px 14px", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 13, outline: "none", color: "#0A1628", fontFamily: "monospace" }}
+                style={{ padding: "10px 14px", border: "1.5px solid var(--border)", borderRadius: 10, fontSize: 13, outline: "none", color: colors.navy, fontFamily: "monospace" }}
               />
               <button
                 onClick={handleVerifier}
@@ -156,18 +157,18 @@ export default function Tracabilite() {
 
           {/* Historique session */}
           {historique.length > 0 && (
-            <div style={{ backgroundColor: "white", borderRadius: 14, padding: "20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+            <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-                <h4 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#0A1628" }}>Historique ({historique.length})</h4>
-                <button onClick={() => setHistorique([])} style={{ fontSize: 11, color: "#9CA3AF", background: "none", border: "none", cursor: "pointer" }}>Effacer</button>
+                <h4 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: colors.navy }}>Historique ({historique.length})</h4>
+                <button onClick={() => setHistorique([])} style={{ fontSize: 11, color: colors.textMuted, background: "none", border: "none", cursor: "pointer" }}>Effacer</button>
               </div>
               {historique.map((item) => {
                 const s = STATUTS[item.result.statut];
                 return (
                   <div key={item.id}
                     onClick={() => { setNumerolot(item.lot || ""); setNomMedicament(item.nom || ""); reset(); }}
-                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", backgroundColor: "#F8FAFC", borderRadius: 8, marginBottom: 6, border: `1px solid ${s.border}`, cursor: "pointer" }}>
-                    <div style={{ flex: 1, fontSize: 12, fontWeight: 600, color: "#0A1628", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", backgroundColor: colors.bgSurface, borderRadius: 8, marginBottom: 6, border: `1px solid ${s.border}`, cursor: "pointer" }}>
+                    <div style={{ flex: 1, fontSize: 12, fontWeight: 600, color: colors.navy, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {item.nom || item.lot || "—"}
                     </div>
                     <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 6, backgroundColor: s.bg, color: s.color, fontWeight: 700 }}>
@@ -184,10 +185,10 @@ export default function Tracabilite() {
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
           {/* Résultat */}
-          <div style={{ backgroundColor: "white", borderRadius: 16, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-            <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Résultat</h3>
+          <div style={{ backgroundColor: colors.bgCard, borderRadius: 16, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+            <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Résultat</h3>
             {!result && !loading && (
-              <div style={{ textAlign: "center", color: "#9CA3AF", padding: "30px 0" }}>
+              <div style={{ textAlign: "center", color: colors.textMuted, padding: "30px 0" }}>
                 <div style={{ fontSize: 32, marginBottom: 8 }}>🔍</div>
                 <div style={{ fontSize: 13 }}>En attente de scan…</div>
               </div>
@@ -195,7 +196,7 @@ export default function Tracabilite() {
             {loading && (
               <div style={{ textAlign: "center", padding: "30px 0" }}>
                 <div style={{ width: 32, height: 32, border: "3px solid #E5E7EB", borderTopColor: "#F59E0B", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 12px" }} />
-                <div style={{ fontSize: 13, color: "#6B7280" }}>Consultation MedOS → BDPM France…</div>
+                <div style={{ fontSize: 13, color: colors.textSecondary }}>Consultation MedOS → BDPM France…</div>
               </div>
             )}
             {result && !loading && (() => {
@@ -206,12 +207,12 @@ export default function Tracabilite() {
                     <div style={{ fontSize: 14, fontWeight: 800, color: s.color }}>{s.label}</div>
                   </div>
                   {Object.entries(result.details).map(([k, v]) => (
-                    <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "9px 0", borderBottom: "1px solid #F3F4F6" }}>
-                      <span style={{ fontSize: 12, color: "#6B7280" }}>{k}</span>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: "#0A1628", textAlign: "right", maxWidth: "55%" }}>{v}</span>
+                    <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "9px 0", borderBottom: "1px solid var(--border-light)" }}>
+                      <span style={{ fontSize: 12, color: colors.textSecondary }}>{k}</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: colors.navy, textAlign: "right", maxWidth: "55%" }}>{v}</span>
                     </div>
                   ))}
-                  <div style={{ marginTop: 10, fontSize: 10, color: "#9CA3AF", textAlign: "right" }}>
+                  <div style={{ marginTop: 10, fontSize: 10, color: colors.textMuted, textAlign: "right" }}>
                     Source : {result.source === "supabase" ? "Base MedOS" : result.source === "bdpm" ? "BDPM France" : "Introuvable"}
                   </div>
                 </div>
@@ -220,16 +221,16 @@ export default function Tracabilite() {
           </div>
 
           {/* Lots MedOS enregistrés */}
-          <div style={{ backgroundColor: "white", borderRadius: 14, padding: "20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-            <h4 style={{ margin: "0 0 14px", fontSize: 13, fontWeight: 700, color: "#0A1628" }}>
+          <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+            <h4 style={{ margin: "0 0 14px", fontSize: 13, fontWeight: 700, color: colors.navy }}>
               Lots enregistrés MedOS ({lotsLoading ? "…" : lotsDB.length})
             </h4>
             <div style={{ maxHeight: 260, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
               {lotsLoading && [1,2,3].map((i) => (
-                <div key={i} style={{ height: 44, backgroundColor: "#F8FAFC", borderRadius: 8, animation: "pulse 1.5s ease-in-out infinite" }} />
+                <div key={i} style={{ height: 44, backgroundColor: colors.bgSurface, borderRadius: 8, animation: "pulse 1.5s ease-in-out infinite" }} />
               ))}
               {!lotsLoading && lotsDB.length === 0 && (
-                <div style={{ padding: "20px", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>
+                <div style={{ padding: "20px", textAlign: "center", color: colors.textMuted, fontSize: 13 }}>
                   Aucun lot enregistré dans MedOS
                 </div>
               )}
@@ -238,22 +239,22 @@ export default function Tracabilite() {
                 return (
                   <div key={lot.id}
                     onClick={() => { setNumerolot(lot.numero_lot); setNomMedicament(lot.medicaments?.nom || ""); reset(); }}
-                    style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", backgroundColor: "#F8FAFC", borderRadius: 8, cursor: "pointer", borderLeft: `3px solid ${expired ? "#EF4444" : "#10B981"}` }}>
+                    style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", backgroundColor: colors.bgSurface, borderRadius: 8, cursor: "pointer", borderLeft: `3px solid ${expired ? "#EF4444" : "#10B981"}` }}>
                     <div>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: "#0A1628" }}>{lot.medicaments?.nom || "—"}</div>
-                      <div style={{ fontSize: 11, color: "#9CA3AF", fontFamily: "monospace" }}>{lot.numero_lot}</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: colors.navy }}>{lot.medicaments?.nom || "—"}</div>
+                      <div style={{ fontSize: 11, color: colors.textMuted, fontFamily: "monospace" }}>{lot.numero_lot}</div>
                     </div>
                     <div style={{ textAlign: "right" }}>
                       <div style={{ fontSize: 11, color: expired ? "#EF4444" : "#10B981", fontWeight: 600 }}>
                         {expired ? "Expiré" : fmt(lot.date_expiration)}
                       </div>
-                      <div style={{ fontSize: 10, color: "#9CA3AF" }}>{lot.fabricant || "—"}</div>
+                      <div style={{ fontSize: 10, color: colors.textMuted }}>{lot.fabricant || "—"}</div>
                     </div>
                   </div>
                 );
               })}
             </div>
-            <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 8 }}>Cliquez sur un lot pour le vérifier</div>
+            <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 8 }}>Cliquez sur un lot pour le vérifier</div>
           </div>
         </div>
       </div>

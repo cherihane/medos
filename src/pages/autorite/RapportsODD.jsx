@@ -1,3 +1,4 @@
+import { colors } from "../../theme";
 import { useState } from "react";
 import Layout from "../../components/Layout";
 import Toast from "../../components/Toast";
@@ -103,33 +104,33 @@ export default function RapportsODD() {
           { label: "Medicaments traces",      value: kpi?.medicamentsTraces ?? "—",                   color: "#3B82F6" },
           { label: "Alertes pharmacovig.",    value: kpi?.alertesPharmacovig ?? "—",                  color: "#F59E0B" },
         ].map((k) => (
-          <div key={k.label} style={{ backgroundColor: "white", borderRadius: 14, padding: "18px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
+          <div key={k.label} style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "18px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", flex: 1, borderLeft: `4px solid ${k.color}` }}>
             <div style={{ fontSize: 22, fontWeight: 800, color: k.color }}>{k.value}</div>
-            <div style={{ fontSize: 12, color: "#6B7280" }}>{k.label}</div>
+            <div style={{ fontSize: 12, color: colors.textSecondary }}>{k.label}</div>
           </div>
         ))}
       </div>
 
       <div className="dash-grid-2" style={{ marginBottom: 20 }}>
-        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Progression par objectif</h3>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Progression par objectif</h3>
           {oddData.map((o) => (
-            <div key={o.goal} style={{ padding: "16px", backgroundColor: "#F8FAFC", borderRadius: 10, marginBottom: 12 }}>
+            <div key={o.goal} style={{ padding: "16px", backgroundColor: colors.bgSurface, borderRadius: 10, marginBottom: 12 }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
                 <div>
                   <span style={{ fontSize: 12, fontWeight: 800, color: "#8B5CF6", padding: "2px 8px", backgroundColor: "#F5F3FF", borderRadius: 8 }}>{o.goal}</span>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginTop: 4 }}>{o.label}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: colors.text, marginTop: 4 }}>{o.label}</div>
                 </div>
                 <div style={{ textAlign: "right" }}>
                   {o.progress != null ? (
                     <>
                       <div style={{ fontSize: 22, fontWeight: 800, color: o.progress >= o.target ? "#10B981" : "#F59E0B" }}>{o.progress}%</div>
-                      <div style={{ fontSize: 10, color: "#9CA3AF" }}>cible : {o.target}%</div>
+                      <div style={{ fontSize: 10, color: colors.textMuted }}>cible : {o.target}%</div>
                     </>
                   ) : (
                     <>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: "#9CA3AF" }}>Donnees insuffisantes</div>
-                      <div style={{ fontSize: 10, color: "#9CA3AF" }}>cible : {o.target}%</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: colors.textMuted }}>Donnees insuffisantes</div>
+                      <div style={{ fontSize: 10, color: colors.textMuted }}>cible : {o.target}%</div>
                     </>
                   )}
                 </div>
@@ -142,51 +143,51 @@ export default function RapportsODD() {
                   </>
                 )}
               </div>
-              <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>Ligne jaune = cible ONU 2030</div>
+              <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 4 }}>Ligne jaune = cible ONU 2030</div>
             </div>
           ))}
         </div>
 
         <div>
-          <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 16 }}>
-            <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Resume executif</h3>
+          <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 16 }}>
+            <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Resume executif</h3>
             {totalEtab === 0 ? (
-              <div style={{ padding: "20px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>
+              <div style={{ padding: "20px 0", textAlign: "center", color: colors.textMuted, fontSize: 13 }}>
                 Aucune donnee disponible. Enregistrez des etablissements pour generer les indicateurs.
               </div>
             ) : (
               <>
-                <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.8 }}>
+                <div style={{ fontSize: 13, color: colors.text, lineHeight: 1.8 }}>
                   Le systeme MedOS recense <strong>{totalEtab}</strong> etablissement{totalEtab > 1 ? "s" : ""} dont <strong>{actifsEtab}</strong> actif{actifsEtab > 1 ? "s" : ""}.
                   La couverture ODD 3.8 calculee depuis les etablissements actifs est de <strong>{couverture38}%</strong> (cible ONU : 90%).
                   Les autres indicateurs ODD necessitent des donnees épidémiologiques complementaires.
                 </div>
                 <div style={{ marginTop: 16, padding: "12px", backgroundColor: "#F5F3FF", borderRadius: 10 }}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: "#7C3AED", marginBottom: 4 }}>Prochaine etape</div>
-                  <div style={{ fontSize: 12, color: "#6B7280" }}>Connecter les donnees épidémiologiques nationales pour calculer automatiquement les indicateurs ODD 3.3, 3.4 et 3.b.</div>
+                  <div style={{ fontSize: 12, color: colors.textSecondary }}>Connecter les donnees épidémiologiques nationales pour calculer automatiquement les indicateurs ODD 3.3, 3.4 et 3.b.</div>
                 </div>
               </>
             )}
           </div>
 
-          <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-            <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Generer un rapport</h3>
-            <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 16, lineHeight: 1.6 }}>
+          <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+            <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Generer un rapport</h3>
+            <div style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 16, lineHeight: 1.6 }}>
               Chaque rapport est genere a partir des donnees Supabase en temps reel : etablissements, medicaments, alertes.
             </div>
             {[
               { name: "Rapport ODD consolidé", desc: `${totalEtab} etablissement${totalEtab !== 1 ? "s" : ""} · ${medicaments.length} medicament${medicaments.length !== 1 ? "s" : ""}` },
               { name: "Rapport pharmacovigilance", desc: `${alertes.length} alerte${alertes.length !== 1 ? "s" : ""} enregistrée${alertes.length !== 1 ? "s" : ""}` },
             ].map((r) => (
-              <div key={r.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 0", borderBottom: "1px solid #F3F4F6" }}>
+              <div key={r.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 0", borderBottom: "1px solid var(--border-light)" }}>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "#0A1628" }}>{r.name}</div>
-                  <div style={{ fontSize: 11, color: "#9CA3AF" }}>{r.desc}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: colors.navy }}>{r.name}</div>
+                  <div style={{ fontSize: 11, color: colors.textMuted }}>{r.desc}</div>
                 </div>
                 <button
                   onClick={() => genererPDF(r.name)}
                   disabled={generating === r.name}
-                  style={{ padding: "6px 14px", backgroundColor: generating === r.name ? "#E5E7EB" : "#F8FAFC", color: generating === r.name ? "#9CA3AF" : "#374151", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 12, cursor: generating === r.name ? "wait" : "pointer" }}
+                  style={{ padding: "6px 14px", backgroundColor: generating === r.name ? "#E5E7EB" : "#F8FAFC", color: generating === r.name ? "#9CA3AF" : "#374151", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12, cursor: generating === r.name ? "wait" : "pointer" }}
                 >
                   {generating === r.name ? "Generation…" : "Telecharger"}
                 </button>

@@ -1,3 +1,4 @@
+import { colors } from "../../theme";
 import { useState } from "react";
 import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
@@ -8,7 +9,7 @@ import Pagination from "../../components/Pagination";
 import { insertLivraison, updateLivraison, receiveLivraison } from "../../hooks/useMutations";
 
 const statusStyle = {
-  planifiee:   { bg: "#F3F4F6",  color: "#6B7280",  label: "Planifiée" },
+  planifiee:   { bg: "#F3F4F6",  color: colors.textSecondary,  label: "Planifiée" },
   en_transit:  { bg: "#DBEAFE",  color: "#2563EB",  label: "En transit" },
   livree:      { bg: "#DCFCE7",  color: "#16A34A",  label: "Livrée" },
   incident:    { bg: "#FEF2F2",  color: "#EF4444",  label: "Incident" },
@@ -137,7 +138,7 @@ function StatutModal({ livraison, onClose, onSaved }) {
 
       {statut === "livree" && (
         <>
-          <div style={{ margin: "12px 0 8px", padding: "10px 14px", backgroundColor: "#F0F4FB", borderRadius: 8, fontSize: 12, color: "#374151" }}>
+          <div style={{ margin: "12px 0 8px", padding: "10px 14px", backgroundColor: colors.bg, borderRadius: 8, fontSize: 12, color: colors.text }}>
             Renseignez le médicament livré pour incrémenter automatiquement le stock de l'établissement destinataire.
           </div>
           <Field label="Médicament livré (nom exact)">
@@ -212,9 +213,9 @@ export default function Livraisons() {
             { label: "Planifiées",  value: loading ? "…" : livraisons.filter(l => l.statut === "planifiee").length,    color: "#F59E0B" },
             { label: "Incidents",   value: loading ? "…" : livraisons.filter(l => l.statut === "incident").length,     color: "#EF4444" },
           ].map((k) => (
-            <div key={k.label} style={{ backgroundColor: "white", padding: "14px 18px", borderRadius: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", borderLeft: `4px solid ${k.color}` }}>
+            <div key={k.label} style={{ backgroundColor: colors.bgCard, padding: "14px 18px", borderRadius: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", borderLeft: `4px solid ${k.color}` }}>
               <div style={{ fontSize: 20, fontWeight: 800, color: k.color }}>{k.value}</div>
-              <div style={{ fontSize: 11, color: "#6B7280" }}>{k.label}</div>
+              <div style={{ fontSize: 11, color: colors.textSecondary }}>{k.label}</div>
             </div>
           ))}
         </div>
@@ -229,7 +230,7 @@ export default function Livraisons() {
         {["tous", ...Object.keys(statusStyle)].map((f) => (
           <button key={f} onClick={() => setFilter(f)} style={{
             padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", textTransform: "capitalize",
-            border: filter === f ? "2px solid #F59E0B" : "1.5px solid #E5E7EB",
+            border: filter === f ? "2px solid #F59E0B" : "1.5px solid var(--border)",
             backgroundColor: filter === f ? "#FFFBEB" : "white",
             color: filter === f ? "#D97706" : "#6B7280",
           }}>
@@ -244,39 +245,39 @@ export default function Livraisons() {
         </div>
       )}
 
-      <div style={{ backgroundColor: "white", borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
+      <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
         <div className="table-scroll"><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
-            <tr style={{ backgroundColor: "#F8FAFC" }}>
+            <tr style={{ backgroundColor: colors.bgSurface }}>
               {["N° Suivi", "Destinataire", "Transporteur", "Départ", "Arrivée prévue", "Statut", "Actions"].map((h) => (
-                <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: 12, fontWeight: 700, color: "#6B7280", borderBottom: "1px solid #E5E7EB" }}>{h}</th>
+                <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: 12, fontWeight: 700, color: colors.textSecondary, borderBottom: "1px solid var(--border)" }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading && [1,2,3].map((i) => (
-              <tr key={i} style={{ borderBottom: "1px solid #F3F4F6", animation: "pulse 1.5s ease-in-out infinite" }}>
+              <tr key={i} style={{ borderBottom: "1px solid var(--border-light)", animation: "pulse 1.5s ease-in-out infinite" }}>
                 {[120,160,120,80,90,80,100].map((w, j) => (
-                  <td key={j} style={{ padding: "14px 16px" }}><div style={{ height: 13, width: w, backgroundColor: "#F3F4F6", borderRadius: 6 }} /></td>
+                  <td key={j} style={{ padding: "14px 16px" }}><div style={{ height: 13, width: w, backgroundColor: colors.borderLight, borderRadius: 6 }} /></td>
                 ))}
               </tr>
             ))}
             {!loading && filtered.length === 0 && (
-              <tr><td colSpan={7} style={{ padding: 40, textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>Aucune livraison trouvée</td></tr>
+              <tr><td colSpan={7} style={{ padding: 40, textAlign: "center", color: colors.textMuted, fontSize: 13 }}>Aucune livraison trouvée</td></tr>
             )}
             {!loading && filtered.map((l) => {
               const s = statusStyle[l.statut] ?? statusStyle.preparation;
               const dest = l.etablissements?.nom ?? "—";
               return (
-                <tr key={l.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                  <td style={{ padding: "14px 16px", fontFamily: "monospace", color: "#6B7280", fontSize: 12 }}>{l.numero_suivi ?? "—"}</td>
-                  <td style={{ padding: "14px 16px", fontWeight: 600, color: "#0A1628" }}>
+                <tr key={l.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
+                  <td style={{ padding: "14px 16px", fontFamily: "monospace", color: colors.textSecondary, fontSize: 12 }}>{l.numero_suivi ?? "—"}</td>
+                  <td style={{ padding: "14px 16px", fontWeight: 600, color: colors.navy }}>
                     {dest}
-                    {l.etablissements?.ville && <div style={{ fontSize: 11, color: "#9CA3AF" }}>{l.etablissements.ville}</div>}
+                    {l.etablissements?.ville && <div style={{ fontSize: 11, color: colors.textMuted }}>{l.etablissements.ville}</div>}
                   </td>
-                  <td style={{ padding: "14px 16px", color: "#6B7280" }}>{l.transporteur ?? "—"}</td>
-                  <td style={{ padding: "14px 16px", color: "#6B7280", fontSize: 12 }}>{fmt(l.date_depart)}</td>
-                  <td style={{ padding: "14px 16px", color: "#6B7280", fontSize: 12 }}>{fmt(l.date_arrivee_prevue)}</td>
+                  <td style={{ padding: "14px 16px", color: colors.textSecondary }}>{l.transporteur ?? "—"}</td>
+                  <td style={{ padding: "14px 16px", color: colors.textSecondary, fontSize: 12 }}>{fmt(l.date_depart)}</td>
+                  <td style={{ padding: "14px 16px", color: colors.textSecondary, fontSize: 12 }}>{fmt(l.date_arrivee_prevue)}</td>
                   <td style={{ padding: "14px 16px" }}>
                     <span style={{ padding: "3px 10px", backgroundColor: s.bg, color: s.color, borderRadius: 10, fontSize: 11, fontWeight: 700 }}>{s.label}</span>
                   </td>

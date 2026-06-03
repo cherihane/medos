@@ -1,3 +1,4 @@
+import { colors } from "../../theme";
 import { useState } from "react";
 import Layout from "../../components/Layout";
 import { useIsMobile } from "../../hooks/useWindowSize";
@@ -48,7 +49,7 @@ export default function AssistantIA() {
     <Layout title="Assistant IA" subtitle="Intelligence artificielle au service de la gestion hospitalière">
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 280px", gap: 20, height: "calc(100vh - 160px)" }}>
         {/* Chat */}
-        <div style={{ backgroundColor: "white", borderRadius: 16, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", display: "flex", flexDirection: "column" }}>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 16, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", display: "flex", flexDirection: "column" }}>
           <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16, marginBottom: 20 }}>
             {messages.map((msg, i) => (
               <div key={i} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
@@ -78,20 +79,20 @@ export default function AssistantIA() {
                 <div style={{ width: 32, height: 32, borderRadius: "50%", backgroundColor: "#10B981", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><circle cx="12" cy="12" r="10"/></svg>
                 </div>
-                <div style={{ padding: "10px 16px", backgroundColor: "#F8FAFC", borderRadius: "18px 18px 18px 4px", fontSize: 13, color: "#9CA3AF" }}>
+                <div style={{ padding: "10px 16px", backgroundColor: colors.bgSurface, borderRadius: "18px 18px 18px 4px", fontSize: 13, color: colors.textMuted }}>
                   Analyse en cours...
                 </div>
               </div>
             )}
           </div>
 
-          <div style={{ display: "flex", gap: 10, borderTop: "1px solid #E5E7EB", paddingTop: 16 }}>
+          <div style={{ display: "flex", gap: 10, borderTop: "1px solid var(--border)", paddingTop: 16 }}>
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && sendMessage()}
               placeholder="Posez votre question..."
-              style={{ flex: 1, padding: "11px 16px", border: "1.5px solid #E5E7EB", borderRadius: 12, fontSize: 13, outline: "none" }}
+              style={{ flex: 1, padding: "11px 16px", border: "1.5px solid var(--border)", borderRadius: 12, fontSize: 13, outline: "none" }}
             />
             <button onClick={() => sendMessage()} disabled={!input.trim() || loading}
               style={{ padding: "11px 20px", backgroundColor: "#10B981", color: "white", border: "none", borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
@@ -102,18 +103,18 @@ export default function AssistantIA() {
 
         {/* Suggestions */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <div style={{ backgroundColor: "white", borderRadius: 14, padding: "20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-            <h4 style={{ margin: "0 0 14px", fontSize: 13, fontWeight: 700, color: "#0A1628" }}>Questions suggérées</h4>
+          <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+            <h4 style={{ margin: "0 0 14px", fontSize: 13, fontWeight: 700, color: colors.navy }}>Questions suggérées</h4>
             {suggestions.map((s) => (
               <button key={s} onClick={() => sendMessage(s)}
-                style={{ width: "100%", padding: "10px 14px", backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: 10, cursor: "pointer", textAlign: "left", fontSize: 12, color: "#374151", marginBottom: 8, lineHeight: 1.4 }}>
+                style={{ width: "100%", padding: "10px 14px", backgroundColor: colors.bgSurface, border: "1px solid var(--border)", borderRadius: 10, cursor: "pointer", textAlign: "left", fontSize: 12, color: colors.text, marginBottom: 8, lineHeight: 1.4 }}>
                 {s}
               </button>
             ))}
           </div>
 
-          <div style={{ backgroundColor: "white", borderRadius: 14, padding: "20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-            <h4 style={{ margin: "0 0 14px", fontSize: 13, fontWeight: 700, color: "#0A1628" }}>Capacités</h4>
+          <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+            <h4 style={{ margin: "0 0 14px", fontSize: 13, fontWeight: 700, color: colors.navy }}>Capacités</h4>
             {[
               "Analyse de stock en temps réel",
               "Prédiction de la demande",
@@ -121,7 +122,7 @@ export default function AssistantIA() {
               "Détection d'anomalies",
               "Rapports automatiques",
             ].map((cap) => (
-              <div key={cap} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, fontSize: 12, color: "#6B7280" }}>
+              <div key={cap} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, fontSize: 12, color: colors.textSecondary }}>
                 <div style={{ width: 5, height: 5, borderRadius: "50%", backgroundColor: "#10B981" }} />
                 {cap}
               </div>

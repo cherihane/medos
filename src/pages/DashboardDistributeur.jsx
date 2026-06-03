@@ -1,3 +1,4 @@
+import { colors } from "../theme";
 import { useMemo } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import Layout from "../components/Layout";
@@ -9,7 +10,7 @@ const STATUT_STYLE = {
   en_transit:   { bg: "#DBEAFE", color: "#2563EB", label: "en transit" },
   confirmee:    { bg: "#EDE9FE", color: "#7C3AED", label: "confirmee" },
   envoyee:      { bg: "#FEF9C3", color: "#A16207", label: "envoyee" },
-  brouillon:    { bg: "#F3F4F6", color: "#6B7280", label: "brouillon" },
+  brouillon:    { bg: "#F3F4F6", color: colors.textSecondary, label: "brouillon" },
   annulee:      { bg: "#FEE2E2", color: "#DC2626", label: "annulee" },
 };
 
@@ -102,12 +103,12 @@ export default function DashboardDistributeur() {
 
       <div className="dash-grid-2">
         {/* Reseau clients */}
-        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Reseau clients</h3>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Reseau clients</h3>
           {loadEtabs ? (
-            <div style={{ color: "#9CA3AF", fontSize: 13 }}>Chargement…</div>
+            <div style={{ color: colors.textMuted, fontSize: 13 }}>Chargement…</div>
           ) : reseauClients.length === 0 ? (
-            <div style={{ color: "#9CA3AF", fontSize: 13 }}>Aucun client enregistré.</div>
+            <div style={{ color: colors.textMuted, fontSize: 13 }}>Aucun client enregistré.</div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {reseauClients.map((c) => (
@@ -115,7 +116,7 @@ export default function DashboardDistributeur() {
                   key={c.nom}
                   style={{
                     display: "flex", alignItems: "center", justifyContent: "space-between",
-                    padding: "12px 16px", backgroundColor: "#F8FAFC", borderRadius: 10,
+                    padding: "12px 16px", backgroundColor: colors.bgSurface, borderRadius: 10,
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -124,13 +125,13 @@ export default function DashboardDistributeur() {
                       backgroundColor: c.actif ? "#10B981" : "#9CA3AF",
                     }} />
                     <div>
-                      <div style={{ fontWeight: 600, fontSize: 13, color: "#0A1628" }}>{c.nom}</div>
-                      <div style={{ fontSize: 11, color: "#9CA3AF" }}>{c.ville} — {c.type}</div>
+                      <div style={{ fontWeight: 600, fontSize: 13, color: colors.navy }}>{c.nom}</div>
+                      <div style={{ fontSize: 11, color: colors.textMuted }}>{c.ville} — {c.type}</div>
                     </div>
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    <div style={{ fontWeight: 700, fontSize: 13, color: "#0A1628" }}>{c.ca}M FCFA</div>
-                    <div style={{ fontSize: 11, color: "#9CA3AF" }}>{c.commandes} cmd</div>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: colors.navy }}>{c.ca}M FCFA</div>
+                    <div style={{ fontSize: 11, color: colors.textMuted }}>{c.commandes} cmd</div>
                   </div>
                 </div>
               ))}
@@ -139,12 +140,12 @@ export default function DashboardDistributeur() {
         </div>
 
         {/* Graphique chiffre d'affaires */}
-        <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", minWidth: 0 }}>
-          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", minWidth: 0 }}>
+          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>
             Chiffre d'affaires — 6 derniers mois (FCFA)
           </h3>
           {loadCmd ? (
-            <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", color: "#9CA3AF", fontSize: 13 }}>
+            <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", color: colors.textMuted, fontSize: 13 }}>
               Chargement…
             </div>
           ) : (
@@ -173,20 +174,20 @@ export default function DashboardDistributeur() {
       </div>
 
       {/* Dernieres commandes */}
-      <div style={{ backgroundColor: "white", borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginTop: 20 }}>
-        <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#0A1628" }}>Dernieres commandes</h3>
+      <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginTop: 20 }}>
+        <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Dernieres commandes</h3>
         {loadCmd ? (
-          <div style={{ color: "#9CA3AF", fontSize: 13 }}>Chargement…</div>
+          <div style={{ color: colors.textMuted, fontSize: 13 }}>Chargement…</div>
         ) : dernieresCommandes.length === 0 ? (
-          <div style={{ color: "#9CA3AF", fontSize: 13, padding: "24px 0", textAlign: "center" }}>
+          <div style={{ color: colors.textMuted, fontSize: 13, padding: "24px 0", textAlign: "center" }}>
             Aucune commande enregistrée.
           </div>
         ) : (
           <div className="table-scroll"><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
-              <tr style={{ backgroundColor: "#F8FAFC" }}>
+              <tr style={{ backgroundColor: colors.bgSurface }}>
                 {["N° Commande", "Client", "Ville", "Montant", "Date", "Statut"].map((h) => (
-                  <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontSize: 12, fontWeight: 700, color: "#6B7280", borderBottom: "1px solid #E5E7EB" }}>
+                  <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontSize: 12, fontWeight: 700, color: colors.textSecondary, borderBottom: "1px solid var(--border)" }}>
                     {h}
                   </th>
                 ))}
@@ -196,20 +197,20 @@ export default function DashboardDistributeur() {
               {dernieresCommandes.map((c) => {
                 const s = STATUT_STYLE[c.statut] ?? STATUT_STYLE.brouillon;
                 return (
-                  <tr key={c.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
+                  <tr key={c.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
                     <td style={{ padding: "12px 14px", fontWeight: 600, color: "#3B82F6", fontFamily: "monospace" }}>
                       {c.reference ?? "—"}
                     </td>
-                    <td style={{ padding: "12px 14px", color: "#374151" }}>
+                    <td style={{ padding: "12px 14px", color: colors.text }}>
                       {c.etablissements?.nom ?? "—"}
                     </td>
-                    <td style={{ padding: "12px 14px", color: "#6B7280" }}>
+                    <td style={{ padding: "12px 14px", color: colors.textSecondary }}>
                       {c.etablissements?.ville ?? "—"}
                     </td>
-                    <td style={{ padding: "12px 14px", fontWeight: 700, color: "#0A1628" }}>
+                    <td style={{ padding: "12px 14px", fontWeight: 700, color: colors.navy }}>
                       {fmtMontant(c.montant_total)}
                     </td>
-                    <td style={{ padding: "12px 14px", color: "#6B7280" }}>
+                    <td style={{ padding: "12px 14px", color: colors.textSecondary }}>
                       {fmtDate(c.date_commande)}
                     </td>
                     <td style={{ padding: "12px 14px" }}>
