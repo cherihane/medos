@@ -9,7 +9,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "rec
 import Layout from "../../components/Layout";
 import { usePatientsPaginated, usePatientsStats, useMedicaments } from "../../hooks/useSupabaseData";
 import Pagination from "../../components/Pagination";
-import { insertPatient, insertOrdonnance, upsertHospitalisation, fetchHospitalisation, insertConstante, fetchConstantes, updatePatientTriage } from "../../hooks/useMutations";
+import { insertPatient, insertOrdonnance, upsertHospitalisation, fetchHospitalisation, insertConstante, fetchConstantes, updatePatientTriage, insertNoteEvolution, fetchNotesEvolution } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../supabaseClient";
 import { openDocument, tableHTML, infoGridHTML, alertBannerHTML, signatureRowHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
@@ -559,7 +559,7 @@ const STATUT_ORD = {
 
 // ── Dossier médical — agrégation chronologique ─────────────────────────────
 async function fetchDossierMedical(patient_id) {
-  const [cRes, oRes, hRes, cvRes, dRes, fRes, eRes] = await Promise.all([
+  const [cRes, oRes, hRes, cvRes, dRes, fRes, eRes, nRes] = await Promise.all([
     supabase.from("consultations").select("*").eq("patient_id", patient_id).order("created_at", { ascending: false }),
     supabase.from("ordonnances").select("*").eq("patient_id", patient_id).order("date_emission", { ascending: false }),
     supabase.from("hospitalisations").select("*").eq("patient_id", patient_id).order("date_entree", { ascending: false }),
@@ -567,6 +567,7 @@ async function fetchDossierMedical(patient_id) {
     supabase.from("dispensations").select("*, medicaments(nom)").eq("patient_id", patient_id).order("created_at", { ascending: false }),
     supabase.from("factures_hopital").select("*").eq("patient_id", patient_id).order("date_facture", { ascending: false }),
     supabase.from("examens").select("*").eq("patient_id", patient_id).order("created_at", { ascending: false }),
+    supabase.from("notes_evolution").select("*").eq("patient_id", patient_id).order("created_at", { ascending: false }),
   ]);
   const events = [
     ...(cRes.data  ?? []).map((e) => ({ ...e, _type: "consultation",    _date: e.created_at })),
@@ -576,6 +577,7 @@ async function fetchDossierMedical(patient_id) {
     ...(dRes.data  ?? []).map((e) => ({ ...e, _type: "dispensation",    _date: e.created_at })),
     ...(fRes.data  ?? []).map((e) => ({ ...e, _type: "facture",         _date: e.date_facture ?? e.created_at })),
     ...(eRes.data  ?? []).map((e) => ({ ...e, _type: "examen",          _date: e.created_at })),
+    ...(nRes.data  ?? []).map((e) => ({ ...e, _type: "note_evolution",  _date: e.created_at })),
   ].sort((a, b) => new Date(b._date) - new Date(a._date));
   return events;
 }
@@ -588,6 +590,7 @@ const DOSSIER_TYPES = {
   dispensation:    { label: "Dispensation",    color: "#8B5CF6" },
   facture:         { label: "Facture",         color: "#6B7280" },
   examen:          { label: "Examen",          color: "#06B6D4" },
+  note_evolution:  { label: "Note evolution",  color: "#0891B2" },
 };
 
 function fmtDateEvt(d) {
@@ -664,6 +667,18 @@ function EventCard({ evt }) {
         {evt.interpretation && <span style={{ fontSize: 11, fontWeight: 700, padding: "1px 7px", borderRadius: 6, backgroundColor: evt.interpretation === "normal" ? "#DCFCE7" : evt.interpretation === "critique" ? "#FEF2F2" : "#FEF3C7", color: evt.interpretation === "normal" ? "#16A34A" : evt.interpretation === "critique" ? "#DC2626" : "#D97706" }}>{evt.interpretation}</span>}
       </>
     );
+  } else if (evt._type === "note_evolution") {
+    const NOTE_BADGE = { evolution: { label: "Evolution", color: "#2563EB", bg: "#DBEAFE" }, observation: { label: "Observation", color: "#D97706", bg: "#FEF3C7" }, transmission: { label: "Transmission", color: "#7C3AED", bg: "#EDE9FE" }, sortie: { label: "Sortie", color: "#16A34A", bg: "#DCFCE7" } };
+    const nb = NOTE_BADGE[evt.type] ?? NOTE_BADGE.evolution;
+    content = (
+      <>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+          <strong style={{ fontSize: 12 }}>{evt.auteur}</strong>
+          <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 7px", borderRadius: 6, backgroundColor: nb.bg, color: nb.color }}>{nb.label}</span>
+        </div>
+        <div style={{ fontSize: 12, color: "#374151" }}>{(evt.contenu ?? "").slice(0, 80)}{(evt.contenu ?? "").length > 80 ? "…" : ""}</div>
+      </>
+    );
   }
 
   return (
@@ -722,21 +737,28 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
   const [hospiForm, setHospiForm]     = useState({ statut: "ambulatoire", service: patient.service ?? "Medecine generale", chambre: "", lit: "", date_entree: "", date_sortie_prevue: "", motif_hospitalisation: "" });
   const [savingHospi, setSavingHospi] = useState(false);
   const [hospiSaved, setHospiSaved]   = useState(false);
+  // Notes d'evolution
+  const [notes, setNotes]             = useState([]);
+  const [showNoteForm, setShowNoteForm] = useState(false);
+  const [noteForm, setNoteForm]       = useState({ auteur: medecinNom ?? "", type: "evolution", contenu: "" });
+  const [savingNote, setSavingNote]   = useState(false);
 
   const charger = useCallback(async () => {
     setLoading(true);
     try {
-      const [{ data: ords }, { data: crs }, constData, hospiData, dossierData] = await Promise.all([
+      const [{ data: ords }, { data: crs }, constData, hospiData, dossierData, notesData] = await Promise.all([
         supabase.from("ordonnances").select("id, reference, statut, date_emission, date_expiration, medecin_nom, notes").eq("patient_id", patient.id).order("date_emission", { ascending: false }),
         supabase.from("comptes_rendus").select("*").eq("patient_id", patient.id).order("date_consultation", { ascending: false }),
         fetchConstantes(patient.id),
         fetchHospitalisation(patient.id),
         fetchDossierMedical(patient.id),
+        fetchNotesEvolution(patient.id),
       ]);
       setOrdonnances(ords ?? []);
       setComptes(crs ?? []);
       setConstantes(constData);
       setDossier(dossierData);
+      setNotes(notesData);
       if (hospiData) {
         setHospi(hospiData);
         setHospiForm((f) => ({ ...f, statut: hospiData.statut ?? "ambulatoire", chambre: hospiData.chambre ?? "", lit: hospiData.lit ?? "", date_entree: hospiData.date_entree ?? "", date_sortie_prevue: hospiData.date_sortie_prevue ?? "", motif_hospitalisation: hospiData.motif_hospitalisation ?? "" }));
@@ -1034,6 +1056,121 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
                 <button onClick={handleSaveHospi} disabled={savingHospi} style={{ padding: "10px 20px", backgroundColor: ACCENT, color: "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", alignSelf: "flex-start" }}>
                   {savingHospi ? "Enregistrement..." : hospiSaved ? "Sauvegarde !" : "Enregistrer le statut"}
                 </button>
+
+                {/* ── Notes d'evolution (si hospitalise) ── */}
+                {hospi?.statut === "hospitalise" && (() => {
+                  const NOTE_TYPE_CFG = {
+                    evolution:    { label: "Evolution quotidienne", badge: "Evolution",    color: "#2563EB", bg: "#DBEAFE" },
+                    observation:  { label: "Observation",           badge: "Observation",  color: "#D97706", bg: "#FEF3C7" },
+                    transmission: { label: "Transmission infirmiere",badge: "Transmission",color: "#7C3AED", bg: "#EDE9FE" },
+                    sortie:       { label: "Note de sortie",        badge: "Sortie",       color: "#16A34A", bg: "#DCFCE7" },
+                  };
+                  const handleSaveNote = async () => {
+                    if (!noteForm.contenu.trim()) return alert("Le contenu est obligatoire.");
+                    setSavingNote(true);
+                    try {
+                      await insertNoteEvolution({
+                        patient_id: patient.id,
+                        hospitalisation_id: hospi.id,
+                        etablissement_id: etablissement_id ?? null,
+                        auteur: noteForm.auteur || medecinNom || "Inconnu",
+                        contenu: noteForm.contenu,
+                        type: noteForm.type,
+                      });
+                      setNoteForm((f) => ({ ...f, contenu: "" }));
+                      setShowNoteForm(false);
+                      charger();
+                    } catch (e) { alert(e.message); }
+                    finally { setSavingNote(false); }
+                  };
+                  const handleImprimerJournal = async () => {
+                    const etab = await fetchEtabFromAuth(auth);
+                    const rows = notes.map((n) => [
+                      new Date(n.created_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }),
+                      n.auteur,
+                      NOTE_TYPE_CFG[n.type]?.badge ?? n.type,
+                      n.contenu,
+                    ]);
+                    openDocument({
+                      titre: "Journal d'hospitalisation",
+                      sousTitre: `${patient.prenom} ${patient.nom} — ${hospi.service ?? "—"} — Lit ${hospi.lit ?? "?"}`,
+                      etablissement: etab,
+                      sections: [
+                        { titre: "Informations", html: infoGridHTML([
+                          { label: "Patient",        value: `${patient.prenom} ${patient.nom}` },
+                          { label: "Service",        value: hospi.service ?? "—" },
+                          { label: "Lit",            value: `${hospi.lit ?? "?"} — Ch. ${hospi.chambre ?? "?"}` },
+                          { label: "Date entree",    value: hospi.date_entree ? new Date(hospi.date_entree).toLocaleDateString("fr-FR") : "—" },
+                          { label: "Sortie prevue",  value: hospi.date_sortie_prevue ? new Date(hospi.date_sortie_prevue).toLocaleDateString("fr-FR") : "—" },
+                        ]) },
+                        rows.length > 0
+                          ? { titre: "Notes d'evolution", html: tableHTML(["Date", "Auteur", "Type", "Note"], rows) }
+                          : { titre: "Notes", html: "<p>Aucune note enregistree.</p>" },
+                        { titre: "", html: signatureRowHTML(["Medecin referent", "Chef de service"]) },
+                      ],
+                    });
+                  };
+
+                  return (
+                    <div style={{ marginTop: 24, borderTop: `1px solid ${colors.borderLight}`, paddingTop: 20 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                        <h4 style={{ margin: 0, fontSize: 13, fontWeight: 800, color: colors.navy }}>Journal d'hospitalisation</h4>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <button onClick={handleImprimerJournal} style={{ fontSize: 11, padding: "4px 10px", border: "none", borderRadius: 7, background: "#EFF6FF", color: "#2563EB", cursor: "pointer", fontWeight: 600 }}>Imprimer le journal</button>
+                          <button onClick={() => setShowNoteForm(true)} style={{ fontSize: 11, padding: "4px 10px", border: "none", borderRadius: 7, background: ACCENT, color: "white", cursor: "pointer", fontWeight: 700 }}>+ Ajouter une note</button>
+                        </div>
+                      </div>
+
+                      {showNoteForm && (
+                        <div style={{ background: "#F8FAFC", borderRadius: 10, padding: "14px 16px", marginBottom: 16, border: "1px solid #E5E7EB" }}>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                            <div>
+                              <label style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4 }}>Auteur</label>
+                              <input value={noteForm.auteur} onChange={(e) => setNoteForm((f) => ({ ...f, auteur: e.target.value }))}
+                                style={{ width: "100%", padding: "8px 10px", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 12, outline: "none", boxSizing: "border-box" }} />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4 }}>Type</label>
+                              <select value={noteForm.type} onChange={(e) => setNoteForm((f) => ({ ...f, type: e.target.value }))}
+                                style={{ width: "100%", padding: "8px 10px", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 12, outline: "none", background: "white" }}>
+                                {Object.entries(NOTE_TYPE_CFG).map(([v, c]) => <option key={v} value={v}>{c.label}</option>)}
+                              </select>
+                            </div>
+                          </div>
+                          <div style={{ marginBottom: 10 }}>
+                            <label style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4 }}>Contenu *</label>
+                            <textarea value={noteForm.contenu} onChange={(e) => setNoteForm((f) => ({ ...f, contenu: e.target.value }))}
+                              style={{ width: "100%", padding: "8px 10px", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 12, outline: "none", boxSizing: "border-box", resize: "vertical", minHeight: 120 }}
+                              placeholder="Etat du patient, observations, prescriptions..." />
+                          </div>
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <button onClick={() => setShowNoteForm(false)} style={{ flex: 1, padding: "7px 0", background: "#F3F4F6", border: "none", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>Annuler</button>
+                            <button onClick={handleSaveNote} disabled={savingNote} style={{ flex: 2, padding: "7px 0", background: savingNote ? "#D1D5DB" : ACCENT, color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: savingNote ? "wait" : "pointer" }}>
+                              {savingNote ? "Enregistrement..." : "Enregistrer la note"}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {notes.length === 0 && <div style={{ fontSize: 12, color: colors.textMuted, fontStyle: "italic" }}>Aucune note enregistree.</div>}
+                      {notes.map((n, i) => {
+                        const cfg = NOTE_TYPE_CFG[n.type] ?? NOTE_TYPE_CFG.evolution;
+                        return (
+                          <div key={n.id} style={{ paddingBottom: 12, marginBottom: 12, borderBottom: i < notes.length - 1 ? `1px solid ${colors.borderLight}` : "none" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                              <span style={{ fontSize: 11, color: colors.textMuted }}>
+                                {new Date(n.created_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                              <span style={{ fontSize: 11, fontWeight: 800, color: cfg.color, backgroundColor: cfg.bg, padding: "1px 7px", borderRadius: 6 }}>{cfg.badge}</span>
+                            </div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: colors.navy, marginBottom: 2 }}>{n.auteur}</div>
+                            <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{n.contenu}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </div>
             )}
 

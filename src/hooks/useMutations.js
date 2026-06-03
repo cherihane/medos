@@ -409,3 +409,53 @@ export async function fetchMembresPersonnel(etablissement_id) {
   const { data } = await q;
   return data ?? [];
 }
+
+// ─── Tarifs des actes ─────────────────────────────────────────────────────────
+export async function fetchTarifsActes(etablissement_id) {
+  let q = supabase.from("tarifs_actes").select("*").eq("actif", true).order("categorie").order("libelle");
+  if (etablissement_id) q = q.eq("etablissement_id", etablissement_id);
+  const { data } = await q;
+  return data ?? [];
+}
+
+export async function fetchTarifsActesTous(etablissement_id) {
+  let q = supabase.from("tarifs_actes").select("*").order("categorie").order("libelle");
+  if (etablissement_id) q = q.eq("etablissement_id", etablissement_id);
+  const { data } = await q;
+  return data ?? [];
+}
+
+export async function insertTarifActe(fields) {
+  return run(supabase.from("tarifs_actes").insert(fields).select().single());
+}
+
+export async function updateTarifActe(id, fields) {
+  return run(supabase.from("tarifs_actes").update(fields).eq("id", id).select().single());
+}
+
+export async function deleteTarifActe(id) {
+  return run(supabase.from("tarifs_actes").delete().eq("id", id));
+}
+
+// ─── Notes d'evolution ────────────────────────────────────────────────────────
+export async function insertNoteEvolution(fields) {
+  return run(supabase.from("notes_evolution").insert(fields).select().single());
+}
+
+export async function fetchNotesEvolution(patient_id) {
+  const { data } = await supabase
+    .from("notes_evolution")
+    .select("*")
+    .eq("patient_id", patient_id)
+    .order("created_at", { ascending: false });
+  return data ?? [];
+}
+
+export async function fetchNotesHospitalisation(hospitalisation_id) {
+  const { data } = await supabase
+    .from("notes_evolution")
+    .select("*")
+    .eq("hospitalisation_id", hospitalisation_id)
+    .order("created_at", { ascending: false });
+  return data ?? [];
+}
