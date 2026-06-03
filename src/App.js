@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { NotificationsProvider } from "./context/NotificationsContext";
+import { DarkModeProvider } from "./context/DarkModeContext";
 
 // ── Chargement différé de toutes les pages ────────────────────────────────────
 
@@ -27,6 +28,8 @@ const PhFournisseurs = lazy(() => import("./pages/pharmacie/Fournisseurs"));
 const PhCredits      = lazy(() => import("./pages/pharmacie/Credits"));
 const PhRapports     = lazy(() => import("./pages/pharmacie/Rapports"));
 const PhScanner      = lazy(() => import("./pages/pharmacie/Scanner"));
+const PhMouvements   = lazy(() => import("./pages/pharmacie/Mouvements"));
+const PhPeremptions  = lazy(() => import("./pages/pharmacie/Peremptions"));
 
 // Hôpital
 const HoDashboard    = lazy(() => import("./pages/hopital/Dashboard"));
@@ -118,6 +121,8 @@ function AppRoutes() {
         <Route path="/pharmacie/credits"     element={<ProtectedRoute requiredRole="pharmacie"><PhCredits /></ProtectedRoute>} />
         <Route path="/pharmacie/rapports"    element={<ProtectedRoute requiredRole="pharmacie"><PhRapports /></ProtectedRoute>} />
         <Route path="/pharmacie/scanner"     element={<ProtectedRoute requiredRole="pharmacie"><PhScanner /></ProtectedRoute>} />
+        <Route path="/pharmacie/mouvements"  element={<ProtectedRoute requiredRole="pharmacie"><PhMouvements /></ProtectedRoute>} />
+        <Route path="/pharmacie/peremptions" element={<ProtectedRoute requiredRole="pharmacie"><PhPeremptions /></ProtectedRoute>} />
 
         {/* Hôpital */}
         <Route path="/hopital/dashboard"    element={<ProtectedRoute requiredRole="hopital"><HoDashboard /></ProtectedRoute>} />
@@ -159,11 +164,13 @@ function AppRoutes() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <NotificationsProvider>
-          <AppRoutes />
-        </NotificationsProvider>
-      </AuthProvider>
+      <DarkModeProvider>
+        <AuthProvider>
+          <NotificationsProvider>
+            <AppRoutes />
+          </NotificationsProvider>
+        </AuthProvider>
+      </DarkModeProvider>
     </BrowserRouter>
   );
 }

@@ -3,11 +3,12 @@ import Layout from "../../components/Layout";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useMedicaments } from "../../hooks/useSupabaseData";
-import { insertVentes, decrementStock, insertJournalCaisse, fetchJournalJour, insertClotureCaisse, fetchClotureCaisse } from "../../hooks/useMutations";
+import { insertVentes, decrementStock, insertJournalCaisse, fetchJournalJour, insertClotureCaisse, fetchClotureCaisse, insertFondCaisse, fetchFondJour } from "../../hooks/useMutations";
 import { supabase } from "../../supabaseClient";
 import { useAuth } from "../../context/AuthContext";
 import { openDocument, tableHTML, kpiHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
 import { useIsMobile } from "../../hooks/useWindowSize";
+import QrScanner from "../../components/QrScanner";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 function todayISO() {
@@ -25,12 +26,75 @@ function txnRef(date, uuid) {
 }
 
 const MODE_LABELS = {
-  especes: "Espèces",
-  mobile_money: "Mobile Money",
-  credit: "Crédit",
-  carte: "Carte",
-  assurance: "Assurance",
+  especes:        "Espèces",
+  mobile_money:   "Mobile Money",
+  especes_mobile: "Espèces + Mobile",
+  credit:         "Crédit",
+  carte:          "Carte",
+  assurance:      "Assurance/Mutuelle",
+  cnss:           "CNSS",
 };
+
+// ─── Modal fond de caisse ─────────────────────────────────────────────────────
+function FondCaisseModal({ auth, date, onSaved, onSkip }) {
+  const [montant, setMontant] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const handleSave = async () => {
+    const val = parseInt(montant, 10);
+    if (isNaN(val) || val < 0) { setErr("Saisissez un montant valide (0 ou plus)."); return; }
+    setSaving(true);
+    setErr(null);
+    try {
+      await insertFondCaisse({
+        etablissement_id: auth?.etablissement_id ?? null,
+        caissier_id:      auth?.user?.id         ?? null,
+        caissier_email:   auth?.user?.email       ?? null,
+        montant:          val,
+        date_journee:     date,
+      });
+      onSaved(val);
+    } catch (e) {
+      setErr("Erreur : " + e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ backgroundColor: "white", borderRadius: 16, padding: "28px 32px", width: 440, maxWidth: "95vw", boxShadow: "0 8px 40px rgba(0,0,0,0.18)" }}>
+        <h2 style={{ margin: "0 0 4px", fontSize: 17, fontWeight: 800, color: "#0A1628" }}>Fond de caisse</h2>
+        <p style={{ margin: "0 0 20px", fontSize: 13, color: "#6B7280" }}>
+          Saisissez le montant en caisse au début de cette session ({date}).
+        </p>
+        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
+          Montant en caisse (FCFA)
+        </label>
+        <input
+          type="number"
+          min="0"
+          autoFocus
+          value={montant}
+          onChange={(e) => { setErr(null); setMontant(e.target.value); }}
+          onKeyDown={(e) => e.key === "Enter" && handleSave()}
+          placeholder="Ex : 50000"
+          style={{ width: "100%", padding: "11px 14px", border: `1.5px solid ${err ? "#EF4444" : "#E5E7EB"}`, borderRadius: 8, fontSize: 15, fontWeight: 700, boxSizing: "border-box", outline: "none", marginBottom: err ? 6 : 20 }}
+        />
+        {err && <div style={{ fontSize: 12, color: "#EF4444", marginBottom: 14 }}>{err}</div>}
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={onSkip} style={{ flex: 1, padding: "10px", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", backgroundColor: "white", color: "#374151" }}>
+            Passer
+          </button>
+          <button onClick={handleSave} disabled={saving} style={{ flex: 2, padding: "10px", backgroundColor: saving ? "#E5E7EB" : "#3B82F6", color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer" }}>
+            {saving ? "Enregistrement…" : "Confirmer"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Ticket de caisse imprimable ─────────────────────────────────────────────
 function printTicket({ ref, date, items, paiement, total, montantRecu, monnaie, etab }) {
@@ -241,12 +305,46 @@ function OngletCaisse({ onSaleComplete }) {
   const [search, setSearch] = useState("");
   const [paiement, setPaiement] = useState("especes");
   const [montantRecu, setMontantRecu] = useState("");
+  const [montantEspeces, setMontantEspeces] = useState("");
+  const [montantMobile, setMontantMobile]   = useState("");
+  const [tauxCouverture, setTauxCouverture] = useState("80");  // assurance/cnss %
   const [saving, setSaving] = useState(false);
   const [lastTicket, setLastTicket] = useState(null);
+  const [showScanner, setShowScanner] = useState(false);
+
+  // Fond de caisse
+  const [fondModal, setFondModal] = useState(false);
+  const [fondMontant, setFondMontant] = useState(null);
+  useEffect(() => {
+    fetchFondJour(auth?.etablissement_id ?? null, todayISO()).then((f) => {
+      if (f) setFondMontant(f.montant);
+      else setFondModal(true);
+    }).catch(() => setFondModal(true));
+  }, [auth?.etablissement_id]);
 
   const total = cart.reduce((s, i) => s + (i.prix_unitaire ?? 0) * i.qty, 0);
+
+  // Calculs selon mode de paiement
+  const partAssurance = paiement === "assurance" || paiement === "cnss"
+    ? Math.round(total * Math.min(100, Math.max(0, Number(tauxCouverture))) / 100)
+    : 0;
+  const restePatient = total - partAssurance;
   const monnaie = paiement === "especes" ? Math.max(0, Number(montantRecu) - total) : 0;
   const recuInsuffisant = paiement === "especes" && montantRecu !== "" && Number(montantRecu) < total;
+  const mixteInsuffisant = paiement === "especes_mobile" &&
+    (montantEspeces !== "" || montantMobile !== "") &&
+    (Number(montantEspeces) + Number(montantMobile)) < total;
+
+  // Scanner : cherche par code ou nom
+  const handleScan = (text) => {
+    setShowScanner(false);
+    const found = medicaments.find((m) =>
+      m.code === text ||
+      (m.nom ?? "").toLowerCase().includes(text.toLowerCase())
+    );
+    if (found) addToCart(found);
+    else toastError("Médicament non trouvé, vérifiez l'inventaire.");
+  };
 
   // Bloque les médicaments sans prix : force à saisir un prix avant de vendre
   const addToCart = (med) => {
@@ -277,6 +375,7 @@ function OngletCaisse({ onSaleComplete }) {
   const handleEncaisser = async () => {
     if (cart.length === 0) return;
     if (recuInsuffisant) return toastError("Montant reçu insuffisant");
+    if (mixteInsuffisant) return toastError("La somme espèces + mobile est insuffisante");
     // Vérification prix avant validation
     const sansPrice = cart.filter((i) => (i.prix_unitaire ?? 0) === 0);
     if (sansPrice.length > 0) return toastError(`Prix manquant : ${sansPrice.map((i) => i.nom).join(", ")}`);
@@ -286,6 +385,18 @@ function OngletCaisse({ onSaleComplete }) {
       const etablissement_id = auth?.etablissement_id ?? null;
       const caissier_id = auth?.user?.id ?? null;
       const caissier_email = auth?.user?.email ?? null;
+
+      // Calcul montant reçu selon mode
+      let montantRecuNum = null;
+      let monnaieRendue = null;
+      if (paiement === "especes" && montantRecu !== "") {
+        montantRecuNum = Number(montantRecu);
+        monnaieRendue  = Math.max(0, montantRecuNum - total);
+      } else if (paiement === "especes_mobile") {
+        montantRecuNum = Number(montantEspeces) + Number(montantMobile);
+      } else if (paiement === "assurance" || paiement === "cnss") {
+        montantRecuNum = restePatient; // part patient seulement
+      }
 
       // 1. Insert ventes (prix snapshot depuis le panier, pas depuis la DB)
       const rows = cart.map((item) => ({
@@ -304,8 +415,6 @@ function OngletCaisse({ onSaleComplete }) {
       await Promise.all(cart.map((item) => decrementStock(item.id, item.qty)));
 
       // 3. Journal de caisse avec détail complet (prix snapshot)
-      const montantRecuNum = paiement === "especes" && montantRecu !== "" ? Number(montantRecu) : null;
-      const monnaieRendue = montantRecuNum != null ? Math.max(0, montantRecuNum - total) : null;
       await insertJournalCaisse({
         etablissement_id,
         caissier_id,
@@ -338,6 +447,8 @@ function OngletCaisse({ onSaleComplete }) {
       });
       setCart([]);
       setMontantRecu("");
+      setMontantEspeces("");
+      setMontantMobile("");
       onSaleComplete?.();
     } catch (e) {
       toastError("Erreur : " + e.message);
@@ -349,6 +460,27 @@ function OngletCaisse({ onSaleComplete }) {
   return (
     <>
       <Toast toasts={toasts} />
+
+      {/* Fond de caisse */}
+      {fondModal && (
+        <FondCaisseModal
+          auth={auth}
+          date={todayISO()}
+          onSaved={(val) => { setFondMontant(val); setFondModal(false); success(`Fond de caisse enregistré : ${val.toLocaleString()} FCFA`); }}
+          onSkip={() => setFondModal(false)}
+        />
+      )}
+
+      {/* Scanner */}
+      {showScanner && <QrScanner onScan={handleScan} onClose={() => setShowScanner(false)} />}
+
+      {/* Bannière fond de caisse si enregistré */}
+      {fondMontant !== null && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 18px", backgroundColor: "#EFF6FF", border: "1.5px solid #BFDBFE", borderRadius: 10, marginBottom: 12 }}>
+          <span style={{ fontSize: 13, color: "#2563EB", fontWeight: 600 }}>Fond de caisse : {fondMontant.toLocaleString()} FCFA</span>
+          <button onClick={() => setFondModal(true)} style={{ fontSize: 12, color: "#3B82F6", background: "none", border: "none", cursor: "pointer", fontWeight: 600, textDecoration: "underline" }}>Modifier</button>
+        </div>
+      )}
 
       {/* Bannière ticket après vente */}
       {lastTicket && (
@@ -377,13 +509,25 @@ function OngletCaisse({ onSaleComplete }) {
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 360px", gap: 20, height: isMobile ? "auto" : "calc(100vh - 220px)" }}>
         {/* Gauche */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <div style={{ backgroundColor: "white", borderRadius: 14, padding: "16px 20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <div style={{ backgroundColor: "white", borderRadius: 14, padding: "16px 20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", display: "flex", gap: 10, alignItems: "center" }}>
             <input
               placeholder="Rechercher un médicament…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              style={{ width: "100%", padding: "10px 14px", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 14, outline: "none", boxSizing: "border-box" }}
+              style={{ flex: 1, padding: "10px 14px", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 14, outline: "none", boxSizing: "border-box" }}
             />
+            <button
+              onClick={() => setShowScanner(true)}
+              title="Scanner un code-barres ou QR code"
+              style={{ flexShrink: 0, padding: "10px 16px", backgroundColor: "#0A1628", color: "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/>
+                <path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
+                <line x1="7" y1="12" x2="17" y2="12"/>
+              </svg>
+              Scanner
+            </button>
           </div>
 
           <div style={{ backgroundColor: "white", borderRadius: 14, padding: "20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
@@ -494,10 +638,17 @@ function OngletCaisse({ onSaleComplete }) {
             {/* Mode de paiement */}
             <div style={{ marginBottom: 12 }}>
               <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Mode de paiement</label>
-              <div style={{ display: "flex", gap: 8 }}>
-                {[{ key: "especes", label: "Espèces" }, { key: "mobile_money", label: "Mobile" }, { key: "credit", label: "Crédit" }].map((mode) => (
-                  <button key={mode.key} onClick={() => { setPaiement(mode.key); setMontantRecu(""); }} style={{
-                    flex: 1, padding: "8px", borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: "pointer",
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {[
+                  { key: "especes",        label: "Espèces" },
+                  { key: "mobile_money",   label: "Mobile" },
+                  { key: "especes_mobile", label: "Mixte" },
+                  { key: "credit",         label: "Crédit" },
+                  { key: "assurance",      label: "Assurance" },
+                  { key: "cnss",           label: "CNSS" },
+                ].map((mode) => (
+                  <button key={mode.key} onClick={() => { setPaiement(mode.key); setMontantRecu(""); setMontantEspeces(""); setMontantMobile(""); }} style={{
+                    flex: "1 1 auto", padding: "7px 6px", borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: "pointer",
                     border: paiement === mode.key ? "2px solid #3B82F6" : "1.5px solid #E5E7EB",
                     backgroundColor: paiement === mode.key ? "#EFF6FF" : "white",
                     color: paiement === mode.key ? "#2563EB" : "#6B7280",
@@ -505,6 +656,45 @@ function OngletCaisse({ onSaleComplete }) {
                 ))}
               </div>
             </div>
+
+            {/* Paiement mixte espèces + mobile */}
+            {paiement === "especes_mobile" && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 3 }}>Espèces (FCFA)</label>
+                    <input type="number" min="0" value={montantEspeces} onChange={(e) => setMontantEspeces(e.target.value)} placeholder="0" style={{ width: "100%", padding: "8px 10px", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 3 }}>Mobile Money (FCFA)</label>
+                    <input type="number" min="0" value={montantMobile} onChange={(e) => setMontantMobile(e.target.value)} placeholder="0" style={{ width: "100%", padding: "8px 10px", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                  </div>
+                </div>
+                {mixteInsuffisant && <div style={{ fontSize: 11, color: "#EF4444" }}>Total saisi ({(Number(montantEspeces)+Number(montantMobile)).toLocaleString()} FCFA) inférieur au total ({total.toLocaleString()} FCFA)</div>}
+                {!mixteInsuffisant && (montantEspeces || montantMobile) && <div style={{ fontSize: 12, color: "#10B981", fontWeight: 700 }}>Total saisi : {(Number(montantEspeces)+Number(montantMobile)).toLocaleString()} FCFA</div>}
+              </div>
+            )}
+
+            {/* Assurance / Mutuelle / CNSS */}
+            {(paiement === "assurance" || paiement === "cnss") && (
+              <div style={{ marginBottom: 12, backgroundColor: "#F0F4FB", borderRadius: 10, padding: "12px 14px" }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
+                  Taux de couverture {paiement === "cnss" ? "CNSS" : "assurance"} (%)
+                </label>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+                  <input type="number" min="0" max="100" value={tauxCouverture} onChange={(e) => setTauxCouverture(e.target.value)} style={{ width: 80, padding: "7px 10px", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 13, outline: "none" }} />
+                  <span style={{ fontSize: 13, color: "#6B7280" }}>%</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#374151" }}>
+                  <span>Part {paiement === "cnss" ? "CNSS" : "assurance"} :</span>
+                  <span style={{ fontWeight: 700, color: "#16A34A" }}>{partAssurance.toLocaleString()} FCFA</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#0A1628", fontWeight: 700, marginTop: 4 }}>
+                  <span>Reste à payer (patient) :</span>
+                  <span style={{ color: "#EF4444" }}>{restePatient.toLocaleString()} FCFA</span>
+                </div>
+              </div>
+            )}
 
             {/* Suivi espèces */}
             {paiement === "especes" && (
@@ -537,14 +727,14 @@ function OngletCaisse({ onSaleComplete }) {
             )}
 
             <button
-              disabled={cart.length === 0 || saving || recuInsuffisant}
+              disabled={cart.length === 0 || saving || recuInsuffisant || mixteInsuffisant}
               onClick={handleEncaisser}
               style={{
                 width: "100%", padding: "14px",
-                backgroundColor: cart.length === 0 || saving || recuInsuffisant ? "#E5E7EB" : "#10B981",
-                color: cart.length === 0 || saving || recuInsuffisant ? "#9CA3AF" : "white",
+                backgroundColor: cart.length === 0 || saving || recuInsuffisant || mixteInsuffisant ? "#E5E7EB" : "#10B981",
+                color: cart.length === 0 || saving || recuInsuffisant || mixteInsuffisant ? "#9CA3AF" : "white",
                 border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700,
-                cursor: cart.length === 0 || saving || recuInsuffisant ? "not-allowed" : "pointer",
+                cursor: cart.length === 0 || saving || recuInsuffisant || mixteInsuffisant ? "not-allowed" : "pointer",
               }}
             >
               {saving ? "Enregistrement…" : "Valider la vente"}
@@ -565,12 +755,16 @@ function OngletCaisse({ onSaleComplete }) {
 }
 
 // ─── Modal clôture de caisse ─────────────────────────────────────────────────
-function ClotureModal({ date, journal, byMode, totalEncaisse, auth, onClose, onDone }) {
+function ClotureModal({ date, journal, byMode, totalEncaisse, fondMontant, auth, onClose, onDone }) {
   const [password, setPassword] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(null);
 
   const nb = journal.length;
+  const totalMonnaieRendue = journal.reduce((s, r) => s + (r.monnaie_rendue ?? 0), 0);
+  const soldeTheorique = fondMontant != null
+    ? fondMontant + (byMode.especes ?? 0) - totalMonnaieRendue
+    : null;
   const totaux = {
     especes:  byMode.especes     ?? 0,
     mobile:   byMode.mobile_money ?? 0,
@@ -639,6 +833,12 @@ function ClotureModal({ date, journal, byMode, totalEncaisse, auth, onClose, onD
                   <td style={{ fontSize: 13, fontWeight: 700, color: "#0A1628", textAlign: "right" }}>{r.val.toLocaleString("fr-FR")} FCFA</td>
                 </tr>
               ))}
+              {fondMontant != null && (
+                <tr>
+                  <td style={{ fontSize: 12, color: "#6B7280", padding: "5px 0", fontStyle: "italic" }}>Fond de départ</td>
+                  <td style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", textAlign: "right", fontStyle: "italic" }}>{fondMontant.toLocaleString("fr-FR")} FCFA</td>
+                </tr>
+              )}
               <tr style={{ borderTop: "2px solid #0A1628" }}>
                 <td style={{ fontSize: 14, fontWeight: 800, color: "#0A1628", paddingTop: 8 }}>TOTAL ENCAISSÉ</td>
                 <td style={{ fontSize: 15, fontWeight: 800, color: "#10B981", textAlign: "right", paddingTop: 8 }}>{totaux.total.toLocaleString("fr-FR")} FCFA</td>
@@ -648,6 +848,14 @@ function ClotureModal({ date, journal, byMode, totalEncaisse, auth, onClose, onD
           <div style={{ marginTop: 10, fontSize: 12, color: "#6B7280" }}>Transactions : <strong>{nb}</strong></div>
         </div>
 
+        {soldeTheorique != null && (
+          <div style={{ backgroundColor: "#DCFCE7", border: "1.5px solid #16A34A", borderRadius: 8, padding: "10px 14px", marginBottom: 12, fontSize: 12 }}>
+            <div style={{ fontWeight: 700, color: "#15803D", marginBottom: 2 }}>Solde théorique en caisse</div>
+            <div style={{ fontSize: 11, color: "#374151" }}>
+              Fond {fondMontant.toLocaleString()} + Espèces {totaux.especes.toLocaleString()} – Monnaie {totalMonnaieRendue.toLocaleString()} = <strong>{soldeTheorique.toLocaleString("fr-FR")} FCFA</strong>
+            </div>
+          </div>
+        )}
         <div style={{ backgroundColor: "#FFFBEB", border: "1.5px solid #FCD34D", borderRadius: 8, padding: "10px 14px", marginBottom: 20, fontSize: 12, color: "#92400E" }}>
           Cette opération est irréversible. La journée sera verrouillée en lecture seule. Confirmez avec votre mot de passe.
         </div>
@@ -685,6 +893,7 @@ function OngletJournal({ refreshKey }) {
   const [error, setError] = useState(null);
   const [cloture, setCloture] = useState(null);
   const [showCloture, setShowCloture] = useState(false);
+  const [fondCloture, setFondCloture] = useState(null);
 
   const isGerant = auth?.role_interne === null || auth?.role_interne === "gerant";
 
@@ -692,12 +901,14 @@ function OngletJournal({ refreshKey }) {
     setLoading(true);
     setError(null);
     try {
-      const [data, clot] = await Promise.all([
+      const [data, clot, fond] = await Promise.all([
         fetchJournalJour(auth?.etablissement_id ?? null, date),
         fetchClotureCaisse(auth?.etablissement_id ?? null, date),
+        fetchFondJour(auth?.etablissement_id ?? null, date),
       ]);
       setJournal(data);
       setCloture(clot);
+      setFondCloture(fond?.montant ?? null);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -735,6 +946,7 @@ function OngletJournal({ refreshKey }) {
           journal={journal}
           byMode={byMode}
           totalEncaisse={totalEncaisse}
+          fondMontant={fondCloture}
           auth={auth}
           onClose={() => setShowCloture(false)}
           onDone={() => { setShowCloture(false); load(); }}

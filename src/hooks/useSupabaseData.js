@@ -53,13 +53,18 @@ export function useMedicamentStats() {
   );
 }
 
-export function usePatientsPaginated(search = "", pageSize = 20) {
+export function usePatientsPaginated(search = "", pageSize = 20, filtre = "") {
   return usePaginated(() => {
     let q = supabase.from("patients").select("*", { count: "exact" }).order("nom");
     const s = search.trim();
     if (s) q = q.or(`nom.ilike.%${s}%,prenom.ilike.%${s}%`);
+    if (filtre === "avec_allergies")    q = q.not("allergies", "is", null).neq("allergies", "{}");
+    if (filtre === "avec_mutuelle")     q = q.not("mutuelle", "is", null).neq("mutuelle", "");
+    if (filtre === "fidele")            q = q.gte("nb_visites", 5);
+    if (filtre === "recurrent")         q = q.gte("nb_visites", 2).lt("nb_visites", 5);
+    if (filtre === "occasionnel")       q = q.eq("nb_visites", 1);
     return q;
-  }, [search], pageSize);
+  }, [search, filtre], pageSize);
 }
 
 // Counts globaux patients pour KPI hôpital

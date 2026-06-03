@@ -45,6 +45,8 @@ export const roleConfig = {
       { path: "/pharmacie/fournisseurs", label: "Fournisseurs", icon: "fournisseurs" },
       { path: "/pharmacie/credits", label: "Crédits", icon: "credits" },
       { path: "/pharmacie/rapports", label: "Rapports", icon: "rapports" },
+      { path: "/pharmacie/mouvements", label: "Mouvements", icon: "mouvements" },
+      { path: "/pharmacie/peremptions", label: "Péremptions", icon: "peremptions" },
       { path: "/pharmacie/scanner", label: "Scanner", icon: "scanner" },
       { path: "/parametres", label: "Paramètres", icon: "parametres" },
     ],
