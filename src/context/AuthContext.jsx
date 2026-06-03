@@ -7,25 +7,44 @@ const AuthContext = createContext(null);
 // /parametres est toujours inclus pour tous les rôles internes.
 const NAV_INTERNE = {
   pharmacie: {
-    gerant:      null, // accès complet
-    pharmacien:  ["/pharmacie/dashboard", "/pharmacie/inventaire", "/pharmacie/ordonnances", "/pharmacie/patients", "/pharmacie/scanner"],
-    caissier:    ["/pharmacie/caisse", "/pharmacie/scanner"],
+    gerant: null, // accès complet
+    pharmacien: [
+      "/pharmacie/dashboard",
+      "/pharmacie/inventaire",
+      "/pharmacie/ordonnances",
+      "/pharmacie/patients",
+      "/pharmacie/scanner",
+    ],
+    caissier: ["/pharmacie/caisse", "/pharmacie/scanner"],
   },
   hopital: {
-    directeur:            null,
-    medecin:              ["/hopital/dashboard", "/hopital/assistant", "/hopital/alertes"],
-    infirmiere:           ["/hopital/dashboard", "/hopital/alertes"],
-    pharmacien_hospitalier: ["/hopital/stock", "/hopital/scanner", "/hopital/alertes"],
+    directeur: null,
+    medecin: ["/hopital/dashboard", "/hopital/assistant", "/hopital/alertes"],
+    infirmiere: ["/hopital/dashboard", "/hopital/alertes"],
+    pharmacien_hospitalier: [
+      "/hopital/stock",
+      "/hopital/scanner",
+      "/hopital/alertes",
+    ],
   },
   distributeur: {
-    directeur:  null,
-    commercial: ["/distributeur/dashboard", "/distributeur/reseau-clients", "/distributeur/clients", "/distributeur/previsions"],
-    logistique: ["/distributeur/entrepot", "/distributeur/livraisons", "/distributeur/tracabilite"],
+    directeur: null,
+    commercial: [
+      "/distributeur/dashboard",
+      "/distributeur/reseau-clients",
+      "/distributeur/clients",
+      "/distributeur/previsions",
+    ],
+    logistique: [
+      "/distributeur/entrepot",
+      "/distributeur/livraisons",
+      "/distributeur/tracabilite",
+    ],
   },
   autorite: {
-    ministre:   null,
+    ministre: null,
     inspecteur: null,
-    analyste:   null,
+    analyste: null,
   },
 };
 
@@ -39,14 +58,34 @@ export const roleConfig = {
     nav: [
       { path: "/pharmacie/dashboard", label: "Dashboard", icon: "dashboard" },
       { path: "/pharmacie/caisse", label: "Caisse", icon: "caisse" },
-      { path: "/pharmacie/inventaire", label: "Inventaire", icon: "inventaire" },
-      { path: "/pharmacie/ordonnances", label: "Ordonnances", icon: "ordonnances" },
+      {
+        path: "/pharmacie/inventaire",
+        label: "Inventaire",
+        icon: "inventaire",
+      },
+      {
+        path: "/pharmacie/ordonnances",
+        label: "Ordonnances",
+        icon: "ordonnances",
+      },
       { path: "/pharmacie/patients", label: "Patients", icon: "patients" },
-      { path: "/pharmacie/fournisseurs", label: "Fournisseurs", icon: "fournisseurs" },
+      {
+        path: "/pharmacie/fournisseurs",
+        label: "Fournisseurs",
+        icon: "fournisseurs",
+      },
       { path: "/pharmacie/credits", label: "Crédits", icon: "credits" },
       { path: "/pharmacie/rapports", label: "Rapports", icon: "rapports" },
-      { path: "/pharmacie/mouvements", label: "Mouvements", icon: "mouvements" },
-      { path: "/pharmacie/peremptions", label: "Péremptions", icon: "peremptions" },
+      {
+        path: "/pharmacie/mouvements",
+        label: "Mouvements",
+        icon: "mouvements",
+      },
+      {
+        path: "/pharmacie/peremptions",
+        label: "Péremptions",
+        icon: "peremptions",
+      },
       { path: "/pharmacie/scanner", label: "Scanner", icon: "scanner" },
       { path: "/parametres", label: "Paramètres", icon: "parametres" },
     ],
@@ -60,17 +99,36 @@ export const roleConfig = {
     nav: [
       { path: "/hopital/dashboard", label: "Dashboard", icon: "dashboard" },
       { path: "/hopital/stock", label: "Stock", icon: "inventaire" },
-      { path: "/hopital/fournisseurs", label: "Fournisseurs", icon: "fournisseurs" },
-      { path: "/hopital/patients",    label: "Patients",      icon: "patients"    },
-      { path: "/hopital/predictions", label: "Prédictions IA", icon: "predictions" },
+      {
+        path: "/hopital/fournisseurs",
+        label: "Fournisseurs",
+        icon: "fournisseurs",
+      },
+      { path: "/hopital/patients", label: "Patients", icon: "patients" },
+      {
+        path: "/hopital/predictions",
+        label: "Prédictions IA",
+        icon: "predictions",
+      },
       { path: "/hopital/scanner", label: "Scanner", icon: "scanner" },
       { path: "/hopital/assistant", label: "Assistant IA", icon: "assistant" },
-      { path: "/hopital/facturation", label: "Facturation", icon: "facturation" },
+      {
+        path: "/hopital/facturation",
+        label: "Facturation",
+        icon: "facturation",
+      },
       { path: "/hopital/planning", label: "Planning gardes", icon: "planning" },
       { path: "/hopital/reseau", label: "Réseau", icon: "reseau" },
       { path: "/hopital/alertes", label: "Alertes", icon: "alertes" },
       { path: "/hopital/rapports", label: "Rapports", icon: "rapports" },
       { path: "/parametres", label: "Paramètres", icon: "parametres" },
+      {
+        path: "/hopital/consultations",
+        label: "Consultations",
+        icon: "consultations",
+      },
+      { path: "/hopital/examens", label: "Examens / Labo", icon: "examens" },
+      { path: "/hopital/lits", label: "Gestion des lits", icon: "lits" },
     ],
   },
   distributeur: {
@@ -80,11 +138,31 @@ export const roleConfig = {
     initial: "D",
     dashboardPath: "/distributeur/dashboard",
     nav: [
-      { path: "/distributeur/dashboard", label: "Dashboard", icon: "dashboard" },
-      { path: "/distributeur/reseau-clients", label: "Réseau clients", icon: "reseau" },
-      { path: "/distributeur/previsions", label: "Prévisions", icon: "previsions" },
-      { path: "/distributeur/livraisons", label: "Livraisons", icon: "livraisons" },
-      { path: "/distributeur/tracabilite", label: "Traçabilité", icon: "scanner" },
+      {
+        path: "/distributeur/dashboard",
+        label: "Dashboard",
+        icon: "dashboard",
+      },
+      {
+        path: "/distributeur/reseau-clients",
+        label: "Réseau clients",
+        icon: "reseau",
+      },
+      {
+        path: "/distributeur/previsions",
+        label: "Prévisions",
+        icon: "previsions",
+      },
+      {
+        path: "/distributeur/livraisons",
+        label: "Livraisons",
+        icon: "livraisons",
+      },
+      {
+        path: "/distributeur/tracabilite",
+        label: "Traçabilité",
+        icon: "scanner",
+      },
       { path: "/distributeur/entrepot", label: "Entrepôt", icon: "entrepot" },
       { path: "/distributeur/clients", label: "Clients", icon: "patients" },
       { path: "/distributeur/alertes", label: "Alertes", icon: "alertes" },
@@ -98,12 +176,24 @@ export const roleConfig = {
     initial: "A",
     dashboardPath: "/autorite/vue-nationale",
     nav: [
-      { path: "/autorite/vue-nationale", label: "Vue nationale", icon: "dashboard" },
+      {
+        path: "/autorite/vue-nationale",
+        label: "Vue nationale",
+        icon: "dashboard",
+      },
       { path: "/autorite/cartographie", label: "Cartographie", icon: "carte" },
       { path: "/autorite/contrefacons", label: "Contrefaçons", icon: "shield" },
-      { path: "/autorite/epidemiologie", label: "Épidémiologie", icon: "predictions" },
+      {
+        path: "/autorite/epidemiologie",
+        label: "Épidémiologie",
+        icon: "predictions",
+      },
       { path: "/autorite/acteurs", label: "Acteurs", icon: "reseau" },
-      { path: "/autorite/rapports-odd", label: "Rapports ODD", icon: "rapports" },
+      {
+        path: "/autorite/rapports-odd",
+        label: "Rapports ODD",
+        icon: "rapports",
+      },
       { path: "/autorite/api", label: "API", icon: "api" },
       { path: "/parametres", label: "Paramètres", icon: "parametres" },
     ],
@@ -133,15 +223,32 @@ export function AuthProvider({ children }) {
     const firstNav = nav.find((item) => item.path !== "/parametres");
     const dashboardPath = firstNav ? firstNav.path : config.dashboardPath;
 
-    return { role, role_interne, ...config, nav, dashboardPath, user, etablissement_id: null };
+    return {
+      role,
+      role_interne,
+      ...config,
+      nav,
+      dashboardPath,
+      user,
+      etablissement_id: null,
+    };
   };
 
   // Étape 2 — enrichissement en arrière-plan avec etablissement_id + permissions custom
   const enrichWithEtablissement = async (user, mounted) => {
     try {
       const [etabRes, membreRes] = await Promise.all([
-        supabase.from("etablissements").select("id").eq("email", user.email).maybeSingle(),
-        supabase.from("membres_personnel").select("permissions_nav, actif").eq("email", user.email).eq("actif", true).maybeSingle(),
+        supabase
+          .from("etablissements")
+          .select("id")
+          .eq("email", user.email)
+          .maybeSingle(),
+        supabase
+          .from("membres_personnel")
+          .select("permissions_nav, actif")
+          .eq("email", user.email)
+          .eq("actif", true)
+          .maybeSingle(),
       ]);
       if (!mounted?.current) return;
       setAuth((prev) => {
@@ -152,7 +259,9 @@ export function AuthProvider({ children }) {
         const perms = membreRes.data?.permissions_nav;
         if (Array.isArray(perms) && perms.length > 0) {
           patch.nav = prev.nav.filter((item) => perms.includes(item.path));
-          const firstNav = patch.nav.find((item) => item.path !== "/parametres");
+          const firstNav = patch.nav.find(
+            (item) => item.path !== "/parametres",
+          );
           if (firstNav) patch.dashboardPath = firstNav.path;
         }
         return { ...prev, ...patch };
@@ -165,27 +274,33 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const mountedRef = { current: true };
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!mountedRef.current) return;
-      const base = session?.user ? buildAuthBase(session.user) : null;
-      setAuth(base);
-      setLoading(false); // ← immédiat, l'app s'affiche tout de suite
-      if (base) enrichWithEtablissement(session.user, mountedRef);
-    }).catch(() => {
-      if (mountedRef.current) setLoading(false);
-    });
-
-    // React to auth state changes (token refresh, sign-out, etc.)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
         if (!mountedRef.current) return;
         const base = session?.user ? buildAuthBase(session.user) : null;
         setAuth(base);
+        setLoading(false); // ← immédiat, l'app s'affiche tout de suite
         if (base) enrichWithEtablissement(session.user, mountedRef);
-      }
-    );
+      })
+      .catch(() => {
+        if (mountedRef.current) setLoading(false);
+      });
 
-    return () => { mountedRef.current = false; subscription.unsubscribe(); };
+    // React to auth state changes (token refresh, sign-out, etc.)
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mountedRef.current) return;
+      const base = session?.user ? buildAuthBase(session.user) : null;
+      setAuth(base);
+      if (base) enrichWithEtablissement(session.user, mountedRef);
+    });
+
+    return () => {
+      mountedRef.current = false;
+      subscription.unsubscribe();
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
@@ -196,7 +311,10 @@ export function AuthProvider({ children }) {
    */
   const login = async (role, email, password) => {
     // Attempt sign-in
-    let { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    let { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
     if (error) {
       if (
@@ -216,7 +334,10 @@ export function AuthProvider({ children }) {
         // If email confirmation is required, signInWithPassword may still fail.
         // Try once more (works when email confirmation is disabled).
         if (!signUpResult.data.session) {
-          const retry = await supabase.auth.signInWithPassword({ email, password });
+          const retry = await supabase.auth.signInWithPassword({
+            email,
+            password,
+          });
           if (retry.error) throw retry.error;
           data = retry.data;
         }
@@ -242,14 +363,14 @@ export function AuthProvider({ children }) {
       if (etab?.statut_inscription === "en_attente") {
         await supabase.auth.signOut();
         throw new Error(
-          "Votre compte est en cours de validation. Vous recevrez un email dès qu'une décision sera prise."
+          "Votre compte est en cours de validation. Vous recevrez un email dès qu'une décision sera prise.",
         );
       }
 
       if (etab?.statut_inscription === "refuse") {
         await supabase.auth.signOut();
         throw new Error(
-          "Votre demande d'accès a été refusée. Contactez contact@kelagroup.org pour plus d'informations."
+          "Votre demande d'accès a été refusée. Contactez contact@kelagroup.org pour plus d'informations.",
         );
       }
     }
