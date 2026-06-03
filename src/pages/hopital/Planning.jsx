@@ -5,6 +5,7 @@ import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../c
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useAuth } from "../../context/AuthContext";
+import { supabase } from "../../supabaseClient";
 import {
   insertGarde, updateGarde, deleteGarde, fetchGardes,
   fetchMembresPersonnel,
@@ -94,7 +95,7 @@ function detectConflits(gardes) {
 }
 
 // ── Modal ajout / edition ────────────────────────────────────────────────────
-function GardeModal({ garde, preset, membres, onClose, onSaved, auth }) {
+function GardeModal({ garde, preset, membres, onClose, onSaved, etabId }) {
   const isEdit = !!garde;
   const [form, setForm] = useState({
     personnel_nom:  garde?.personnel_nom  ?? "",
@@ -129,7 +130,7 @@ function GardeModal({ garde, preset, membres, onClose, onSaved, auth }) {
     if (!form.personnel_nom.trim()) return alert("Le nom est obligatoire.");
     setSaving(true);
     try {
-      const payload = { ...form, etablissement_id: auth?.etablissement_id ?? null };
+      const payload = { ...form, etablissement_id: etabId ?? null };
       if (isEdit) await updateGarde(garde.id, payload);
       else await insertGarde(payload);
       onSaved();
@@ -364,6 +365,37 @@ async function exportPlanningPDF(gardes, weekDates, auth) {
   });
 }
 
+// ── Résolution de l'etablissement_id ────────────────────────────────────────
+// auth.etablissement_id peut être null si le compte n'a pas de ligne dans
+// etablissements (ex : compte test ou membre invité). On tente trois sources :
+//   1. auth.etablissement_id (cas normal — propriétaire)
+//   2. membres_personnel.etablissement_id pour cet email
+//   3. etablissements.id dont l'email correspond à l'utilisateur courant
+async function resolveEtabId(auth) {
+  if (auth?.etablissement_id) return auth.etablissement_id;
+
+  const userEmail = auth?.user?.email;
+  if (!userEmail) return null;
+
+  // Fallback 1 : membre invité dans membres_personnel
+  const { data: membre } = await supabase
+    .from("membres_personnel")
+    .select("etablissement_id")
+    .eq("email", userEmail)
+    .eq("actif", true)
+    .not("etablissement_id", "is", null)
+    .maybeSingle();
+  if (membre?.etablissement_id) return membre.etablissement_id;
+
+  // Fallback 2 : etablissement dont l'email correspond directement
+  const { data: etab } = await supabase
+    .from("etablissements")
+    .select("id")
+    .eq("email", userEmail)
+    .maybeSingle();
+  return etab?.id ?? null;
+}
+
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function Planning() {
   const { auth } = useAuth();
@@ -374,6 +406,7 @@ export default function Planning() {
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null);
   const [activeGarde, setActiveGarde] = useState(null);
+  const [etabId, setEtabId] = useState(auth?.etablissement_id ?? null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
@@ -392,14 +425,16 @@ export default function Planning() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    const resolvedId = await resolveEtabId(auth);
+    if (resolvedId && resolvedId !== etabId) setEtabId(resolvedId);
     const [data, mems] = await Promise.all([
-      fetchGardes(auth?.etablissement_id, weekStart, weekEnd),
-      fetchMembresPersonnel(auth?.etablissement_id),
+      fetchGardes(resolvedId, weekStart, weekEnd),
+      fetchMembresPersonnel(resolvedId),
     ]);
     setGardes(data);
     setMembres(mems);
     setLoading(false);
-  }, [auth?.etablissement_id, weekStart, weekEnd]);
+  }, [auth, weekStart, weekEnd]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
 
@@ -468,7 +503,7 @@ export default function Planning() {
           garde={modal.garde}
           preset={modal.preset}
           membres={membres}
-          auth={auth}
+          etabId={etabId}
           onClose={() => setModal(null)}
           onSaved={() => { load(); success(modal.garde ? "Garde modifiee" : "Garde ajoutee"); }}
         />
@@ -522,7 +557,7 @@ export default function Planning() {
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button
-            onClick={() => exportPlanningPDF(gardes, weekDates, auth)}
+            onClick={() => exportPlanningPDF(gardes, weekDates, auth ?? {})}
             style={{ padding: "7px 16px", backgroundColor: colors.bgCard, color: "#7C3AED", border: `1px solid #7C3AED`, borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" }}
           >Exporter PDF</button>
           <button
