@@ -208,3 +208,117 @@ export async function upsertMedicaments(rows) {
       .select()
   );
 }
+
+// ─── Hospitalisations ─────────────────────────────────────────────────────────
+export async function upsertHospitalisation(patient_id, fields) {
+  const { data: existing } = await supabase
+    .from("hospitalisations")
+    .select("id")
+    .eq("patient_id", patient_id)
+    .in("statut", ["hospitalise", "ambulatoire"])
+    .maybeSingle();
+  if (existing) {
+    return run(supabase.from("hospitalisations").update({ ...fields, updated_at: new Date().toISOString() }).eq("id", existing.id).select().single());
+  }
+  return run(supabase.from("hospitalisations").insert({ patient_id, ...fields }).select().single());
+}
+
+export async function fetchHospitalisation(patient_id) {
+  const { data } = await supabase
+    .from("hospitalisations")
+    .select("*")
+    .eq("patient_id", patient_id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data;
+}
+
+export async function fetchLitsOccupes(etablissement_id) {
+  const { data } = await supabase
+    .from("hospitalisations")
+    .select("*, patients(prenom, nom, groupe_sanguin, triage)")
+    .eq("statut", "hospitalise")
+    .order("date_entree", { ascending: false });
+  return data ?? [];
+}
+
+// ─── Constantes vitales ───────────────────────────────────────────────────────
+export async function insertConstante(fields) {
+  return run(supabase.from("constantes_vitales").insert(fields).select().single());
+}
+
+export async function fetchConstantes(patient_id, limit = 20) {
+  const { data } = await supabase
+    .from("constantes_vitales")
+    .select("*")
+    .eq("patient_id", patient_id)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  return data ?? [];
+}
+
+// ─── Dispensations nominatives ────────────────────────────────────────────────
+export async function insertDispensation(fields) {
+  return run(supabase.from("dispensations").insert(fields).select().single());
+}
+
+export async function fetchDispensationsPatient(patient_id) {
+  const { data } = await supabase
+    .from("dispensations")
+    .select("*, medicaments(nom, forme)")
+    .eq("patient_id", patient_id)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  return data ?? [];
+}
+
+// ─── Factures hopital ─────────────────────────────────────────────────────────
+export async function insertFacture(fields) {
+  return run(supabase.from("factures_hopital").insert(fields).select().single());
+}
+
+export async function updateFacture(id, fields) {
+  return run(supabase.from("factures_hopital").update(fields).eq("id", id).select().single());
+}
+
+export async function fetchFactures(etablissement_id) {
+  const { data } = await supabase
+    .from("factures_hopital")
+    .select("*, patients(prenom, nom)")
+    .eq("etablissement_id", etablissement_id)
+    .order("created_at", { ascending: false })
+    .limit(100);
+  return data ?? [];
+}
+
+// ─── Planning des gardes ──────────────────────────────────────────────────────
+export async function insertGarde(fields) {
+  return run(supabase.from("planning_gardes").insert(fields).select().single());
+}
+
+export async function updateGarde(id, fields) {
+  return run(supabase.from("planning_gardes").update(fields).eq("id", id).select().single());
+}
+
+export async function deleteGarde(id) {
+  return run(supabase.from("planning_gardes").delete().eq("id", id));
+}
+
+export async function fetchGardes(etablissement_id, dateDebut, dateFin) {
+  let q = supabase
+    .from("planning_gardes")
+    .select("*")
+    .order("date_garde")
+    .order("heure_debut");
+  if (etablissement_id) q = q.eq("etablissement_id", etablissement_id);
+  if (dateDebut) q = q.gte("date_garde", dateDebut);
+  if (dateFin)   q = q.lte("date_garde", dateFin);
+  const { data } = await q;
+  return data ?? [];
+}
+
+// ─── Update triage patient ────────────────────────────────────────────────────
+export async function updatePatientTriage(id, triage) {
+  return run(supabase.from("patients").update({ triage }).eq("id", id).select().single());
+}
