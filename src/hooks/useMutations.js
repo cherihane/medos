@@ -323,6 +323,81 @@ export async function updatePatientTriage(id, triage) {
   return run(supabase.from("patients").update({ triage }).eq("id", id).select().single());
 }
 
+// ─── Consultations ────────────────────────────────────────────────────────────
+export async function insertConsultation(fields) {
+  return run(supabase.from("consultations").insert(fields).select().single());
+}
+
+export async function updateConsultation(id, fields) {
+  return run(supabase.from("consultations").update(fields).eq("id", id).select().single());
+}
+
+export async function fetchConsultationsJour(etablissement_id, dateISO) {
+  const debut = dateISO + "T00:00:00.000Z";
+  const fin   = dateISO + "T23:59:59.999Z";
+  let q = supabase
+    .from("consultations")
+    .select("*, patients(id, prenom, nom, groupe_sanguin, antecedents)")
+    .gte("heure_arrivee", debut)
+    .lte("heure_arrivee", fin)
+    .order("heure_arrivee", { ascending: true });
+  if (etablissement_id) q = q.eq("etablissement_id", etablissement_id);
+  const { data } = await q;
+  return data ?? [];
+}
+
+// ─── Examens ──────────────────────────────────────────────────────────────────
+export async function insertExamen(fields) {
+  return run(supabase.from("examens").insert(fields).select().single());
+}
+
+export async function updateExamen(id, fields) {
+  return run(supabase.from("examens").update(fields).eq("id", id).select().single());
+}
+
+export async function fetchExamensPatient(patient_id) {
+  const { data } = await supabase
+    .from("examens").select("*").eq("patient_id", patient_id)
+    .order("created_at", { ascending: false });
+  return data ?? [];
+}
+
+export async function fetchExamens(etablissement_id) {
+  let q = supabase
+    .from("examens")
+    .select("*, patients(id, prenom, nom)")
+    .order("created_at", { ascending: false });
+  if (etablissement_id) q = q.eq("etablissement_id", etablissement_id);
+  const { data } = await q;
+  return data ?? [];
+}
+
+// ─── Configuration lits ───────────────────────────────────────────────────────
+export async function fetchConfigurationLits(etablissement_id) {
+  let q = supabase.from("configuration_lits").select("*");
+  if (etablissement_id) q = q.eq("etablissement_id", etablissement_id);
+  const { data } = await q;
+  return data ?? [];
+}
+
+export async function upsertConfigurationLit(etablissement_id, service, capacite_totale) {
+  return run(
+    supabase.from("configuration_lits")
+      .upsert({ etablissement_id, service, capacite_totale, updated_at: new Date().toISOString() },
+               { onConflict: "etablissement_id,service" })
+      .select().single()
+  );
+}
+
+export async function libererLit(hospitalisation_id, patient_id, date_sortie_reelle, notes) {
+  await run(supabase.from("hospitalisations")
+    .update({ statut: "sorti", date_sortie_reelle, notes })
+    .eq("id", hospitalisation_id));
+  await run(supabase.from("patients")
+    .update({ statut: "ambulatoire" })
+    .eq("id", patient_id));
+}
+
 // ─── Membres du personnel ─────────────────────────────────────────────────────
 export async function fetchMembresPersonnel(etablissement_id) {
   let q = supabase
