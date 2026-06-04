@@ -619,3 +619,34 @@ export async function fetchRdvSemaine(etablissement_id, dateDebut, dateFin) {
     .order("heure_rdv", { ascending: true });
   return data ?? [];
 }
+
+// ─── Transmissions de garde ───────────────────────────────────────────────────
+export async function insertTransmissionGarde(fields) {
+  return run(supabase.from("transmissions_garde").insert(fields).select().single());
+}
+
+export async function fetchDerniereTransmission(etablissement_id, service) {
+  let q = supabase
+    .from("transmissions_garde")
+    .select("*")
+    .eq("etablissement_id", etablissement_id)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (service) q = q.eq("service", service);
+  const { data } = await q;
+  return data?.[0] ?? null;
+}
+
+// ─── Ordonnances expirant bientôt ─────────────────────────────────────────────
+export async function fetchOrdonnancesExpirantBientot(etablissement_id, jours = 7) {
+  const today = new Date().toISOString().slice(0, 10);
+  const dateLimite = new Date(Date.now() + jours * 86400000).toISOString().slice(0, 10);
+  const { data } = await supabase
+    .from("ordonnances")
+    .select("*, patients(prenom, nom, telephone, numero_dossier)")
+    .eq("etablissement_id", etablissement_id)
+    .lte("date_expiration", dateLimite)
+    .neq("statut", "annulee")
+    .order("date_expiration", { ascending: true });
+  return data ?? [];
+}

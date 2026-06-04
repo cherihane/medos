@@ -7,7 +7,7 @@ import { useAlertes, useKpiHopital, usePatients } from "../../hooks/useSupabaseD
 import { supabase } from "../../supabaseClient";
 import { colors, radius, shadow, font } from "../../theme";
 import { useAuth } from "../../context/AuthContext";
-import { fetchLitsOccupes } from "../../hooks/useMutations";
+import { fetchLitsOccupes, fetchDerniereTransmission } from "../../hooks/useMutations";
 
 function useTendanceHopital() {
   const [hier, setHier] = useState(null);
@@ -275,8 +275,11 @@ function DashboardRole({ ri }) {
   const [kpis, setKpis] = useState([]);
   const [shortcut, setShortcut] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [rdvJourDetail, setRdvJourDetail]   = useState([]);
+  const [rdvJourDetail, setRdvJourDetail]     = useState([]);
   const [patientsRecents, setPatientsRecents] = useState([]);
+  const [fileMedecin, setFileMedecin]         = useState([]);
+  const [examensDispos, setExamensDispos]     = useState([]);
+  const [transmission, setTransmission]       = useState(null);
   const todayISO = new Date().toISOString().slice(0, 10);
   const debutJour = todayISO + "T00:00:00.000Z";
   const finJour   = todayISO + "T23:59:59.999Z";
@@ -290,19 +293,27 @@ function DashboardRole({ ri }) {
       setLoading(true);
       try {
         if (ri === "Médecin") {
-          const [cRes, hRes, eRes, oRes] = await Promise.all([
-            supabase.from("consultations").select("id").eq("etablissement_id", eid).gte("heure_arrivee", debutJour).lte("heure_arrivee", finJour).ilike("medecin_nom", `%${email.split("@")[0]}%`),
-            supabase.from("hospitalisations").select("id").eq("etablissement_id", eid).eq("statut", "hospitalise"),
-            supabase.from("examens").select("id").eq("etablissement_id", eid).neq("statut", "resultat_disponible").ilike("prescripteur", `%${email.split("@")[0]}%`),
-            supabase.from("ordonnances").select("id").eq("etablissement_id", eid).eq("statut", "en_attente"),
+          const emailPrefix = email.split("@")[0];
+          const today = todayISO;
+          const dans3j = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10);
+          const [cAttenteRes, hRes, eDispoRes, ordRenouv, fileRes, trans] = await Promise.all([
+            supabase.from("consultations").select("id", { count: "exact", head: true }).eq("etablissement_id", eid).eq("statut", "en_attente").gte("heure_arrivee", debutJour),
+            supabase.from("hospitalisations").select("id", { count: "exact", head: true }).eq("etablissement_id", eid).eq("statut", "hospitalise"),
+            supabase.from("examens").select("id, type_examen, interpretation, patients(prenom, nom)").eq("etablissement_id", eid).eq("statut", "resultat_disponible").ilike("prescripteur", `%${emailPrefix}%`).limit(5),
+            supabase.from("ordonnances").select("id", { count: "exact", head: true }).eq("etablissement_id", eid).lte("date_expiration", dans3j).gte("date_expiration", today),
+            supabase.from("consultations").select("id, triage, patients(prenom, nom)").eq("etablissement_id", eid).eq("statut", "en_attente").gte("heure_arrivee", debutJour).order("heure_arrivee").limit(5),
+            fetchDerniereTransmission(eid, null),
           ]);
           setKpis([
-            { label: "Mes consultations auj.", value: cRes.data?.length ?? 0, color: "#3B82F6" },
-            { label: "Patients sous ma charge", value: hRes.data?.length ?? 0, color: "#EF4444" },
-            { label: "Examens en attente",      value: eRes.data?.length ?? 0, color: "#F59E0B" },
-            { label: "Ordonnances actives",      value: oRes.data?.length ?? 0, color: "#8B5CF6" },
+            { label: "Patients en attente",     value: cAttenteRes.count ?? 0, color: "#F59E0B" },
+            { label: "Resultats disponibles",   value: eDispoRes.data?.length ?? 0, color: (eDispoRes.data?.length ?? 0) > 0 ? "#EF4444" : "#9CA3AF" },
+            { label: "Patients hospitalises",   value: hRes.count ?? 0,         color: "#3B82F6" },
+            { label: "Ordonnances a renouveler",value: ordRenouv.count ?? 0,    color: "#8B5CF6" },
           ]);
-          setShortcut({ label: "Aller a ma file d'attente", path: "/hopital/mes-consultations" });
+          setShortcut({ label: "Commencer les consultations", path: "/hopital/mes-consultations" });
+          setFileMedecin(fileRes.data ?? []);
+          setExamensDispos(eDispoRes.data ?? []);
+          setTransmission(trans);
 
         } else if (ri === "Infirmière") {
           const seuil6h = new Date(Date.now() - 6 * 3600 * 1000).toISOString();
@@ -398,6 +409,7 @@ function DashboardRole({ ri }) {
   if (!kpis.length && !loading) return null;
 
   const isSecretaire = ri === "Secrétaire médicale";
+  const isMedecin    = ri === "Médecin";
 
   return (
     <div style={{ marginBottom: 24 }}>
@@ -409,6 +421,72 @@ function DashboardRole({ ri }) {
           </div>
         )) : kpis.map((k) => <KpiRoleCard key={k.label} {...k} />)}
       </div>
+
+      {/* Alerte transmission de garde */}
+      {isMedecin && !loading && transmission && (
+        <div style={{ padding: "12px 16px", backgroundColor: "#FFFBEB", border: "1.5px solid #F59E0B", borderRadius: 10, marginBottom: 16, fontSize: 13 }}>
+          <strong style={{ color: "#92400E" }}>Transmission de garde recue</strong>
+          <span style={{ color: "#6B7280", marginLeft: 8, fontSize: 12 }}>
+            de {transmission.medecin_sortant} — {new Date(transmission.date_transmission).toLocaleString("fr-FR")}
+          </span>
+          {transmission.message_general && (
+            <div style={{ marginTop: 6, color: "#78350F", fontSize: 12 }}>{transmission.message_general}</div>
+          )}
+        </div>
+      )}
+
+      {/* Dashboard enrichi médecin */}
+      {isMedecin && !loading && (fileMedecin.length > 0 || examensDispos.length > 0) && (
+        <div className="dash-grid-2" style={{ marginBottom: 16 }}>
+          {/* File d'attente */}
+          <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: colors.navy }}>Ma file d'attente</h3>
+              <button onClick={() => navigate("/hopital/mes-consultations")}
+                style={{ fontSize: 11, padding: "3px 10px", backgroundColor: "#EFF6FF", color: "#2563EB", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600 }}>
+                Voir tout
+              </button>
+            </div>
+            {fileMedecin.length === 0 ? (
+              <div style={{ fontSize: 13, color: colors.textMuted, textAlign: "center", padding: 20 }}>Aucun patient en attente.</div>
+            ) : fileMedecin.map((c) => {
+              const TRIAGE_COLORS = { urgent: "#EF4444", semi_urgent: "#F59E0B", non_urgent: "#10B981" };
+              const tc = TRIAGE_COLORS[c.triage] ?? "#9CA3AF";
+              return (
+                <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${colors.borderLight}`, fontSize: 12 }}>
+                  <span style={{ fontWeight: 600, color: colors.navy }}>{c.patients ? `${c.patients.prenom} ${c.patients.nom}` : "—"}</span>
+                  {c.triage && <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 8, backgroundColor: tc + "20", color: tc }}>{c.triage.replace("_", " ")}</span>}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Résultats d'examens */}
+          <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: colors.navy }}>Resultats a lire</h3>
+              <button onClick={() => navigate("/hopital/examens")}
+                style={{ fontSize: 11, padding: "3px 10px", backgroundColor: "#EFF6FF", color: "#2563EB", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600 }}>
+                Voir tout
+              </button>
+            </div>
+            {examensDispos.length === 0 ? (
+              <div style={{ fontSize: 13, color: colors.textMuted, textAlign: "center", padding: 20 }}>Aucun resultat disponible.</div>
+            ) : examensDispos.map((e) => {
+              const interpColor = { normal: "#10B981", anormal: "#F59E0B", critique: "#EF4444" }[e.interpretation] ?? "#6B7280";
+              return (
+                <div key={e.id} style={{ padding: "8px 0", borderBottom: `1px solid ${colors.borderLight}`, fontSize: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ fontWeight: 600, color: colors.navy }}>{e.patients ? `${e.patients.prenom} ${e.patients.nom}` : "—"}</span>
+                    {e.interpretation && <span style={{ fontSize: 10, fontWeight: 700, color: interpColor }}>{e.interpretation.toUpperCase()}</span>}
+                  </div>
+                  <div style={{ color: colors.textMuted, marginTop: 2 }}>{e.type_examen ?? "Examen"}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Dashboard enrichi secretaire */}
       {isSecretaire && !loading && (

@@ -413,8 +413,26 @@ function ModalNouveauPatient({ etablissement_id, medecinNom, onClose, onSaved, o
 // ── Modal Nouvelle ordonnance ─────────────────────────────────────────────────
 const LIGNE_ORD = () => ({ id: Date.now() + Math.random(), medicament_id: "", posologie: "", duree: "" });
 
-function ModalNouvelleOrdonnance({ patient, etablissement_id, medecinNom, medicaments, onClose, onSaved }) {
-  const [lignes, setLignes]          = useState([LIGNE_ORD()]);
+function getStatutOrdonnance(ordonnance) {
+  if (!ordonnance.date_expiration) return null;
+  const diff = Math.ceil((new Date(ordonnance.date_expiration) - new Date()) / 86400000);
+  if (diff < 0) return { label: "Expiree",             color: "#EF4444", bg: "#FEF2F2" };
+  if (diff <= 7) return { label: `Expire dans ${diff}j`, color: "#F59E0B", bg: "#FFFBEB" };
+  return { label: `Valide ${diff}j`,                    color: "#10B981", bg: "#F0FDF4" };
+}
+
+function ModalNouvelleOrdonnance({ patient, etablissement_id, medecinNom, medicaments, onClose, onSaved, lignesInitiales = null }) {
+  const [lignes, setLignes]          = useState(() => {
+    if (lignesInitiales && lignesInitiales.length > 0) {
+      return lignesInitiales.map((l) => ({
+        id: Date.now() + Math.random(),
+        medicament_id: l.medicament_id ?? "",
+        posologie: l.posologie ?? "",
+        duree: l.duree ?? "",
+      }));
+    }
+    return [LIGNE_ORD()];
+  });
   const [dateExpiration, setDateExp] = useState("");
   const [instructions, setInstr]     = useState("");
   const [saving, setSaving]          = useState(false);
@@ -656,7 +674,7 @@ function fmtDateEvt(d) {
   return new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-function EventCard({ evt }) {
+function EventCard({ evt, onRenouveler }) {
   const cfg = DOSSIER_TYPES[evt._type] ?? { label: evt._type, color: "#6B7280" };
   let content = null;
 
@@ -671,9 +689,22 @@ function EventCard({ evt }) {
   } else if (evt._type === "ordonnance") {
     let lignes = [];
     try { lignes = JSON.parse(evt.notes ?? "{}").lignes ?? []; } catch { /* noop */ }
+    const statutOrd = getStatutOrdonnance(evt);
     content = (
       <>
-        <div style={{ fontSize: 12 }}><strong>Ref :</strong> {evt.reference ?? "—"} — <strong>Statut :</strong> {evt.statut}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 12 }}><strong>Ref :</strong> {evt.reference ?? "—"} — <strong>Statut :</strong> {evt.statut}</div>
+          {statutOrd && (
+            <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 8, backgroundColor: statutOrd.bg, color: statutOrd.color }}>
+              {statutOrd.label}
+            </span>
+          )}
+          {statutOrd && (statutOrd.color === "#EF4444" || statutOrd.color === "#F59E0B") && onRenouveler && (
+            <button onClick={() => onRenouveler(evt)} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 6, backgroundColor: "#10B981", color: "white", border: "none", cursor: "pointer", fontWeight: 600 }}>
+              Renouveler
+            </button>
+          )}
+        </div>
         {lignes.length > 0 && <div style={{ fontSize: 12 }}>{lignes.map((l) => `${l.nom} ${l.posologie}`).join(", ")}</div>}
       </>
     );
@@ -784,6 +815,7 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
   const [filtreDossier, setFiltreDossier] = useState("Tous");
   const [loading, setLoading]         = useState(true);
   const [showOrd, setShowOrd]         = useState(false);
+  const [ordRenouveler, setOrdRenouveler] = useState(null);
   const [showCR, setShowCR]           = useState(false);
   const [detailCR, setDetailCR]       = useState(null);
   const [smsError, setSmsError]       = useState(null);
@@ -901,6 +933,7 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
   return (
     <>
       {showOrd && <ModalNouvelleOrdonnance patient={patient} etablissement_id={etablissement_id} medecinNom={medecinNom} medicaments={medicaments} onClose={() => setShowOrd(false)} onSaved={() => { setShowOrd(false); charger(); onPatientUpdated("Ordonnance créée."); }} />}
+      {ordRenouveler && <ModalNouvelleOrdonnance patient={patient} etablissement_id={etablissement_id} medecinNom={medecinNom} medicaments={medicaments} lignesInitiales={(() => { try { return JSON.parse(ordRenouveler.notes ?? "{}").lignes ?? []; } catch { return []; } })()} onClose={() => setOrdRenouveler(null)} onSaved={() => { setOrdRenouveler(null); charger(); onPatientUpdated("Ordonnance renouvelee."); }} />}
       {showCR  && <ModalNouveauCompteRendu patient={patient} etablissement_id={etablissement_id} medecinNom={medecinNom} onClose={() => setShowCR(false)} onSaved={() => { setShowCR(false); charger(); onPatientUpdated("Compte rendu enregistré."); }} />}
 
       {/* Détail compte rendu */}
@@ -1033,7 +1066,7 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
                 {/* Timeline */}
                 {loading && <div style={{ color: colors.textMuted, fontSize: 13 }}>Chargement...</div>}
                 {!loading && dossierFiltres.length === 0 && <div style={{ fontSize: 13, color: colors.textMuted }}>Aucun evenement dans le dossier</div>}
-                {!loading && dossierFiltres.map((evt, i) => <EventCard key={evt.id ?? i} evt={evt} />)}
+                {!loading && dossierFiltres.map((evt, i) => <EventCard key={evt.id ?? i} evt={evt} onRenouveler={evt._type === "ordonnance" ? setOrdRenouveler : undefined} />)}
               </div>
             )}
 
