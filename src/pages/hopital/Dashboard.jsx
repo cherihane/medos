@@ -256,8 +256,165 @@ function LitsOccupesPanel() {
   );
 }
 
+// ── Dashboard role-specific ───────────────────────────────────────────────────
+function KpiRoleCard({ label, value, color, sublabel }) {
+  return (
+    <div style={{ backgroundColor: colors.bgCard, borderRadius: 12, padding: "18px 20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", borderTop: `3px solid ${color}`, flex: 1, minWidth: 160 }}>
+      <div style={{ fontSize: 28, fontWeight: 800, color }}>{value}</div>
+      <div style={{ fontSize: 13, color: colors.text, marginTop: 4 }}>{label}</div>
+      {sublabel && <div style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>{sublabel}</div>}
+    </div>
+  );
+}
+
+function DashboardRole({ ri }) {
+  const { auth } = useAuth();
+  const navigate = useNavigate();
+  const [kpis, setKpis] = useState([]);
+  const [shortcut, setShortcut] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const debutJour = todayISO + "T00:00:00.000Z";
+  const finJour   = todayISO + "T23:59:59.999Z";
+
+  useEffect(() => {
+    const eid = auth?.etablissement_id;
+    const email = auth?.user?.email ?? "";
+    if (!eid) { setLoading(false); return; }
+
+    const load = async () => {
+      setLoading(true);
+      try {
+        if (ri === "Médecin") {
+          const [cRes, hRes, eRes, oRes] = await Promise.all([
+            supabase.from("consultations").select("id").eq("etablissement_id", eid).gte("heure_arrivee", debutJour).lte("heure_arrivee", finJour).ilike("medecin_nom", `%${email.split("@")[0]}%`),
+            supabase.from("hospitalisations").select("id").eq("etablissement_id", eid).eq("statut", "hospitalise"),
+            supabase.from("examens").select("id").eq("etablissement_id", eid).neq("statut", "resultat_disponible").ilike("prescripteur", `%${email.split("@")[0]}%`),
+            supabase.from("ordonnances").select("id").eq("etablissement_id", eid).eq("statut", "en_attente"),
+          ]);
+          setKpis([
+            { label: "Mes consultations auj.", value: cRes.data?.length ?? 0, color: "#3B82F6" },
+            { label: "Patients sous ma charge", value: hRes.data?.length ?? 0, color: "#EF4444" },
+            { label: "Examens en attente",      value: eRes.data?.length ?? 0, color: "#F59E0B" },
+            { label: "Ordonnances actives",      value: oRes.data?.length ?? 0, color: "#8B5CF6" },
+          ]);
+          setShortcut({ label: "Aller a ma file d'attente", path: "/hopital/mes-consultations" });
+
+        } else if (ri === "Infirmière") {
+          const seuil6h = new Date(Date.now() - 6 * 3600 * 1000).toISOString();
+          const [hRes, cRes, aRes, lRes] = await Promise.all([
+            supabase.from("hospitalisations").select("patient_id").eq("etablissement_id", eid).eq("statut", "hospitalise"),
+            supabase.from("consultations").select("id").eq("etablissement_id", eid).gte("heure_arrivee", debutJour).eq("statut", "en_attente"),
+            supabase.from("alertes").select("id").eq("resolu", false),
+            supabase.from("constantes_vitales").select("patient_id").gte("created_at", seuil6h),
+          ]);
+          const hospitalises = hRes.data ?? [];
+          const constRecents = new Set((lRes.data ?? []).map((c) => c.patient_id));
+          const manquantes   = hospitalises.filter((h) => !constRecents.has(h.patient_id)).length;
+          setKpis([
+            { label: "Patients hospitalises",   value: hospitalises.length,      color: "#EF4444" },
+            { label: "Constantes manquantes",   value: manquantes,               color: manquantes > 0 ? "#EF4444" : "#9CA3AF" },
+            { label: "Consultations en attente",value: cRes.data?.length ?? 0,   color: "#F59E0B" },
+            { label: "Alertes non resolues",    value: aRes.data?.length ?? 0,   color: "#8B5CF6" },
+          ]);
+          setShortcut({ label: "Aller a mon service", path: "/hopital/mon-service" });
+
+        } else if (ri === "Secrétaire médicale") {
+          const [cRes, rdvRes, pRes, fRes] = await Promise.all([
+            supabase.from("consultations").select("id").eq("etablissement_id", eid).eq("statut", "en_attente"),
+            supabase.from("consultations").select("id").eq("etablissement_id", eid).eq("type", "rdv").eq("date_rdv", todayISO),
+            supabase.from("patients").select("id").eq("etablissement_id", eid).gte("created_at", debutJour).lte("created_at", finJour),
+            supabase.from("factures_hopital").select("id").eq("etablissement_id", eid).eq("statut", "emise"),
+          ]);
+          setKpis([
+            { label: "Patients en attente",     value: cRes.data?.length ?? 0,  color: "#F59E0B" },
+            { label: "RDV du jour",             value: rdvRes.data?.length ?? 0, color: "#3B82F6" },
+            { label: "Patients enregistres auj.",value: pRes.data?.length ?? 0, color: "#10B981" },
+            { label: "Factures en attente",     value: fRes.data?.length ?? 0,  color: "#EF4444" },
+          ]);
+          setShortcut({ label: "Ouvrir la file d'attente", path: "/hopital/consultations" });
+
+        } else if (ri === "Laborantin") {
+          const [eRes, eResAuj, eUrgRes] = await Promise.all([
+            supabase.from("examens").select("id").eq("etablissement_id", eid).in("statut", ["prescrit", "en_cours"]),
+            supabase.from("examens").select("id").eq("etablissement_id", eid).eq("statut", "resultat_disponible").gte("updated_at", debutJour).lte("updated_at", finJour),
+            supabase.from("examens").select("id").eq("etablissement_id", eid).eq("urgence", true).neq("statut", "resultat_disponible"),
+          ]);
+          setKpis([
+            { label: "Examens a traiter",          value: eRes.data?.length ?? 0,    color: "#3B82F6" },
+            { label: "Resultats saisis auj.",       value: eResAuj.data?.length ?? 0, color: "#10B981" },
+            { label: "Urgents en attente",          value: eUrgRes.data?.length ?? 0, color: eUrgRes.data?.length > 0 ? "#EF4444" : "#9CA3AF" },
+            { label: "Total en base",               value: (eRes.data?.length ?? 0) + (eResAuj.data?.length ?? 0), color: "#8B5CF6" },
+          ]);
+          setShortcut({ label: "Traiter les examens", path: "/hopital/examens" });
+
+        } else if (ri === "Caissier") {
+          const [fERes, fPRes] = await Promise.all([
+            supabase.from("factures_hopital").select("id, reste_patient").eq("etablissement_id", eid).eq("statut", "emise"),
+            supabase.from("factures_hopital").select("id, reste_patient").eq("etablissement_id", eid).eq("statut", "payee").gte("date_paiement", debutJour).lte("date_paiement", finJour),
+          ]);
+          const facEmises = fERes.data ?? [];
+          const facPayees = fPRes.data ?? [];
+          const montantAttente  = facEmises.reduce((s, f) => s + (f.reste_patient ?? 0), 0);
+          const montantEncaisse = facPayees.reduce((s, f) => s + (f.reste_patient ?? 0), 0);
+          setKpis([
+            { label: "Factures en attente",    value: facEmises.length,                    color: "#EF4444" },
+            { label: "Montant en attente",     value: `${Math.round(montantAttente / 1000)}K FCFA`, color: "#F59E0B" },
+            { label: "Encaisse aujourd'hui",   value: `${Math.round(montantEncaisse / 1000)}K FCFA`, color: "#10B981" },
+            { label: "Transactions auj.",      value: facPayees.length,                    color: "#3B82F6" },
+          ]);
+          setShortcut({ label: "Ouvrir la caisse", path: "/hopital/caisse" });
+
+        } else if (ri === "Pharmacien hospitalier") {
+          const [mRes, oRes] = await Promise.all([
+            supabase.from("medicaments").select("id, stock_actuel, stock_minimum, prix_unitaire"),
+            supabase.from("ordonnances").select("id").eq("etablissement_id", eid).eq("statut", "en_attente"),
+          ]);
+          const meds = mRes.data ?? [];
+          const ruptures = meds.filter((m) => (m.stock_actuel ?? 0) === 0).length;
+          const alertes  = meds.filter((m) => (m.stock_actuel ?? 0) > 0 && (m.stock_actuel ?? 0) <= (m.stock_minimum ?? 0)).length;
+          const valeur   = meds.reduce((s, m) => s + (m.stock_actuel ?? 0) * (m.prix_unitaire ?? 0), 0);
+          setKpis([
+            { label: "Medicaments en rupture", value: ruptures,                           color: ruptures > 0 ? "#EF4444" : "#9CA3AF" },
+            { label: "Sous le seuil",          value: alertes,                            color: alertes > 0 ? "#F59E0B" : "#9CA3AF" },
+            { label: "Ordonnances a dispenser",value: oRes.data?.length ?? 0,             color: "#3B82F6" },
+            { label: "Valeur du stock",        value: `${Math.round(valeur / 1000)}K FCFA`, color: "#8B5CF6" },
+          ]);
+          setShortcut({ label: "Voir le stock", path: "/hopital/stock" });
+        }
+      } finally { setLoading(false); }
+    };
+    load();
+  }, [auth?.etablissement_id, ri]); // eslint-disable-line
+
+  if (!kpis.length && !loading) return null;
+
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <div className="kpi-row" style={{ marginBottom: 16 }}>
+        {loading ? [1,2,3,4].map((i) => (
+          <div key={i} style={{ flex: 1, backgroundColor: colors.bgCard, borderRadius: 12, padding: "18px 20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+            <div style={{ height: 28, width: "60%", backgroundColor: colors.borderLight, borderRadius: 6, marginBottom: 8 }} />
+            <div style={{ height: 14, width: "80%", backgroundColor: colors.borderLight, borderRadius: 6 }} />
+          </div>
+        )) : kpis.map((k) => <KpiRoleCard key={k.label} {...k} />)}
+      </div>
+      {shortcut && (
+        <button onClick={() => navigate(shortcut.path)}
+          style={{ width: "100%", padding: "14px 20px", backgroundColor: "#10B981", color: "white", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
+          {shortcut.label}
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ── Dashboard principal ───────────────────────────────────────────────────────
 export default function DashboardHopital() {
+  const { auth } = useAuth();
+  const ri = auth?.role_interne;
+  const isDirecteur = !ri || ri === "Directeur";
+
   return (
     <Layout title="Dashboard Hôpital" subtitle="Vue d'ensemble — Hôpital Central Abidjan">
       <style>{`
@@ -267,20 +424,34 @@ export default function DashboardHopital() {
         }
       `}</style>
 
-      <KpiSection />
+      {/* Dashboard role-specific pour tous sauf Directeur */}
+      {!isDirecteur && <DashboardRole ri={ri} />}
 
-      <div className="dash-grid-2">
-        <AlertesPanel />
-        <PatientsPanel />
-      </div>
+      {/* Dashboard complet pour Directeur (ou compte principal) */}
+      {isDirecteur && (
+        <>
+          <KpiSection />
+          <div className="dash-grid-2">
+            <AlertesPanel />
+            <PatientsPanel />
+          </div>
+          <div className="dash-grid-2" style={{ marginTop: 20 }}>
+            <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+              <h3 style={{ margin: "0 0 8px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Dispensation médicaments</h3>
+              <p style={{ margin: 0, fontSize: 13, color: colors.textMuted }}>Données de dispensation disponibles après enregistrement des ventes en caisse.</p>
+            </div>
+            <PredictionsIA />
+          </div>
+        </>
+      )}
 
-      <div className="dash-grid-2" style={{ marginTop: 20 }}>
-        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <h3 style={{ margin: "0 0 8px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Dispensation médicaments</h3>
-          <p style={{ margin: 0, fontSize: 13, color: colors.textMuted }}>Données de dispensation disponibles après enregistrement des ventes en caisse.</p>
+      {/* Pour les roles avec dashboard reduit, afficher quand meme alertes */}
+      {!isDirecteur && (
+        <div className="dash-grid-2">
+          <AlertesPanel />
+          <PatientsPanel />
         </div>
-        <PredictionsIA />
-      </div>
+      )}
     </Layout>
   );
 }
