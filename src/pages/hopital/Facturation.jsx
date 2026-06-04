@@ -9,6 +9,7 @@ import { usePatients } from "../../hooks/useSupabaseData";
 import {
   insertFacture, updateFacture, fetchFactures,
   fetchTarifsActes, fetchTarifsActesTous, insertTarifActe, updateTarifActe, deleteTarifActe,
+  fetchConfigCaisse,
 } from "../../hooks/useMutations";
 import { supabase } from "../../supabaseClient";
 import { openDocument, tableHTML, infoGridHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
@@ -51,6 +52,7 @@ function StatusBadge({ statut }) {
   const map = {
     brouillon: { bg: "#F3F4F6", color: "#6B7280", label: "Brouillon" },
     emise:     { bg: "#EFF6FF", color: "#2563EB", label: "Emise" },
+    acompte:   { bg: "#FFF7ED", color: "#C2410C", label: "Acompte" },
     payee:     { bg: "#DCFCE7", color: "#16A34A", label: "Payee" },
     annulee:   { bg: "#FEF2F2", color: "#DC2626", label: "Annulee" },
   };
@@ -226,7 +228,7 @@ async function chargerActesNonFactures(patient_id) {
 }
 
 // ── Modal creation facture ────────────────────────────────────────────────────
-function FactureModal({ patients, etabId, onClose, onSaved }) {
+function FactureModal({ patients, etabId, config, onClose, onSaved }) {
   const [patient_id, setPatientId] = useState("");
   const [filtrePatient, setFiltrePatient] = useState("");
   const [tarifs, setTarifs] = useState([]);
@@ -268,7 +270,8 @@ function FactureModal({ patients, etabId, onClose, onSaved }) {
   const sous_total_lignes = lignes.reduce((s, l) => s + (Number(l.quantite) || 0) * (Number(l.prix_unitaire) || 0), 0);
   const sous_total        = sous_total_actes + sous_total_lignes;
   const montant_couverture = Math.round(sous_total * (Number(taux_couverture) || 0) / 100);
-  const reste_patient      = sous_total - montant_couverture;
+  const tva_montant        = config?.tva_active && config?.tva_taux > 0 ? Math.round((sous_total - montant_couverture) * Number(config.tva_taux) / 100) : 0;
+  const reste_patient      = sous_total - montant_couverture + tva_montant;
 
   const addLigne    = () => setLignes((prev) => [...prev, { libelle: "", quantite: 1, prix_unitaire: 0 }]);
   const removeLigne = (i) => setLignes((prev) => prev.filter((_, j) => j !== i));
@@ -417,6 +420,12 @@ function FactureModal({ patients, etabId, onClose, onSaved }) {
             <span style={{ fontWeight: 600, color: ACCENT }}>- {montant_couverture.toLocaleString("fr-FR")} FCFA</span>
           </div>
         )}
+        {tva_montant > 0 && (
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+            <span style={{ color: colors.textSecondary }}>TVA ({config.tva_taux}%)</span>
+            <span style={{ fontWeight: 600, color: "#6B7280" }}>{tva_montant.toLocaleString("fr-FR")} FCFA</span>
+          </div>
+        )}
         <div style={{ display: "flex", justifyContent: "space-between", borderTop: `1px solid ${colors.border}`, paddingTop: 8, marginTop: 4 }}>
           <span style={{ fontWeight: 700, color: colors.navy }}>Reste a payer</span>
           <span style={{ fontWeight: 800, fontSize: 16, color: "#EF4444" }}>{reste_patient.toLocaleString("fr-FR")} FCFA</span>
@@ -475,6 +484,7 @@ export default function Facturation() {
   const [showTarifs, setShowTarifs] = useState(false);
   const [filterStatut, setFilterStatut] = useState("tous");
   const [etabId, setEtabId] = useState(auth?.etablissement_id ?? null);
+  const [config, setConfig] = useState({ tva_taux: 0, tva_active: false, assureurs: [] });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -483,7 +493,7 @@ export default function Facturation() {
       const { data } = await supabase.from("etablissements").select("id").eq("email", auth.user.email).maybeSingle();
       eid = data?.id ?? null;
     }
-    if (eid) setEtabId(eid);
+    if (eid) { setEtabId(eid); fetchConfigCaisse(eid).then(setConfig); }
     const data = await fetchFactures(eid);
     setFactures(data);
     setLoading(false);
@@ -505,6 +515,7 @@ export default function Facturation() {
         <FactureModal
           patients={patients}
           etabId={etabId}
+          config={config}
           onClose={() => setShowModal(false)}
           onSaved={() => { load(); success("Facture creee avec succes"); }}
         />
@@ -528,7 +539,7 @@ export default function Facturation() {
       {/* Filtres + boutons */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {["tous", "brouillon", "emise", "payee", "annulee"].map((s) => (
+          {["tous", "brouillon", "emise", "acompte", "payee", "annulee"].map((s) => (
             <button key={s} onClick={() => setFilterStatut(s)} style={{
               padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "none", textTransform: "capitalize",
               backgroundColor: filterStatut === s ? "#3B82F6" : colors.bgSurface,

@@ -498,3 +498,110 @@ export async function fetchTransfertsStock(etablissement_id) {
     .order("created_at", { ascending: false });
   return data ?? [];
 }
+
+// ─── Sessions caisse ──────────────────────────────────────────────────────────
+export async function ouvrirSessionCaisse(fields) {
+  return run(supabase.from("sessions_caisse").insert(fields).select().single());
+}
+
+export async function fetchSessionActive(etablissement_id, caissier_email) {
+  const today = new Date().toISOString().slice(0, 10);
+  const { data } = await supabase
+    .from("sessions_caisse")
+    .select("*")
+    .eq("etablissement_id", etablissement_id)
+    .eq("caissier_email", caissier_email)
+    .eq("date_session", today)
+    .eq("statut", "ouverte")
+    .maybeSingle();
+  return data ?? null;
+}
+
+export async function fermerSessionCaisse(id, fields) {
+  return run(
+    supabase.from("sessions_caisse")
+      .update({ ...fields, statut: "fermee", heure_fermeture: new Date().toISOString() })
+      .eq("id", id)
+      .select()
+      .single()
+  );
+}
+
+export async function fetchSessionsHistorique(etablissement_id, limit = 30) {
+  const { data } = await supabase
+    .from("sessions_caisse")
+    .select("*")
+    .eq("etablissement_id", etablissement_id)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  return data ?? [];
+}
+
+// ─── Paiements ────────────────────────────────────────────────────────────────
+export async function insertPaiement(fields) {
+  return run(supabase.from("paiements_facture").insert(fields).select().single());
+}
+
+export async function fetchPaiementsFacture(facture_id) {
+  const { data } = await supabase
+    .from("paiements_facture")
+    .select("*")
+    .eq("facture_id", facture_id)
+    .order("created_at", { ascending: true });
+  return data ?? [];
+}
+
+export async function fetchPaiementsSession(session_id) {
+  const { data } = await supabase
+    .from("paiements_facture")
+    .select("*, factures_hopital(numero_facture, sous_total, patients(prenom, nom))")
+    .eq("session_id", session_id)
+    .order("created_at", { ascending: false });
+  return data ?? [];
+}
+
+// ─── Numerotation recus ───────────────────────────────────────────────────────
+export async function genererNumeroRecu(etablissement_id) {
+  const annee = new Date().getFullYear();
+  const { data, error } = await supabase.rpc("incrementer_compteur_recu", {
+    p_etablissement_id: etablissement_id,
+    p_annee: annee,
+  });
+  if (error) {
+    return `REC-${annee}-${Date.now().toString().slice(-5)}`;
+  }
+  return `REC-${annee}-${String(data).padStart(5, "0")}`;
+}
+
+// ─── Config caisse ─────────────────────────────────────────────────────────────
+export async function fetchConfigCaisse(etablissement_id) {
+  const { data } = await supabase
+    .from("config_caisse")
+    .select("*")
+    .eq("etablissement_id", etablissement_id)
+    .maybeSingle();
+  return data ?? { tva_taux: 0, tva_active: false, assureurs: [], mention_legale: "" };
+}
+
+export async function upsertConfigCaisse(etablissement_id, fields) {
+  return run(
+    supabase.from("config_caisse")
+      .upsert(
+        { etablissement_id, ...fields, updated_at: new Date().toISOString() },
+        { onConflict: "etablissement_id" }
+      )
+      .select()
+      .single()
+  );
+}
+
+// ─── Factures enrichies ────────────────────────────────────────────────────────
+export async function fetchFacturesAvecPaiements(etablissement_id) {
+  const { data } = await supabase
+    .from("factures_hopital")
+    .select("*, patients(prenom, nom, telephone), paiements_facture(montant, mode_paiement, created_at, numero_recu)")
+    .eq("etablissement_id", etablissement_id)
+    .order("created_at", { ascending: false })
+    .limit(200);
+  return data ?? [];
+}
