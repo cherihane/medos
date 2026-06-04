@@ -1,5 +1,6 @@
 import { colors } from "../../theme";
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { SERVICES_HOPITAL } from "../../constants/hopital";
 import Layout from "../../components/Layout";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
@@ -15,10 +16,7 @@ import { openDocument, tableHTML, fetchEtabFromAuth } from "../../utils/MedOSDoc
 // ── Constantes ────────────────────────────────────────────────────────────────
 const ACCENT = "#10B981";
 
-const SERVICES_LISTE = [
-  "Medecine generale", "Maternite", "Pediatrie", "Cardiologie",
-  "Chirurgie", "Urgences", "Neurologie", "Ophtalmologie",
-];
+const SERVICES_LISTE = SERVICES_HOPITAL;
 
 const TRIAGE_CONFIG = {
   urgent:      { label: "Urgent",      color: "#EF4444", bg: "#FEF2F2", seuil: 20 },

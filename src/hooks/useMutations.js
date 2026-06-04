@@ -483,3 +483,18 @@ export async function fetchNotesHospitalisation(hospitalisation_id) {
     .order("created_at", { ascending: false });
   return data ?? [];
 }
+
+// ─── Transferts de stock inter-établissements ──────────────────────────────────
+export async function insertTransfertStock(fields) {
+  return run(supabase.from("transferts_stock").insert(fields).select().single());
+}
+
+export async function fetchTransfertsStock(etablissement_id) {
+  if (!etablissement_id) return [];
+  const { data } = await supabase
+    .from("transferts_stock")
+    .select("*, medicaments(nom)")
+    .or(`etablissement_source_id.eq.${etablissement_id},etablissement_dest_id.eq.${etablissement_id}`)
+    .order("created_at", { ascending: false });
+  return data ?? [];
+}

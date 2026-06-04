@@ -1,5 +1,6 @@
 import { colors } from "../../theme";
 import { useState, useEffect, useCallback } from "react";
+import { SERVICES_HOPITAL, CRENEAUX_GARDE, ROLES_PLANNING } from "../../constants/hopital";
 import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
 import Toast from "../../components/Toast";
@@ -21,28 +22,10 @@ import {
 } from "@dnd-kit/core";
 import { openDocument, tableHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
 
-// ── Constantes ────────────────────────────────────────────────────────────────
-const SERVICES = [
-  "Urgences",
-  "Pediatrie",
-  "Maternite",
-  "Chirurgie",
-  "Medecine generale",
-];
-
-const CRENEAUX = [
-  { key: "matin", label: "Matin",      debut: "06:00", fin: "14:00" },
-  { key: "aprem", label: "Apres-midi", debut: "14:00", fin: "22:00" },
-  { key: "nuit",  label: "Nuit",       debut: "22:00", fin: "06:00" },
-];
-
-const ROLES = [
-  { value: "Medecin",       label: "Medecin",       color: "#16A34A", bg: "#DCFCE7" },
-  { value: "Infirmier",     label: "Infirmier",     color: "#2563EB", bg: "#DBEAFE" },
-  { value: "Aide-soignant", label: "Aide-soignant", color: "#D97706", bg: "#FEF3C7" },
-  { value: "Sage-femme",    label: "Sage-femme",    color: "#7C3AED", bg: "#EDE9FE" },
-  { value: "Laborantin",    label: "Laborantin",    color: "#0891B2", bg: "#CFFAFE" },
-];
+// ── Alias locaux depuis les constantes partagees ──────────────────────────────
+const SERVICES = SERVICES_HOPITAL;
+const CRENEAUX = CRENEAUX_GARDE;
+const ROLES    = ROLES_PLANNING;
 
 function roleStyle(role) {
   return ROLES.find((r) => r.value === role) ?? { color: "#6B7280", bg: "#F3F4F6" };

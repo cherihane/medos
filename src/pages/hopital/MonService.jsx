@@ -1,5 +1,6 @@
 import { colors } from "../../theme";
 import { useState, useEffect, useCallback } from "react";
+// SERVICES_HOPITAL disponible via constants si besoin dans une evolution future
 import Layout from "../../components/Layout";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";

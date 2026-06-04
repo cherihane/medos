@@ -84,10 +84,12 @@ const PROTOCOLES = [
 ];
 
 const suggestions = [
-  "Quels medicaments sont en rupture critique ?",
-  "Genere un bon de commande pour Amoxicilline",
-  "Analyse la tendance des ordonnances ce mois",
-  "Quels patients ont un renouvellement ce week-end ?",
+  "Quel est le protocole OMS pour le paludisme sévère ?",
+  "Quelles sont les contre-indications de la quinine ?",
+  "Comment interpréter une NFS avec Hb à 7 g/dL ?",
+  "Signes de gravité du choléra chez l'enfant ?",
+  "Protocole de réhydratation orale — dosage adulte",
+  "Interactions médicamenteuses : artéméther + halofantrine",
 ];
 
 const initialMessages = [
@@ -114,25 +116,48 @@ export default function AssistantIA() {
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState("suggestions");
 
-  const fakeResponses = {
-    rupture: "D'apres l'inventaire actuel, 4 medicaments sont en rupture critique : Salbutamol inhaler (2), Metformine 850mg (3), Paracetamol 1g (8), Amoxicilline 500mg (12). Commande urgente recommandee.",
-    commande: "Bon de commande Amoxicilline 500mg : 500 boites / PharmaCongo / Priorite urgente / Delai 3-5 jours.",
-    tendance: "Ordonnances +12% ce mois. Pics lundi (+28%) et mercredi (+19%). Antibiotiques 34%, analgesiques 28%.",
-    renouvellement: "3 patients ce week-end : Fatou Diallo (Metformine), Emmanuel Kasongo (Amlodipine), Kouassi Amlan (Atorvastatine).",
-  };
-
-  const sendMessage = (text) => {
+  const sendMessage = async (text) => {
     const msg = text || input.trim();
     if (!msg) return;
-    setMessages((prev) => [...prev, { role: "user", content: msg }]);
+
+    const newMessages = [...messages, { role: "user", content: msg }];
+    setMessages(newMessages);
     setInput("");
     setLoading(true);
-    setTimeout(() => {
-      const key = Object.keys(fakeResponses).find((k) => msg.toLowerCase().includes(k));
-      const response = key ? fakeResponses[key] : "D'apres les donnees, les stocks sont globalement dans les normes. Utilisez les protocoles maladies tropicales pour une aide au diagnostic.";
-      setMessages((prev) => [...prev, { role: "assistant", content: response }]);
+
+    try {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": process.env.REACT_APP_ANTHROPIC_API_KEY ?? "",
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true",
+        },
+        body: JSON.stringify({
+          model: "claude-opus-4-5",
+          max_tokens: 1000,
+          system: `Tu es l'Assistant IA MedOS, un assistant médical expert pour les hôpitaux d'Afrique centrale.
+Tu aides les médecins, infirmières et pharmaciens dans leur travail quotidien.
+Tu connais les protocoles OMS pour les maladies tropicales (paludisme, typhoïde, choléra, tuberculose, méningite, VIH, hépatite B).
+Tu réponds toujours en français, de façon claire et professionnelle.
+Tu ne poses pas de diagnostic définitif — tu aides à la décision clinique.
+Tes réponses sont concises et orientées action.`,
+          messages: newMessages.map((m) => ({ role: m.role, content: m.content })),
+        }),
+      });
+
+      const data = await response.json();
+      const reply = data.content?.[0]?.text ?? "Je n'ai pas pu générer une réponse. Veuillez réessayer.";
+      setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
+    } catch (err) {
+      setMessages((prev) => [...prev, {
+        role: "assistant",
+        content: "Connexion impossible pour le moment. Vérifiez votre connexion internet et réessayez.",
+      }]);
+    } finally {
       setLoading(false);
-    }, 1200);
+    }
   };
 
   return (
