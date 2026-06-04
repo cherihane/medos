@@ -26,6 +26,21 @@ const NAV_INTERNE = {
       "/hopital/scanner",
       "/hopital/alertes",
     ],
+    medecin: [...existant, "/hopital/mes-consultations"],
+    infirmiere: [...existant, "/hopital/mon-service"],
+    aide_soignant: [
+      "/hopital/mon-service",
+      "/hopital/lits",
+      "/hopital/alertes",
+    ],
+    secretaire: [
+      "/hopital/consultations",
+      "/hopital/patients",
+      "/hopital/facturation",
+      "/hopital/caisse",
+    ],
+    laborantin: ["/hopital/examens", "/hopital/alertes"],
+    caissier: ["/hopital/facturation", "/hopital/caisse"],
   },
   distributeur: {
     directeur: null,
