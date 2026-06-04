@@ -155,7 +155,8 @@ function AppRoutes() {
         <Route path="/hopital/mes-consultations" element={<ProtectedRoute requiredRole="hopital"><HoMesConsult /></ProtectedRoute>} />
         <Route path="/hopital/caisse"           element={<ProtectedRoute requiredRole="hopital"><HoCaisse /></ProtectedRoute>} />
         <Route path="/hopital/agenda"            element={<ProtectedRoute requiredRole="hopital"><HoAgenda /></ProtectedRoute>} />
-        <Route path="/hopital/transmission"     element={<ProtectedRoute requiredRole="hopital"><HoTransmission /></ProtectedRoute>} />
+        <Route path="/hopital/transmission"       element={<ProtectedRoute requiredRole="hopital"><HoTransmission /></ProtectedRoute>} />
+        <Route path="/hopital/transmission-garde" element={<ProtectedRoute requiredRole="hopital"><HoTransmission /></ProtectedRoute>} />
         <Route path="/hopital/renouvellements"  element={<ProtectedRoute requiredRole="hopital"><HoRenouvellements /></ProtectedRoute>} />
 
         {/* Distributeur */}
