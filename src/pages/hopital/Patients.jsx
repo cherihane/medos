@@ -14,21 +14,14 @@ import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../supabaseClient";
 import { openDocument, tableHTML, infoGridHTML, alertBannerHTML, signatureRowHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
 import { INTERACTIONS_MEDICAMENTEUSES, CONTRE_INDICATIONS_ANTECEDENTS } from "../../data/interactions";
+import { SERVICES_HOPITAL, SERVICE_COLORS } from "../../constants/hopital";
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 const ACCENT = "#10B981";
 
-const SERVICES = [
-  "Médecine générale", "Maternité", "Pédiatrie", "Cardiologie",
-  "Chirurgie", "Urgences", "Neurologie", "Ophtalmologie",
-];
-
-const SERVICE_COLOR = {
-  "Médecine générale": "#3B82F6", "Maternité": "#EC4899",
-  "Pédiatrie": "#F59E0B",         "Cardiologie": "#EF4444",
-  "Chirurgie": "#8B5CF6",         "Urgences": "#DC2626",
-  "Neurologie": "#06B6D4",        "Ophtalmologie": "#10B981",
-};
+// Alias locaux depuis constantes partagees
+const SERVICES     = SERVICES_HOPITAL;
+const SERVICE_COLOR = SERVICE_COLORS;
 
 // ── Triage ────────────────────────────────────────────────────────────────────
 const TRIAGE = {

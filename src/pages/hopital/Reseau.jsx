@@ -1,11 +1,12 @@
 import { colors } from "../../theme";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useEtablissements, useMedicaments } from "../../hooks/useSupabaseData";
-import { insertCommande } from "../../hooks/useMutations";
+import { insertTransfertStock, fetchTransfertsStock } from "../../hooks/useMutations";
+import { useAuth } from "../../context/AuthContext";
 
 // ── Modal Détails établissement ───────────────────────────────────────────────
 function EtabModal({ etab, onClose }) {
@@ -34,7 +35,7 @@ function EtabModal({ etab, onClose }) {
 }
 
 // ── Modal Proposer redistribution ─────────────────────────────────────────────
-function RedistribModal({ etab, medicaments, onClose, onSaved }) {
+function RedistribModal({ etab, medicaments, sourceEtabId, onClose, onSaved }) {
   const [form, setForm] = useState({ medicament_id: "", quantite: 10, notes: "" });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
@@ -46,11 +47,14 @@ function RedistribModal({ etab, medicaments, onClose, onSaved }) {
     setSaving(true);
     setFormError(null);
     try {
-      await insertCommande({
-        statut: "envoyee",
-        date_commande: new Date().toISOString(),
-        montant_total: 0,
-        notes: `Redistribution → ${etab.nom} : ${selectedMed?.nom} — Qté: ${form.quantite}${form.notes ? " — " + form.notes : ""}`,
+      await insertTransfertStock({
+        etablissement_source_id: sourceEtabId ?? null,
+        etablissement_dest_id: etab.id,
+        medicament_id: form.medicament_id,
+        medicament_nom: selectedMed?.nom ?? null,
+        quantite: Number(form.quantite),
+        notes: form.notes || null,
+        statut: "propose",
       });
       onSaved();
       onClose();
@@ -85,12 +89,34 @@ function RedistribModal({ etab, medicaments, onClose, onSaved }) {
   );
 }
 
+const STATUT_LABEL = {
+  propose: { label: "Proposé", color: "#D97706", bg: "#FFFBEB" },
+  accepte: { label: "Accepté", color: "#16A34A", bg: "#DCFCE7" },
+  refuse:  { label: "Refusé",  color: "#DC2626", bg: "#FEF2F2" },
+  effectue:{ label: "Effectué",color: "#2563EB", bg: "#EFF6FF" },
+};
+
 export default function Reseau() {
+  const { auth } = useAuth();
   const { data: etablissements, loading } = useEtablissements();
   const { data: medicaments } = useMedicaments();
   const { toasts, success } = useToast();
   const [etabModal, setEtabModal] = useState(null);
   const [redistribModal, setRedistribModal] = useState(null);
+  const [transferts, setTransferts] = useState([]);
+  const [loadingTransferts, setLoadingTransferts] = useState(true);
+
+  const etabId = auth?.etablissement_id ?? null;
+
+  const loadTransferts = async () => {
+    if (!etabId) { setLoadingTransferts(false); return; }
+    setLoadingTransferts(true);
+    const data = await fetchTransfertsStock(etabId);
+    setTransferts(data);
+    setLoadingTransferts(false);
+  };
+
+  useEffect(() => { loadTransferts(); }, [etabId]); // eslint-disable-line
 
   return (
     <Layout title="Réseau Hospitalier" subtitle="Connexions inter-établissements et partage de ressources">
@@ -102,8 +128,9 @@ export default function Reseau() {
         <RedistribModal
           etab={redistribModal}
           medicaments={medicaments}
+          sourceEtabId={etabId}
           onClose={() => setRedistribModal(null)}
-          onSaved={() => success("Proposition de redistribution envoyée")}
+          onSaved={() => { success("Proposition de redistribution envoyée"); loadTransferts(); }}
         />
       )}
 
@@ -149,6 +176,36 @@ export default function Reseau() {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Transferts en cours */}
+      <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginTop: 20 }}>
+        <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Transferts en cours</h3>
+        {loadingTransferts && [1,2].map((i) => (
+          <div key={i} style={{ height: 48, backgroundColor: colors.bgSurface, borderRadius: 10, marginBottom: 8, animation: "pulse 1.5s ease-in-out infinite" }} />
+        ))}
+        {!loadingTransferts && transferts.length === 0 && (
+          <div style={{ fontSize: 13, color: colors.textMuted, textAlign: "center", padding: 20 }}>
+            Aucun transfert proposé ou en cours.
+          </div>
+        )}
+        {!loadingTransferts && transferts.map((t) => {
+          const s = STATUT_LABEL[t.statut] ?? STATUT_LABEL.propose;
+          return (
+            <div key={t.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", backgroundColor: colors.bgSurface, borderRadius: 10, marginBottom: 8 }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: colors.navy }}>{t.medicament_nom ?? t.medicaments?.nom ?? "—"}</div>
+                <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>
+                  Qté : {t.quantite} · {new Date(t.created_at).toLocaleDateString("fr-FR")}
+                  {t.notes ? ` · ${t.notes}` : ""}
+                </div>
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 10, backgroundColor: s.bg, color: s.color }}>
+                {s.label}
+              </span>
+            </div>
+          );
+        })}
       </div>
     </Layout>
   );

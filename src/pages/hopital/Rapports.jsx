@@ -31,6 +31,29 @@ function ts() { return new Date(); }
 function debutMois() { const d = ts(); return new Date(d.getFullYear(), d.getMonth(), 1).toISOString(); }
 function finMois()   { const d = ts(); return new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59).toISOString(); }
 
+// ── EmptyState générique pour graphiques ─────────────────────────────────────
+function EmptyState({ message = "Aucune donnée disponible pour cette période." }) {
+  return (
+    <div style={{
+      height: 200,
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.bgSurface,
+      borderRadius: 10,
+      border: `1.5px dashed ${colors.border}`,
+    }}>
+      <div style={{ fontSize: 13, color: colors.textMuted, textAlign: "center", lineHeight: 1.6 }}>
+        {message}
+      </div>
+      <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 6 }}>
+        Les données apparaîtront ici au fur et à mesure des enregistrements.
+      </div>
+    </div>
+  );
+}
+
 // ── Onglet Activite clinique ──────────────────────────────────────────────────
 function OngletActivite({ etabId }) {
   const [data, setData] = useState(null);
@@ -119,34 +142,42 @@ function OngletActivite({ etabId }) {
       <div className="dash-grid-2" style={{ marginBottom: 20 }}>
         <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: 24, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
           <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700, color: colors.navy }}>Consultations par service — 6 mois</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={data.consultHisto}>
-              <XAxis dataKey="mois" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-              <Tooltip /><Legend wrapperStyle={{ fontSize: 11 }} />
-              {data.servicesPresents.map((s) => (
-                <Bar key={s} dataKey={s} fill={SERVICE_COLOR[s] ?? "#9CA3AF"} radius={[4, 4, 0, 0]} />
-              ))}
-            </BarChart>
-          </ResponsiveContainer>
+          {data.servicesPresents.length === 0 ? (
+            <EmptyState message="Aucune consultation enregistrée pour les 6 derniers mois." />
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={data.consultHisto}>
+                <XAxis dataKey="mois" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                <Tooltip /><Legend wrapperStyle={{ fontSize: 11 }} />
+                {data.servicesPresents.map((s) => (
+                  <Bar key={s} dataKey={s} fill={SERVICE_COLOR[s] ?? "#9CA3AF"} radius={[4, 4, 0, 0]} />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
         <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: 24, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
           <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700, color: colors.navy }}>Occupation des lits par service</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart layout="vertical" data={data.tauxOccup}>
-              <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
-              <YAxis type="category" dataKey="service" tick={{ fontSize: 10 }} width={110} />
-              <Tooltip formatter={(v) => `${v}%`} />
-              <Bar dataKey="taux" fill={ACCENT} radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          {data.tauxOccup.every((x) => x.occupes === 0) ? (
+            <EmptyState message="Aucun patient hospitalisé actuellement." />
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart layout="vertical" data={data.tauxOccup}>
+                <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
+                <YAxis type="category" dataKey="service" tick={{ fontSize: 10 }} width={110} />
+                <Tooltip formatter={(v) => `${v}%`} />
+                <Bar dataKey="taux" fill={ACCENT} radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
 
       <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: 24, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
         <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700, color: colors.navy }}>Top 5 motifs de consultation ce mois</h3>
-        {data.top5.length === 0 && <div style={{ color: colors.textMuted, fontSize: 13 }}>Aucune consultation ce mois.</div>}
+        {data.top5.length === 0 && <EmptyState message="Aucun motif de consultation enregistré ce mois." />}
         {data.top5.map(([motif, count], i) => (
           <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: i < data.top5.length - 1 ? `1px solid ${colors.borderLight}` : "none" }}>
             <span style={{ fontSize: 13, color: colors.text }}>{i + 1}. {motif}</span>
@@ -232,16 +263,20 @@ function OngletFinances({ etabId }) {
       <div className="dash-grid-2">
         <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: 24, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
           <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700, color: colors.navy }}>Recettes mensuelles — 6 mois</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={data.moisHisto}>
-              <XAxis dataKey="mois" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`} />
-              <Tooltip formatter={(v) => `${Number(v).toLocaleString("fr-FR")} FCFA`} />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Line type="monotone" dataKey="facture"  stroke="#3B82F6" strokeWidth={2} name="Facture"  dot={{ r: 3 }} />
-              <Line type="monotone" dataKey="encaisse" stroke={ACCENT}  strokeWidth={2} name="Encaisse" dot={{ r: 3 }} />
-            </LineChart>
-          </ResponsiveContainer>
+          {data.moisHisto.every((m) => m.facture === 0 && m.encaisse === 0) ? (
+            <EmptyState message="Aucune facture émise pour les 6 derniers mois." />
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={data.moisHisto}>
+                <XAxis dataKey="mois" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`} />
+                <Tooltip formatter={(v) => `${Number(v).toLocaleString("fr-FR")} FCFA`} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Line type="monotone" dataKey="facture"  stroke="#3B82F6" strokeWidth={2} name="Facture"  dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="encaisse" stroke={ACCENT}  strokeWidth={2} name="Encaisse" dot={{ r: 3 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
         <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: 24, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
@@ -343,6 +378,9 @@ function OngletStock({ etabId }) {
       <div className="dash-grid-2">
         <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: 24, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
           <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700, color: colors.navy }}>Dispensations mensuelles — 6 mois</h3>
+          {data.moisHisto.every((m) => m.dispensations === 0) ? (
+            <EmptyState message="Aucune dispensation enregistrée sur les 6 derniers mois." />
+          ) : (
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={data.moisHisto}>
               <XAxis dataKey="mois" tick={{ fontSize: 11 }} />
@@ -351,16 +389,19 @@ function OngletStock({ etabId }) {
               <Bar dataKey="dispensations" fill={ACCENT} radius={[4, 4, 0, 0]} name="Dispensations" />
             </BarChart>
           </ResponsiveContainer>
+          )}
         </div>
         <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: 24, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
           <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700, color: colors.navy }}>Top 10 medicaments dispenses ce mois</h3>
-          {data.top10.length === 0 && <div style={{ color: colors.textMuted, fontSize: 13 }}>Aucune dispensation ce mois.</div>}
-          {data.top10.map((m, i) => (
-            <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: i < data.top10.length - 1 ? `1px solid ${colors.borderLight}` : "none" }}>
-              <span style={{ fontSize: 12 }}>{i + 1}. {m.nom}</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: ACCENT }}>{m.total} unites</span>
-            </div>
-          ))}
+          {data.top10.length === 0
+            ? <EmptyState message="Aucune dispensation enregistrée ce mois." />
+            : data.top10.map((m, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: i < data.top10.length - 1 ? `1px solid ${colors.borderLight}` : "none" }}>
+                <span style={{ fontSize: 12 }}>{i + 1}. {m.nom}</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: ACCENT }}>{m.total} unites</span>
+              </div>
+            ))
+          }
         </div>
       </div>
     </div>

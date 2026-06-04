@@ -1,5 +1,5 @@
 import { colors } from "../../theme";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Layout from "../../components/Layout";
 import { useMedicamentsCritiques, useMedicaments, useFournisseurs } from "../../hooks/useSupabaseData";
 import { insertCommande } from "../../hooks/useMutations";
@@ -87,11 +87,6 @@ function CommanderModal({ medicamentNom, quantiteDefaut, onClose, onSaved }) {
 
 const riskColor = { critique: "#EF4444", alerte: "#F59E0B", normal: "#10B981" };
 
-const aiInsights = [
-  { titre: "Tendance grippe saisonnière", desc: "Hausse de 34% des cas attendue dans les 2 prochaines semaines. Augmenter les stocks d'antiviraux.", impact: "élevé" },
-  { titre: "Pic diabète — fin de mois", desc: "Pattern récurrent de +18% de consultations diabète en fin de mois. Préparer Metformine et insuline.", impact: "modéré" },
-  { titre: "Rotation stock antibiotiques", desc: "L'Amoxicilline arrivera à expiration avant écoulement. Recommander redistribution au réseau.", impact: "faible" },
-];
 
 function getRisque(m) {
   if (!m.stock_minimum || m.stock_minimum === 0) return "normal";
@@ -108,6 +103,36 @@ export default function Predictions() {
   const [toast, setToast] = useState(null);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3500); };
+
+  const generateInsights = useMemo(() => {
+    if (!critiques || critiques.length === 0) return [];
+    const insights = [];
+    const enRupture = critiques.filter((m) => (m.stock_actuel ?? 0) === 0);
+    if (enRupture.length > 0) {
+      insights.push({
+        titre: "Ruptures de stock détectées",
+        desc: `${enRupture.length} médicament(s) en rupture totale : ${enRupture.slice(0, 3).map((m) => m.nom).join(", ")}${enRupture.length > 3 ? ` et ${enRupture.length - 3} autres` : ""}. Commander en urgence.`,
+        impact: "critique",
+      });
+    }
+    const sousSeuil = critiques.filter((m) => (m.stock_actuel ?? 0) > 0 && (m.stock_actuel ?? 0) <= (m.stock_minimum ?? 0));
+    if (sousSeuil.length > 0) {
+      insights.push({
+        titre: `${sousSeuil.length} médicament(s) sous le seuil minimum`,
+        desc: `Stocks insuffisants pour assurer la continuité des soins. Prévoir les commandes dans les 48h.`,
+        impact: "élevé",
+      });
+    }
+    const valeurStock = allMeds.reduce((s, m) => s + (m.stock_actuel ?? 0) * (m.prix_unitaire ?? 0), 0);
+    if (valeurStock > 0) {
+      insights.push({
+        titre: "Valeur totale du stock",
+        desc: `Le stock actuel représente ${valeurStock.toLocaleString("fr-FR")} FCFA. ${sousSeuil.length > 0 ? "Optimiser les niveaux critiques pour réduire le risque." : "Niveaux globalement satisfaisants."}`,
+        impact: sousSeuil.length > 3 ? "modéré" : "faible",
+      });
+    }
+    return insights;
+  }, [critiques, allMeds]);
 
   // Build predictions from critiques meds
   const predictions = critiques.map((m) => ({
@@ -181,15 +206,17 @@ export default function Predictions() {
         <div>
           <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 16 }}>
             <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Insights IA</h3>
-            {[
-              { titre: "Tendance ruptures de stock", desc: "Des médicaments essentiels sont en dessous du seuil minimum. Planifier les commandes immédiatement.", impact: "élevé" },
-              { titre: "Optimisation des achats", desc: "Regrouper les commandes par fournisseur pour réduire les coûts logistiques.", impact: "modéré" },
-              { titre: "Rotation des lots", desc: "Vérifier les dates d'expiration des lots en stock pour éviter les pertes.", impact: "faible" },
-            ].map((ins) => (
+            {generateInsights.length === 0 && !loading && (
+              <div style={{ color: colors.textMuted, fontSize: 13, textAlign: "center", padding: 16 }}>Aucun insight disponible — stock en ordre.</div>
+            )}
+            {generateInsights.map((ins) => (
               <div key={ins.titre} style={{ padding: "14px", backgroundColor: colors.bgSurface, borderRadius: 10, marginBottom: 10 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                   <span style={{ fontWeight: 700, fontSize: 13, color: colors.navy }}>{ins.titre}</span>
-                  <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 10, fontWeight: 700, backgroundColor: ins.impact === "élevé" ? "#FEF2F2" : ins.impact === "modéré" ? "#FFFBEB" : "#DCFCE7", color: ins.impact === "élevé" ? "#EF4444" : ins.impact === "modéré" ? "#D97706" : "#16A34A" }}>{ins.impact}</span>
+                  <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 10, fontWeight: 700,
+                    backgroundColor: ins.impact === "critique" || ins.impact === "élevé" ? "#FEF2F2" : ins.impact === "modéré" ? "#FFFBEB" : "#DCFCE7",
+                    color: ins.impact === "critique" || ins.impact === "élevé" ? "#EF4444" : ins.impact === "modéré" ? "#D97706" : "#16A34A",
+                  }}>{ins.impact}</span>
                 </div>
                 <div style={{ fontSize: 12, color: colors.textSecondary, lineHeight: 1.6 }}>{ins.desc}</div>
               </div>

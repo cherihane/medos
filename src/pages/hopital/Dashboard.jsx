@@ -62,7 +62,7 @@ function KpiSection() {
     { label: "Patients hospitalisés",  value: live?.patientsHospitalises ?? 0, color: "#3B82F6", to: "/hopital/patients",   change: null },
     { label: "Alertes critiques",      value: live?.alertesCritiques ?? 0,     color: "#EF4444", to: "/hopital/alertes",    change: hier ? fmtChange(live?.alertesCritiques ?? 0, hier.alertesHier) : null },
     { label: "Médicaments dispensés",  value: live?.medicamentsDispenses ?? 0, color: "#10B981", to: "/hopital/stock",      change: null },
-    { label: "Ordonnances",            value: live?.consultations ?? 0,        color: "#8B5CF6", to: "/hopital/patients",   change: hier ? fmtChange(live?.consultations ?? 0, hier.ordonnancesHier) : null },
+    { label: "Ordonnances",            value: live?.ordonnancesTotal ?? 0,     color: "#8B5CF6", to: "/hopital/patients",   change: hier ? fmtChange(live?.ordonnancesTotal ?? 0, hier.ordonnancesHier) : null },
   ];
 
   if (loading) {
@@ -414,9 +414,20 @@ export default function DashboardHopital() {
   const { auth } = useAuth();
   const ri = auth?.role_interne;
   const isDirecteur = !ri || ri === "Directeur";
+  const [etabNom, setEtabNom] = useState("");
+
+  useEffect(() => {
+    if (!auth?.etablissement_id) return;
+    supabase
+      .from("etablissements")
+      .select("nom")
+      .eq("id", auth.etablissement_id)
+      .maybeSingle()
+      .then(({ data }) => { if (data?.nom) setEtabNom(data.nom); });
+  }, [auth?.etablissement_id]);
 
   return (
-    <Layout title="Dashboard Hôpital" subtitle="Vue d'ensemble — Hôpital Central Abidjan">
+    <Layout title="Dashboard Hôpital" subtitle={etabNom ? `Vue d'ensemble — ${etabNom}` : "Vue d'ensemble"}>
       <style>{`
         @keyframes pulse {
           0%, 100% { opacity: 1; }

@@ -375,7 +375,7 @@ export function useKpiHopital() {
   const [state, setState] = useState({ data: null, loading: true, error: null });
   useEffect(() => {
     Promise.all([
-      supabase.from("patients").select("id", { count: "exact", head: true }),
+      supabase.from("hospitalisations").select("id", { count: "exact", head: true }).eq("statut", "hospitalise"),
       supabase.from("alertes").select("id, severite").eq("resolu", false),
       supabase.from("medicaments").select("id, stock_actuel"),
       supabase.from("ordonnances").select("id"),
@@ -388,7 +388,7 @@ export function useKpiHopital() {
           alertesCritiques,
           medicamentsDispenses: dispenses,
           totalAlertes: alts.data?.length ?? 0,
-          consultations: ords.data?.length ?? 0,
+          ordonnancesTotal: ords.data?.length ?? 0,
         },
         loading: false,
         error: null,

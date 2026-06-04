@@ -1,5 +1,6 @@
 import { colors } from "../../theme";
 import { useState, useEffect, useCallback } from "react";
+import { SERVICES_HOPITAL, SERVICE_COLORS } from "../../constants/hopital";
 import Layout from "../../components/Layout";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
@@ -19,17 +20,9 @@ import { openDocument, tableHTML, fetchEtabFromAuth } from "../../utils/MedOSDoc
 // ── Constantes ────────────────────────────────────────────────────────────────
 const ACCENT = "#10B981";
 
-const SERVICES = [
-  "Urgences", "Medecine generale", "Maternite", "Pediatrie", "Chirurgie",
-];
-
-const SERVICE_COLOR = {
-  "Urgences":          "#EF4444",
-  "Medecine generale": "#3B82F6",
-  "Maternite":         "#EC4899",
-  "Pediatrie":         "#F59E0B",
-  "Chirurgie":         "#8B5CF6",
-};
+// Alias depuis constantes partagees — on filtre les 5 services avec lits
+const SERVICES     = ["Urgences", "Médecine générale", "Maternité", "Pédiatrie", "Chirurgie"];
+const SERVICE_COLOR = SERVICE_COLORS;
 
 function toISO(d) { return d.toISOString().slice(0, 10); }
 const todayISO = toISO(new Date());
