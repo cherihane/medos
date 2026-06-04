@@ -292,6 +292,30 @@ export async function fetchFactures(etablissement_id) {
   return data ?? [];
 }
 
+export async function fetchFacturesEnAttente(etablissement_id) {
+  let q = supabase
+    .from("factures_hopital")
+    .select("*, patients(prenom, nom)")
+    .eq("statut", "emise")
+    .order("date_facture", { ascending: false });
+  if (etablissement_id) q = q.eq("etablissement_id", etablissement_id);
+  const { data } = await q;
+  return data ?? [];
+}
+
+export async function fetchJournalCaisse(etablissement_id, dateISO) {
+  let q = supabase
+    .from("factures_hopital")
+    .select("*, patients(prenom, nom)")
+    .eq("statut", "payee")
+    .gte("date_paiement", dateISO + "T00:00:00.000Z")
+    .lte("date_paiement", dateISO + "T23:59:59.999Z")
+    .order("date_paiement", { ascending: false });
+  if (etablissement_id) q = q.eq("etablissement_id", etablissement_id);
+  const { data } = await q;
+  return data ?? [];
+}
+
 // ─── Planning des gardes ──────────────────────────────────────────────────────
 export async function insertGarde(fields) {
   return run(supabase.from("planning_gardes").insert(fields).select().single());

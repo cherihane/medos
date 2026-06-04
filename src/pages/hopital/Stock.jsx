@@ -221,6 +221,11 @@ export default function Stock() {
       {showNouveau && <NouveauModal onClose={() => setShowNouveau(false)} onSaved={() => { refetch(); success("Médicament ajouté"); }} />}
       {dispenseMed && <DispensationModal med={dispenseMed} patients={patients} auth={auth} onClose={() => setDispenseMed(null)} onSaved={() => { refetch(); success(`Dispensation enregistree — stock mis a jour`); }} />}
 
+      {auth?.role_interne === "Infirmière" && (
+        <div style={{ padding: "10px 16px", backgroundColor: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 10, marginBottom: 16, fontSize: 13, color: "#1D4ED8", fontWeight: 600 }}>
+          Consultation uniquement — contactez le pharmacien hospitalier pour les modifications de stock.
+        </div>
+      )}
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
         <div style={{ display: "flex", gap: 8 }}>
           {["tous", "critique", "alerte", "normal"].map((f) => (
@@ -232,9 +237,11 @@ export default function Stock() {
             }}>{f}</button>
           ))}
         </div>
-        <button onClick={() => setShowNouveau(true)} style={{ padding: "8px 16px", backgroundColor: "#10B981", color: "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-          + Nouveau produit
-        </button>
+        {auth?.role_interne !== "Infirmière" && (
+          <button onClick={() => setShowNouveau(true)} style={{ padding: "8px 16px", backgroundColor: "#10B981", color: "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+            + Nouveau produit
+          </button>
+        )}
       </div>
 
       <div className="kpi-row">
@@ -292,9 +299,13 @@ export default function Stock() {
                   </td>
                   <td style={{ padding: "13px 16px" }}>
                     <div style={{ display: "flex", gap: 6 }}>
-                      <button onClick={() => setEditMed(p)} style={{ padding: "4px 10px", backgroundColor: "#EFF6FF", color: "#2563EB", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>Éditer</button>
-                      <button onClick={() => setCommandMed(p)} style={{ padding: "4px 10px", backgroundColor: "#DCFCE7", color: "#16A34A", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>Commander</button>
-                      <button onClick={() => setDispenseMed(p)} style={{ padding: "4px 10px", backgroundColor: "#FFFBEB", color: "#D97706", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>Dispenser</button>
+                      {auth?.role_interne !== "Infirmière" && (
+                        <>
+                          <button onClick={() => setEditMed(p)} style={{ padding: "4px 10px", backgroundColor: "#EFF6FF", color: "#2563EB", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>Éditer</button>
+                          <button onClick={() => setCommandMed(p)} style={{ padding: "4px 10px", backgroundColor: "#DCFCE7", color: "#16A34A", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>Commander</button>
+                          <button onClick={() => setDispenseMed(p)} style={{ padding: "4px 10px", backgroundColor: "#FFFBEB", color: "#D97706", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>Dispenser</button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>

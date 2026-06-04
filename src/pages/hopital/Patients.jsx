@@ -819,14 +819,24 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
   const svcColor = SERVICE_COLOR[patient.service] ?? "#6B7280";
   const dossierFiltres = filtreDossier === "Tous" ? dossier : dossier.filter((e) => e._type === filtreDossier);
 
-  const onglets  = [
-    ["dossier", `Dossier (${dossier.length})`],
-    ["infos", "Informations"],
-    ["hospitalisation", "Hospitalisation"],
-    ["constantes", `Constantes (${constantes.length})`],
-    ["ordonnances", `Ordonnances (${ordonnances.length})`],
-    ["comptes", `Comptes rendus (${comptes.length})`],
-    ["historique", `Historique (${historique.length})`],
+  const ri = auth?.role_interne;
+  const peutVoirDossier    = !ri || ri === "Médecin" || ri === "Directeur";
+  const peutVoirConst      = !ri || ri === "Médecin" || ri === "Infirmière" || ri === "Directeur" || ri === "Aide-soignant";
+  const peutVoirOrd        = !ri || ri === "Médecin" || ri === "Pharmacien hospitalier" || ri === "Directeur";
+  const peutVoirHospi      = !ri || ["Médecin", "Infirmière", "Aide-soignant", "Directeur"].includes(ri);
+  const peutVoirComptes    = !ri || ri === "Médecin" || ri === "Directeur";
+  const peutVoirHistorique = !ri || ["Secrétaire médicale", "Caissier", "Directeur"].includes(ri);
+  const peutSaisirConst    = !ri || ri === "Médecin" || ri === "Infirmière" || ri === "Directeur";
+  const peutCreerOrd       = !ri || ri === "Médecin" || ri === "Directeur";
+
+  const onglets = [
+    ...(peutVoirDossier    ? [["dossier", `Dossier (${dossier.length})`]] : []),
+    ...(ri !== "Caissier"  ? [["infos", "Informations"]] : []),
+    ...(peutVoirHospi      ? [["hospitalisation", "Hospitalisation"]] : []),
+    ...(peutVoirConst      ? [["constantes", `Constantes (${constantes.length})`]] : []),
+    ...(peutVoirOrd        ? [["ordonnances", `Ordonnances (${ordonnances.length})`]] : []),
+    ...(peutVoirComptes    ? [["comptes", `Comptes rendus (${comptes.length})`]] : []),
+    ...(peutVoirHistorique ? [["historique", `Historique (${historique.length})`]] : []),
     ["qrcode", "QR Code"],
   ];
 
@@ -1204,9 +1214,11 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
                   <label style={{ fontSize: 11, fontWeight: 600, color: colors.text, display: "block", marginBottom: 3 }}>Notes</label>
                   <input value={constForm.notes} onChange={(e) => setConstForm((f) => ({ ...f, notes: e.target.value }))} style={{ width: "100%", padding: "8px 10px", border: `1.5px solid ${colors.border}`, borderRadius: 7, fontSize: 13, outline: "none", boxSizing: "border-box", backgroundColor: colors.bgCard, color: colors.navy }} />
                 </div>
-                <button onClick={handleSaveConst} disabled={savingConst} style={{ padding: "8px 20px", backgroundColor: ACCENT, color: "white", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 20 }}>
-                  {savingConst ? "Enregistrement..." : "Enregistrer les constantes"}
-                </button>
+                {peutSaisirConst && (
+                  <button onClick={handleSaveConst} disabled={savingConst} style={{ padding: "8px 20px", backgroundColor: ACCENT, color: "white", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 20 }}>
+                    {savingConst ? "Enregistrement..." : "Enregistrer les constantes"}
+                  </button>
+                )}
 
                 {/* Historique constantes */}
                 {constantes.length > 0 && (
@@ -1402,14 +1414,18 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
           <div style={{ padding: "14px 26px", borderTop: "1px solid var(--border-light)", display: "flex", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
             <button onClick={onClose} style={{ padding: "9px 16px", background: "#F8FAFC", color: colors.text, border: "1px solid var(--border)", borderRadius: 9, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>Fermer</button>
             <button onClick={() => printFichePatient({ patient, ordonnances, comptes, auth })} style={{ padding: "9px 16px", background: "#1D4ED8", color: "white", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Imprimer la fiche</button>
-            <button onClick={() => { setShowCR(true); setOnglet("comptes"); }} style={{ padding: "9px 16px", background: "#0A1628", color: "white", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
-              Nouveau compte rendu
-            </button>
-            <button onClick={() => { setShowOrd(true); setOnglet("ordonnances"); }} style={{ padding: "9px 16px", background: ACCENT, color: "white", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
-              Nouvelle ordonnance
-            </button>
+            {peutVoirComptes && (
+              <button onClick={() => { setShowCR(true); setOnglet("comptes"); }} style={{ padding: "9px 16px", background: "#0A1628", color: "white", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                Nouveau compte rendu
+              </button>
+            )}
+            {peutCreerOrd && (
+              <button onClick={() => { setShowOrd(true); setOnglet("ordonnances"); }} style={{ padding: "9px 16px", background: ACCENT, color: "white", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                Nouvelle ordonnance
+              </button>
+            )}
           </div>
         </div>
       </div>

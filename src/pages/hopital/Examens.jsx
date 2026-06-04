@@ -299,12 +299,24 @@ export default function Examens() {
 
   useEffect(() => { load(); }, [load]);
 
+  const ri = auth?.role_interne;
+  const isLaborantin = ri === "Laborantin";
+  const isMedecin    = ri === "Médecin";
+
+  // Par defaut, laborantin voit les examens a traiter en premier
+  const [filtreStatutEffectif, setFiltreStatutEffectif] = useState(isLaborantin ? "prescrit" : "Tous");
+
   const filtres = useMemo(() => {
     let r = examens;
-    if (filtreStatut !== "Tous") r = r.filter((e) => e.statut === filtreStatut);
-    if (filtreType !== "Tous")   r = r.filter((e) => e.type_examen === filtreType);
+    const fs = filtreStatutEffectif !== "Tous" ? filtreStatutEffectif : filtreStatut;
+    if (fs !== "Tous") r = r.filter((e) => e.statut === fs);
+    if (filtreType !== "Tous") r = r.filter((e) => e.type_examen === filtreType);
+    if (isMedecin) {
+      const prefix = (auth?.user?.email ?? "").split("@")[0].toLowerCase();
+      if (prefix) r = r.filter((e) => (e.prescripteur ?? "").toLowerCase().includes(prefix));
+    }
     return r;
-  }, [examens, filtreStatut, filtreType]);
+  }, [examens, filtreStatut, filtreStatutEffectif, filtreType, isMedecin, auth]);
 
   const kpis = {
     prescrits:  examens.filter((e) => e.statut === "prescrit").length,
@@ -361,27 +373,39 @@ export default function Examens() {
         ))}
       </div>
 
+      {/* Bandeau laborantin */}
+      {isLaborantin && kpis.prescrits + kpis.en_cours > 0 && (
+        <div style={{ padding: "8px 16px", backgroundColor: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 10, marginBottom: 14, fontSize: 13, color: "#D97706", fontWeight: 700 }}>
+          {kpis.prescrits + kpis.en_cours} examen(s) en attente de traitement
+        </div>
+      )}
+
       {/* Filtres + action */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 10, flexWrap: "wrap" }}>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {["Tous", "prescrit", "en_cours", "resultat_disponible"].map((s) => (
-            <button key={s} onClick={() => setFiltreStatut(s)}
-              style={{ padding: "5px 12px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700,
-                backgroundColor: filtreStatut === s ? "#3B82F6" : "#F3F4F6",
-                color: filtreStatut === s ? "white" : "#374151" }}>
-              {STATUT_CONFIG[s]?.label ?? "Tous"}
-            </button>
-          ))}
+          {["Tous", "prescrit", "en_cours", "resultat_disponible"].map((s) => {
+            const actif = isLaborantin ? filtreStatutEffectif === s : filtreStatut === s;
+            return (
+              <button key={s} onClick={() => { if (isLaborantin) setFiltreStatutEffectif(s); else setFiltreStatut(s); }}
+                style={{ padding: "5px 12px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700,
+                  backgroundColor: actif ? "#3B82F6" : "#F3F4F6",
+                  color: actif ? "white" : "#374151" }}>
+                {STATUT_CONFIG[s]?.label ?? "Tous"}
+              </button>
+            );
+          })}
           <select value={filtreType} onChange={(e) => setFiltreType(e.target.value)}
             style={{ padding: "5px 10px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 12, background: "white", color: "#0A1628" }}>
             <option value="Tous">Tous les types</option>
             {TYPES_EXAMENS.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
-        <button onClick={() => setShowPrescrire(true)}
-          style={{ padding: "8px 16px", background: ACCENT, color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-          + Prescrire un examen
-        </button>
+        {!isLaborantin && (
+          <button onClick={() => setShowPrescrire(true)}
+            style={{ padding: "8px 16px", background: ACCENT, color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+            + Prescrire un examen
+          </button>
+        )}
       </div>
 
       {/* Tableau */}
@@ -425,10 +449,12 @@ export default function Examens() {
                             style={{ fontSize: 11, padding: "3px 9px", border: "none", borderRadius: 6, background: "#DBEAFE", color: "#2563EB", cursor: "pointer", fontWeight: 600 }}>
                             En cours
                           </button>
-                          <button onClick={() => setModalResultat(e)}
-                            style={{ fontSize: 11, padding: "3px 9px", border: "none", borderRadius: 6, background: "#DCFCE7", color: "#16A34A", cursor: "pointer", fontWeight: 600 }}>
-                            Resultat
-                          </button>
+                          {!isMedecin && (
+                            <button onClick={() => setModalResultat(e)}
+                              style={{ fontSize: 11, padding: "3px 9px", border: "none", borderRadius: 6, background: "#DCFCE7", color: "#16A34A", cursor: "pointer", fontWeight: 600 }}>
+                              {isLaborantin ? "Traiter cet examen" : "Resultat"}
+                            </button>
+                          )}
                         </>
                       )}
                       {e.statut === "resultat_disponible" && (

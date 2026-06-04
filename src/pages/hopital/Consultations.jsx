@@ -336,9 +336,17 @@ export default function Consultations() {
 
   useEffect(() => { load(); }, [load]);
 
-  const filtrees = filtreService === "Tous"
-    ? consultations
-    : consultations.filter((c) => c.service === filtreService);
+  const ri = auth?.role_interne;
+  const [voirTout, setVoirTout] = useState(ri !== "Médecin");
+
+  const filtrees = useMemo(() => {
+    let r = filtreService === "Tous" ? consultations : consultations.filter((c) => c.service === filtreService);
+    if (ri === "Médecin" && !voirTout) {
+      const emailPrefix = (auth?.user?.email ?? "").split("@")[0].toLowerCase();
+      r = r.filter((c) => (c.medecin_nom ?? "").toLowerCase().includes(emailPrefix));
+    }
+    return r;
+  }, [consultations, filtreService, ri, voirTout, auth]);
 
   const enAttente = filtrees.filter((c) => c.statut === "en_attente");
   const enCours   = filtrees.filter((c) => c.statut === "en_cours");
@@ -408,6 +416,20 @@ export default function Consultations() {
           </div>
         ))}
       </div>
+
+      {/* Banniere filtre medecin */}
+      {ri === "Médecin" && !voirTout && (
+        <div style={{ padding: "8px 16px", backgroundColor: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 10, marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13, color: "#2563EB" }}>
+          <span>Affichage de vos consultations uniquement</span>
+          <button onClick={() => setVoirTout(true)} style={{ padding: "4px 12px", background: "#3B82F6", color: "white", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Voir tout</button>
+        </div>
+      )}
+      {ri === "Médecin" && voirTout && (
+        <div style={{ padding: "8px 16px", backgroundColor: "#F3F4F6", borderRadius: 10, marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13, color: "#374151" }}>
+          <span>Affichage de toutes les consultations du service</span>
+          <button onClick={() => setVoirTout(false)} style={{ padding: "4px 12px", background: "#E5E7EB", color: "#374151", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Mes consultations</button>
+        </div>
+      )}
 
       {/* Barre actions */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 12, flexWrap: "wrap" }}>

@@ -46,6 +46,9 @@ const HoPlanning       = lazy(() => import("./pages/hopital/Planning"));
 const HoConsultations  = lazy(() => import("./pages/hopital/Consultations"));
 const HoExamens        = lazy(() => import("./pages/hopital/Examens"));
 const HoLits           = lazy(() => import("./pages/hopital/Lits"));
+const HoMonService     = lazy(() => import("./pages/hopital/MonService"));
+const HoMesConsult     = lazy(() => import("./pages/hopital/MesConsultations"));
+const HoCaisse         = lazy(() => import("./pages/hopital/CaissePage"));
 
 // Distributeur
 const DiDashboard     = lazy(() => import("./pages/distributeur/Dashboard"));
@@ -142,9 +145,12 @@ function AppRoutes() {
         <Route path="/hopital/rapports"     element={<ProtectedRoute requiredRole="hopital"><HoRapports /></ProtectedRoute>} />
         <Route path="/hopital/facturation"   element={<ProtectedRoute requiredRole="hopital"><HoFacturation /></ProtectedRoute>} />
         <Route path="/hopital/planning"      element={<ProtectedRoute requiredRole="hopital"><HoPlanning /></ProtectedRoute>} />
-        <Route path="/hopital/consultations" element={<ProtectedRoute requiredRole="hopital"><HoConsultations /></ProtectedRoute>} />
-        <Route path="/hopital/examens"       element={<ProtectedRoute requiredRole="hopital"><HoExamens /></ProtectedRoute>} />
-        <Route path="/hopital/lits"          element={<ProtectedRoute requiredRole="hopital"><HoLits /></ProtectedRoute>} />
+        <Route path="/hopital/consultations"    element={<ProtectedRoute requiredRole="hopital"><HoConsultations /></ProtectedRoute>} />
+        <Route path="/hopital/examens"          element={<ProtectedRoute requiredRole="hopital"><HoExamens /></ProtectedRoute>} />
+        <Route path="/hopital/lits"             element={<ProtectedRoute requiredRole="hopital"><HoLits /></ProtectedRoute>} />
+        <Route path="/hopital/mon-service"      element={<ProtectedRoute requiredRole="hopital"><HoMonService /></ProtectedRoute>} />
+        <Route path="/hopital/mes-consultations" element={<ProtectedRoute requiredRole="hopital"><HoMesConsult /></ProtectedRoute>} />
+        <Route path="/hopital/caisse"           element={<ProtectedRoute requiredRole="hopital"><HoCaisse /></ProtectedRoute>} />
 
         {/* Distributeur */}
         <Route path="/distributeur/dashboard"      element={<ProtectedRoute requiredRole="distributeur"><DiDashboard /></ProtectedRoute>} />

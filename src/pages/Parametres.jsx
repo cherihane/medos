@@ -62,10 +62,14 @@ const PERMISSIONS_DEFAUT = {
     Caissier:     ["/pharmacie/caisse", "/pharmacie/scanner"],
   },
   hopital: {
-    Directeur:               null,
-    Médecin:                 ["/hopital/dashboard", "/hopital/patients", "/hopital/assistant", "/hopital/alertes"],
-    Infirmière:              ["/hopital/dashboard", "/hopital/patients", "/hopital/alertes"],
-    "Pharmacien hospitalier":["/hopital/stock", "/hopital/scanner", "/hopital/alertes"],
+    Directeur:                null,
+    "Médecin":                ["/hopital/dashboard", "/hopital/patients", "/hopital/consultations", "/hopital/mes-consultations", "/hopital/examens", "/hopital/assistant", "/hopital/alertes"],
+    "Infirmière":             ["/hopital/dashboard", "/hopital/patients", "/hopital/consultations", "/hopital/lits", "/hopital/mon-service", "/hopital/alertes"],
+    "Pharmacien hospitalier": ["/hopital/stock", "/hopital/patients", "/hopital/scanner", "/hopital/alertes"],
+    "Secrétaire médicale":    ["/hopital/consultations", "/hopital/patients", "/hopital/facturation", "/hopital/caisse"],
+    "Laborantin":             ["/hopital/examens", "/hopital/alertes"],
+    "Caissier":               ["/hopital/facturation", "/hopital/caisse"],
+    "Aide-soignant":          ["/hopital/lits", "/hopital/mon-service", "/hopital/alertes"],
   },
   distributeur: {
     Directeur:  null,
@@ -81,7 +85,7 @@ const PERMISSIONS_DEFAUT = {
 
 const ROLES_INTERNES = {
   pharmacie:    ["Gérant", "Pharmacien", "Caissier"],
-  hopital:      ["Directeur", "Médecin", "Infirmière", "Pharmacien hospitalier"],
+  hopital:      ["Directeur", "Médecin", "Infirmière", "Pharmacien hospitalier", "Secrétaire médicale", "Laborantin", "Caissier", "Aide-soignant"],
   distributeur: ["Directeur", "Commercial", "Logistique"],
   autorite:     ["Ministre", "Inspecteur", "Analyste"],
 };
