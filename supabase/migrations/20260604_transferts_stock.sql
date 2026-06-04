@@ -24,10 +24,10 @@ CREATE POLICY "transferts_own_etab" ON transferts_stock
   FOR ALL
   USING (
     etablissement_source_id = (
-      SELECT etablissement_id FROM etablissements WHERE email = auth.jwt() ->> 'email' LIMIT 1
+      SELECT id FROM etablissements WHERE email = auth.jwt() ->> 'email' LIMIT 1
     )
     OR
     etablissement_dest_id = (
-      SELECT etablissement_id FROM etablissements WHERE email = auth.jwt() ->> 'email' LIMIT 1
+      SELECT id FROM etablissements WHERE email = auth.jwt() ->> 'email' LIMIT 1
     )
   );
