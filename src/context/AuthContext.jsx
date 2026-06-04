@@ -171,6 +171,16 @@ export const roleConfig = {
       },
       { path: "/hopital/caisse", label: "Caisse", icon: "caisse" },
       { path: "/hopital/agenda", label: "Agenda", icon: "agenda" },
+      {
+        path: "/hopital/transmission-garde",
+        label: "Transmission de garde",
+        icon: "transmission",
+      },
+      {
+        path: "/hopital/renouvellements",
+        label: "Renouvellements",
+        icon: "renouvellements",
+      },
     ],
   },
   distributeur: {
