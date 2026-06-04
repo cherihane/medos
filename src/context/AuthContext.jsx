@@ -159,6 +159,17 @@ export const roleConfig = {
       },
       { path: "/hopital/examens", label: "Examens / Labo", icon: "examens" },
       { path: "/hopital/lits", label: "Gestion des lits", icon: "lits" },
+      {
+        path: "/hopital/mon-service",
+        label: "Mon service",
+        icon: "mon-service",
+      },
+      {
+        path: "/hopital/mes-consultations",
+        label: "Mes consultations",
+        icon: "mes-consultations",
+      },
+      { path: "/hopital/caisse", label: "Caisse", icon: "caisse" },
     ],
   },
   distributeur: {
