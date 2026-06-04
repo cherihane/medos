@@ -11,7 +11,7 @@ import {
   updateConsultation,
   fetchConsultationsJour,
 } from "../../hooks/useMutations";
-import { openDocument, tableHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
+import { openDocument, tableHTML, infoGridHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 const ACCENT = "#10B981";
@@ -82,7 +82,7 @@ function ChronoCell({ depuis, triage, style }) {
 }
 
 // ── Modal enregistrer arrivee ─────────────────────────────────────────────────
-function ModalArrivee({ patients, etabId, medecinNom, onClose, onSaved }) {
+function ModalArrivee({ patients, etabId, medecinNom, auth, onClose, onSaved }) {
   const [filtre, setFiltre] = useState("");
   const [form, setForm] = useState({
     patient_id: "",
@@ -112,7 +112,7 @@ function ModalArrivee({ patients, etabId, medecinNom, onClose, onSaved }) {
     if (!form.triage) { setErr("Le triage est obligatoire."); return; }
     setSaving(true);
     try {
-      await insertConsultation({
+      const consult = await insertConsultation({
         ...form,
         etablissement_id: etabId ?? null,
         heure_arrivee: new Date().toISOString(),
@@ -120,6 +120,13 @@ function ModalArrivee({ patients, etabId, medecinNom, onClose, onSaved }) {
         date_rdv: form.type === "rdv" ? form.date_rdv || null : null,
         heure_rdv: form.type === "rdv" ? form.heure_rdv || null : null,
       });
+      // Calculer position dans la file d'attente
+      const { count } = await import("../../supabaseClient").then((m) =>
+        m.supabase.from("consultations").select("id", { count: "exact", head: true })
+          .eq("etablissement_id", etabId).eq("statut", "en_attente").eq("service", form.service)
+      );
+      const patient = patients.find((p) => p.id === form.patient_id);
+      imprimerTicket(consult ?? { ...form, heure_arrivee: new Date().toISOString() }, patient, (count ?? 0), auth);
       onSaved();
       onClose();
     } catch (e) { setErr(e.message); setSaving(false); }
@@ -229,7 +236,7 @@ function ModalArrivee({ patients, etabId, medecinNom, onClose, onSaved }) {
 }
 
 // ── Carte consultation ────────────────────────────────────────────────────────
-function CarteConsultation({ c, onAppeler, onTerminer }) {
+function CarteConsultation({ c, onAppeler, onTerminer, auth, patients }) {
   const nom = c.patients ? `${c.patients.prenom} ${c.patients.nom}` : "Patient inconnu";
   const now  = new Date();
 
@@ -251,10 +258,16 @@ function CarteConsultation({ c, onAppeler, onTerminer }) {
           <div style={{ fontSize: 11, color: "#6B7280" }}>
             Arrivee : {fmtHeure(c.heure_arrivee)} — <ChronoCell depuis={c.heure_arrivee} triage={c.triage} />
           </div>
-          <button onClick={() => onAppeler(c)}
-            style={{ padding: "5px 12px", background: "#3B82F6", color: "white", border: "none", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-            Appeler
-          </button>
+          <div style={{ display: "flex", gap: 5 }}>
+            <button onClick={() => { const pat = patients?.find((p) => p.id === c.patient_id) ?? c.patients; imprimerTicket(c, pat, "?", auth); }}
+              style={{ padding: "5px 10px", background: "#F3F4F6", color: "#374151", border: "none", borderRadius: 7, fontSize: 10, fontWeight: 600, cursor: "pointer" }}>
+              Ticket
+            </button>
+            <button onClick={() => onAppeler(c)}
+              style={{ padding: "5px 12px", background: "#3B82F6", color: "white", border: "none", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+              Appeler
+            </button>
+          </div>
         </div>
       )}
 
@@ -295,6 +308,72 @@ function Colonne({ titre, count, bgHeader, borderColor, children }) {
       </div>
     </div>
   );
+}
+
+// ── Impression ticket d'attente ───────────────────────────────────────────────
+async function imprimerTicket(consultation, patient, positionFile, auth) {
+  const etab = await fetchEtabFromAuth(auth);
+  const heure = new Date(consultation.heure_arrivee).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  const triageLabel = { urgent: "URGENT", semi_urgent: "SEMI-URGENT", non_urgent: "NON URGENT" }[consultation.triage] ?? "NON URGENT";
+  const triageCouleur = { urgent: "#EF4444", semi_urgent: "#F59E0B", non_urgent: "#10B981" }[consultation.triage] ?? "#10B981";
+  const typeLabel = { urgence: "Urgence", rdv: "Rendez-vous", consultation: "Consultation" }[consultation.type] ?? "Consultation";
+
+  openDocument({
+    titre: "Ticket d'attente",
+    sousTitre: `${etab?.nom ?? ""} — ${new Date().toLocaleDateString("fr-FR")}`,
+    etablissement: etab,
+    sections: [{
+      titre: "",
+      html: `
+        <div style="text-align:center;padding:20px 0">
+          <div style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Votre numero d'ordre</div>
+          <div style="font-size:64px;font-weight:900;color:#10B981;line-height:1;margin-bottom:12px">${String(positionFile).padStart(3, "0")}</div>
+          <div style="display:inline-block;padding:6px 16px;border-radius:20px;background:${triageCouleur}20;border:2px solid ${triageCouleur};color:${triageCouleur};font-weight:700;font-size:13px;margin-bottom:16px">${triageLabel}</div>
+        </div>
+        ${infoGridHTML([
+          { label: "Patient",        value: `${patient?.prenom ?? ""} ${patient?.nom ?? ""}` },
+          { label: "Service",        value: consultation.service ?? "—" },
+          { label: "Medecin",        value: consultation.medecin_nom || "A determiner" },
+          { label: "Motif",          value: consultation.motif || "Consultation" },
+          { label: "Heure d'arrivee", value: heure },
+          { label: "Type",           value: typeLabel },
+        ])}
+        <div style="margin-top:16px;padding:10px;background:#F0FDF4;border-radius:8px;font-size:11px;color:#16A34A;text-align:center">
+          Veuillez patienter. Vous serez appele(e) selon votre ordre d'arrivee et votre priorite medicale.
+        </div>
+      `,
+    }],
+  });
+}
+
+// ── Impression RDV du jour ────────────────────────────────────────────────────
+async function imprimerRdvJour(consultations, auth) {
+  const etab = await fetchEtabFromAuth(auth);
+  const today = new Date().toISOString().slice(0, 10);
+  const rdvAujourdhui = consultations.filter((c) => c.type === "rdv" && c.date_rdv === today)
+    .sort((a, b) => (a.heure_rdv ?? "").localeCompare(b.heure_rdv ?? ""));
+
+  openDocument({
+    titre: "Rendez-vous du jour",
+    sousTitre: new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" }),
+    etablissement: etab,
+    sections: [{
+      titre: `${rdvAujourdhui.length} rendez-vous programmes`,
+      html: rdvAujourdhui.length === 0
+        ? "<p style='color:#6B7280;font-size:13px'>Aucun rendez-vous programme aujourd'hui.</p>"
+        : tableHTML(
+            ["Heure", "Patient", "Service", "Medecin", "Motif", "Statut"],
+            rdvAujourdhui.map((r) => [
+              r.heure_rdv?.slice(0, 5) ?? "--:--",
+              `${r.patients?.prenom ?? ""} ${r.patients?.nom ?? ""}`.trim(),
+              r.service ?? "—",
+              r.medecin_nom ?? "—",
+              r.motif ?? "—",
+              { en_attente: "En attente", en_cours: "En cours", termine: "Termine" }[r.statut] ?? r.statut,
+            ]),
+          ),
+    }],
+  });
 }
 
 // ── Page principale ───────────────────────────────────────────────────────────
@@ -395,8 +474,9 @@ export default function Consultations() {
           patients={patients}
           etabId={etabId}
           medecinNom={auth?.user?.email ?? ""}
+          auth={auth}
           onClose={() => setShowModal(false)}
-          onSaved={() => { load(); success("Arrivee enregistree"); }}
+          onSaved={() => { load(); success("Arrivee enregistree — ticket imprime"); }}
         />
       )}
 
@@ -440,6 +520,10 @@ export default function Consultations() {
           {SERVICES_LISTE.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
         <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => imprimerRdvJour(consultations, auth)}
+            style={{ padding: "8px 16px", background: colors.bgCard, color: "#3B82F6", border: "1px solid #3B82F6", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+            RDV du jour
+          </button>
           <button onClick={handleImprimer}
             style={{ padding: "8px 16px", background: colors.bgCard, color: "#7C3AED", border: "1px solid #7C3AED", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
             Imprimer le journal
@@ -459,7 +543,7 @@ export default function Consultations() {
           <Colonne titre="En attente" count={enAttente.length} bgHeader="#FFFBEB" borderColor="#F59E0B">
             {enAttente.length === 0 && <div style={{ fontSize: 12, color: "#9CA3AF", textAlign: "center", paddingTop: 24 }}>Aucun patient en attente</div>}
             {enAttente.map((c) => (
-              <CarteConsultation key={c.id} c={c} onAppeler={handleAppeler} onTerminer={handleTerminer} />
+              <CarteConsultation key={c.id} c={c} onAppeler={handleAppeler} onTerminer={handleTerminer} auth={auth} patients={patients} />
             ))}
           </Colonne>
 

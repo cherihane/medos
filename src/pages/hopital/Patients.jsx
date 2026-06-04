@@ -232,17 +232,42 @@ async function insertCompteRendu(fields) {
 }
 
 // ── Modal Nouveau patient ─────────────────────────────────────────────────────
-function ModalNouveauPatient({ etablissement_id, medecinNom, onClose, onSaved }) {
+function ModalNouveauPatient({ etablissement_id, medecinNom, onClose, onSaved, onDoublonSelected }) {
   const [form, setForm] = useState({
     prenom: "", nom: "", date_naissance: "", genre: "",
     adresse: "", telephone: "", groupe_sanguin: "",
     allergies: "", antecedents: "", medecin_referent: medecinNom ?? "",
     statut: "ambulatoire", service: "Médecine générale",
+    assurance: "", numero_assurance: "",
   });
   const [dossier]           = useState(genDossier);
   const [saving, setSaving] = useState(false);
   const [err, setErr]       = useState(null);
+  const [doublons, setDoublons] = useState([]);
+  const [checkingDoublon, setCheckingDoublon] = useState(false);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  // Détection de doublons en temps réel
+  useEffect(() => {
+    const prenom = form.prenom.trim();
+    const nom    = form.nom.trim();
+    const tel    = form.telephone.trim();
+    if (prenom.length < 2 && nom.length < 2 && tel.length < 8) { setDoublons([]); return; }
+    const timer = setTimeout(async () => {
+      setCheckingDoublon(true);
+      let q = supabase.from("patients").select("id, prenom, nom, date_naissance, telephone, numero_dossier");
+      if (tel.length >= 8) {
+        q = q.or(`telephone.eq.${tel},and(prenom.ilike.%${prenom}%,nom.ilike.%${nom}%)`);
+      } else {
+        q = q.ilike("nom", `%${nom}%`).ilike("prenom", `%${prenom}%`);
+      }
+      if (etablissement_id) q = q.eq("etablissement_id", etablissement_id);
+      const { data } = await q.limit(5);
+      setDoublons(data ?? []);
+      setCheckingDoublon(false);
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [form.prenom, form.nom, form.telephone]); // eslint-disable-line
 
   const handleSave = async () => {
     setErr(null);
@@ -261,6 +286,8 @@ function ModalNouveauPatient({ etablissement_id, medecinNom, onClose, onSaved })
         medecin_referent: form.medecin_referent.trim() || null,
         statut: form.statut, service: form.service,
         numero_dossier: dossier,
+        assurance: form.assurance.trim() || null,
+        numero_assurance: form.numero_assurance.trim() || null,
         derniere_visite: new Date().toISOString().slice(0, 10),
         ...(etablissement_id ? { etablissement_id } : {}),
       });
@@ -288,6 +315,40 @@ function ModalNouveauPatient({ etablissement_id, medecinNom, onClose, onSaved })
             <div><label style={labelSt}>Prénom <span style={{ color: "#EF4444" }}>*</span></label><input style={inputSt} value={form.prenom} onChange={(e) => set("prenom", e.target.value)} placeholder="Prénom" /></div>
             <div><label style={labelSt}>Nom <span style={{ color: "#EF4444" }}>*</span></label><input style={inputSt} value={form.nom} onChange={(e) => set("nom", e.target.value)} placeholder="Nom de famille" /></div>
           </div>
+
+          {/* Détection doublons */}
+          {checkingDoublon && <div style={{ fontSize: 11, color: colors.textMuted }}>Vérification des doublons...</div>}
+          {!checkingDoublon && doublons.length > 0 && (
+            <div style={{ padding: "12px 14px", backgroundColor: "#FFFBEB", borderRadius: 8, border: "1.5px solid #F59E0B" }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#92400E", marginBottom: 8 }}>
+                Patient(s) similaire(s) detecte(s) — verifier avant de creer :
+              </div>
+              {doublons.map((d) => (
+                <div key={d.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderTop: "1px solid #FDE68A", fontSize: 12 }}>
+                  <div>
+                    <strong style={{ color: colors.navy }}>{d.prenom} {d.nom}</strong>
+                    <span style={{ color: colors.textMuted, marginLeft: 8 }}>
+                      {d.date_naissance ? `ne(e) le ${new Date(d.date_naissance).toLocaleDateString("fr-FR")}` : ""}
+                      {d.telephone ? ` — ${d.telephone}` : ""}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <span style={{ fontSize: 11, color: "#6B7280", fontFamily: "monospace" }}>{d.numero_dossier}</span>
+                    {onDoublonSelected && (
+                      <button type="button" onClick={() => { onDoublonSelected(d); onClose(); }}
+                        style={{ fontSize: 11, padding: "3px 8px", borderRadius: 5, backgroundColor: ACCENT, color: "white", border: "none", cursor: "pointer", fontWeight: 600 }}>
+                        Ouvrir ce dossier
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+              <div style={{ fontSize: 11, color: "#92400E", marginTop: 6 }}>
+                Si c'est un nouveau patient different, vous pouvez continuer l'enregistrement.
+              </div>
+            </div>
+          )}
+
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
             <div><label style={labelSt}>Date de naissance</label><input style={inputSt} type="date" value={form.date_naissance} onChange={(e) => set("date_naissance", e.target.value)} /></div>
             <div>
@@ -307,6 +368,10 @@ function ModalNouveauPatient({ etablissement_id, medecinNom, onClose, onSaved })
           <div className="form-row-2">
             <div><label style={labelSt}>Téléphone</label><input style={inputSt} value={form.telephone} onChange={(e) => set("telephone", e.target.value)} placeholder="+225 07 00 00 00 00" /></div>
             <div><label style={labelSt}>Adresse</label><input style={inputSt} value={form.adresse} onChange={(e) => set("adresse", e.target.value)} placeholder="Quartier, ville" /></div>
+          </div>
+          <div className="form-row-2">
+            <div><label style={labelSt}>Assurance / Mutuelle</label><input style={inputSt} value={form.assurance} onChange={(e) => set("assurance", e.target.value)} placeholder="Ex : CNPS, UAM, Saham..." /></div>
+            <div><label style={labelSt}>Numero de carte assurance</label><input style={inputSt} value={form.numero_assurance} onChange={(e) => set("numero_assurance", e.target.value)} placeholder="Ex : ASS-2026-00123" /></div>
           </div>
           <div>
             <label style={labelSt}>Allergies connues <span style={{ fontSize: 10, fontWeight: 400, color: colors.textMuted }}>— séparez par des virgules</span></label>
@@ -1444,6 +1509,7 @@ function HoverCard({ patient, anchorRef }) {
         <div style={{ display: "flex", gap: 5, marginTop: 6, flexWrap: "wrap" }}>
           <span style={{ padding: "2px 7px", background: svcColor, color: "white", borderRadius: 5, fontSize: 10, fontWeight: 600 }}>{patient.service ?? "Méd. générale"}</span>
           {patient.groupe_sanguin && <span style={{ padding: "2px 7px", background: "#FEE2E2", color: "#DC2626", borderRadius: 5, fontSize: 10, fontWeight: 700 }}>{patient.groupe_sanguin}</span>}
+          {patient.assurance && <span style={{ padding: "2px 6px", fontSize: 10, fontWeight: 600, backgroundColor: "#EFF6FF", color: "#2563EB", border: "1px solid #BFDBFE", borderRadius: 4 }}>{patient.assurance}</span>}
         </div>
       </div>
       {patient.allergies?.length > 0 && (
@@ -1541,14 +1607,22 @@ export default function PatientsHopital() {
   const medecinNom       = auth?.user?.user_metadata?.display_name ?? auth?.structure ?? null;
   const hopitalNom       = auth?.structure ?? "Hôpital";
 
-  const filtered = patients
+  const filtered = useMemo(() => patients
     .filter((p) => filtreStatut === "tous"    || p.statut  === filtreStatut)
     .filter((p) => filtreService === "tous"   || (p.service ?? "Médecine générale") === filtreService)
     .filter((p) => filtreTriage === "tous"    || p.triage  === filtreTriage)
     .filter((p) => {
-      const q = recherche.toLowerCase();
-      return !q || `${p.prenom} ${p.nom}`.toLowerCase().includes(q) || (p.numero_dossier ?? "").toLowerCase().includes(q);
-    });
+      const q = recherche.toLowerCase().trim();
+      if (!q) return true;
+      return (
+        `${p.prenom} ${p.nom}`.toLowerCase().includes(q) ||
+        `${p.nom} ${p.prenom}`.toLowerCase().includes(q) ||
+        (p.numero_dossier ?? "").toLowerCase().includes(q) ||
+        (p.telephone ?? "").replace(/\s/g, "").includes(q.replace(/\s/g, "")) ||
+        (p.date_naissance ?? "").includes(q) ||
+        (p.assurance ?? "").toLowerCase().includes(q)
+      );
+    }), [patients, filtreStatut, filtreService, filtreTriage, recherche]);
 
   // Groupement par service (uniquement si filtre = "tous")
   const afficherGroupes = filtreService === "tous" && !recherche;
@@ -1570,7 +1644,7 @@ export default function PatientsHopital() {
 
       {toast && <div style={{ position: "fixed", top: 20, right: 20, background: ACCENT, color: "white", padding: "12px 20px", borderRadius: 10, fontWeight: 600, fontSize: 13, zIndex: 2000, boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}>{toast}</div>}
 
-      {showNouv && <ModalNouveauPatient etablissement_id={etablissement_id} medecinNom={medecinNom} onClose={() => setShowNouv(false)} onSaved={() => { setShowNouv(false); refetch(); showToast("Patient enregistré."); }} />}
+      {showNouv && <ModalNouveauPatient etablissement_id={etablissement_id} medecinNom={medecinNom} onClose={() => setShowNouv(false)} onSaved={() => { setShowNouv(false); refetch(); showToast("Patient enregistré."); }} onDoublonSelected={(p) => { setShowNouv(false); setFichePatient(p); }} />}
       {fichePatient && <FichePatient patient={fichePatient} etablissement_id={etablissement_id} medecinNom={medecinNom} hopitalNom={hopitalNom} medicaments={medicaments} onClose={() => setFichePatient(null)} onPatientUpdated={(msg) => { refetch(); showToast(msg); }} auth={auth} />}
 
       {/* KPI */}
@@ -1590,7 +1664,7 @@ export default function PatientsHopital() {
 
       {/* Barre d'actions */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
-        <input value={recherche} onChange={(e) => setRecherche(e.target.value)} placeholder="Rechercher par nom ou n° dossier…"
+        <input value={recherche} onChange={(e) => setRecherche(e.target.value)} placeholder="Rechercher par nom, prénom, n° dossier, téléphone, assurance..."
           style={{ flex: 1, minWidth: 200, padding: "9px 14px", border: "1.5px solid var(--border)", borderRadius: 10, fontSize: 13, outline: "none", color: colors.navy }} />
 
         {/* Filtre statut */}
