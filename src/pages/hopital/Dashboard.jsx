@@ -267,12 +267,16 @@ function KpiRoleCard({ label, value, color, sublabel }) {
   );
 }
 
+const ACCENT = "#10B981";
+
 function DashboardRole({ ri }) {
   const { auth } = useAuth();
   const navigate = useNavigate();
   const [kpis, setKpis] = useState([]);
   const [shortcut, setShortcut] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [rdvJourDetail, setRdvJourDetail]   = useState([]);
+  const [patientsRecents, setPatientsRecents] = useState([]);
   const todayISO = new Date().toISOString().slice(0, 10);
   const debutJour = todayISO + "T00:00:00.000Z";
   const finJour   = todayISO + "T23:59:59.999Z";
@@ -320,19 +324,23 @@ function DashboardRole({ ri }) {
           setShortcut({ label: "Aller a mon service", path: "/hopital/mon-service" });
 
         } else if (ri === "Secrétaire médicale") {
-          const [cRes, rdvRes, pRes, fRes] = await Promise.all([
-            supabase.from("consultations").select("id").eq("etablissement_id", eid).eq("statut", "en_attente"),
-            supabase.from("consultations").select("id").eq("etablissement_id", eid).eq("type", "rdv").eq("date_rdv", todayISO),
-            supabase.from("patients").select("id").eq("etablissement_id", eid).gte("created_at", debutJour).lte("created_at", finJour),
-            supabase.from("factures_hopital").select("id").eq("etablissement_id", eid).eq("statut", "emise"),
+          const [cRes, rdvRes, pRes, fRes, rdvDetailRes, pRecentRes] = await Promise.all([
+            supabase.from("consultations").select("id", { count: "exact", head: true }).eq("etablissement_id", eid).eq("statut", "en_attente"),
+            supabase.from("consultations").select("id", { count: "exact", head: true }).eq("etablissement_id", eid).eq("type", "rdv").eq("date_rdv", todayISO),
+            supabase.from("patients").select("id", { count: "exact", head: true }).eq("etablissement_id", eid).gte("created_at", debutJour).lte("created_at", finJour),
+            supabase.from("factures_hopital").select("id", { count: "exact", head: true }).eq("etablissement_id", eid).eq("statut", "emise"),
+            supabase.from("consultations").select("id, heure_rdv, service, medecin_nom, patients(prenom, nom)").eq("etablissement_id", eid).eq("type", "rdv").eq("date_rdv", todayISO).order("heure_rdv"),
+            supabase.from("patients").select("id, prenom, nom, numero_dossier, created_at").eq("etablissement_id", eid).order("created_at", { ascending: false }).limit(5),
           ]);
           setKpis([
-            { label: "Patients en attente",     value: cRes.data?.length ?? 0,  color: "#F59E0B" },
-            { label: "RDV du jour",             value: rdvRes.data?.length ?? 0, color: "#3B82F6" },
-            { label: "Patients enregistres auj.",value: pRes.data?.length ?? 0, color: "#10B981" },
-            { label: "Factures en attente",     value: fRes.data?.length ?? 0,  color: "#EF4444" },
+            { label: "En salle d'attente",      value: cRes.count ?? 0,         color: "#F59E0B" },
+            { label: "RDV d'aujourd'hui",        value: rdvRes.count ?? 0,       color: "#3B82F6" },
+            { label: "Nouveaux patients auj.",   value: pRes.count ?? 0,         color: ACCENT },
+            { label: "Factures en attente",      value: fRes.count ?? 0,         color: "#EF4444" },
           ]);
-          setShortcut({ label: "Ouvrir la file d'attente", path: "/hopital/consultations" });
+          setShortcut({ label: "Enregistrer une arrivee", path: "/hopital/consultations" });
+          setRdvJourDetail(rdvDetailRes.data ?? []);
+          setPatientsRecents(pRecentRes.data ?? []);
 
         } else if (ri === "Laborantin") {
           const [eRes, eResAuj, eUrgRes] = await Promise.all([
@@ -389,6 +397,8 @@ function DashboardRole({ ri }) {
 
   if (!kpis.length && !loading) return null;
 
+  const isSecretaire = ri === "Secrétaire médicale";
+
   return (
     <div style={{ marginBottom: 24 }}>
       <div className="kpi-row" style={{ marginBottom: 16 }}>
@@ -399,9 +409,56 @@ function DashboardRole({ ri }) {
           </div>
         )) : kpis.map((k) => <KpiRoleCard key={k.label} {...k} />)}
       </div>
+
+      {/* Dashboard enrichi secretaire */}
+      {isSecretaire && !loading && (
+        <div className="dash-grid-2" style={{ marginBottom: 16 }}>
+          {/* RDV du jour */}
+          <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: colors.navy }}>RDV du jour</h3>
+              <button onClick={() => navigate("/hopital/agenda")}
+                style={{ fontSize: 11, padding: "3px 10px", backgroundColor: "#EFF6FF", color: "#2563EB", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600 }}>
+                Voir l'agenda
+              </button>
+            </div>
+            {rdvJourDetail.length === 0 && (
+              <div style={{ fontSize: 13, color: colors.textMuted, textAlign: "center", padding: 20 }}>Aucun rendez-vous programme aujourd'hui.</div>
+            )}
+            {rdvJourDetail.map((rdv) => (
+              <div key={rdv.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${colors.borderLight}`, fontSize: 12 }}>
+                <div>
+                  <span style={{ fontWeight: 700, color: colors.navy }}>{rdv.patients ? `${rdv.patients.prenom} ${rdv.patients.nom}` : "—"}</span>
+                  <span style={{ color: colors.textMuted, marginLeft: 8 }}>{rdv.service}</span>
+                  {rdv.medecin_nom && <span style={{ color: colors.textMuted, marginLeft: 4 }}>— {rdv.medecin_nom}</span>}
+                </div>
+                <span style={{ fontWeight: 700, color: ACCENT, flexShrink: 0, marginLeft: 8 }}>{rdv.heure_rdv?.slice(0, 5) ?? "—"}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Derniers patients enregistres */}
+          <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+            <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 700, color: colors.navy }}>Derniers patients enregistres</h3>
+            {patientsRecents.length === 0 && (
+              <div style={{ fontSize: 13, color: colors.textMuted, textAlign: "center", padding: 20 }}>Aucun patient enregistre recemment.</div>
+            )}
+            {patientsRecents.map((p) => (
+              <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${colors.borderLight}`, fontSize: 12 }}>
+                <div>
+                  <span style={{ fontWeight: 700, color: colors.navy }}>{p.prenom} {p.nom}</span>
+                  <span style={{ fontSize: 10, color: "#6B7280", fontFamily: "monospace", marginLeft: 8 }}>{p.numero_dossier}</span>
+                </div>
+                <span style={{ fontSize: 11, color: colors.textMuted }}>{new Date(p.created_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {shortcut && (
         <button onClick={() => navigate(shortcut.path)}
-          style={{ width: "100%", padding: "14px 20px", backgroundColor: "#10B981", color: "white", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
+          style={{ width: "100%", padding: "14px 20px", backgroundColor: ACCENT, color: "white", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
           {shortcut.label}
         </button>
       )}

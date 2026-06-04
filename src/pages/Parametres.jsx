@@ -63,10 +63,10 @@ const PERMISSIONS_DEFAUT = {
   },
   hopital: {
     Directeur:                null,
-    "Médecin":                ["/hopital/dashboard", "/hopital/patients", "/hopital/consultations", "/hopital/mes-consultations", "/hopital/examens", "/hopital/assistant", "/hopital/alertes"],
+    "Médecin":                ["/hopital/dashboard", "/hopital/patients", "/hopital/consultations", "/hopital/mes-consultations", "/hopital/examens", "/hopital/assistant", "/hopital/alertes", "/hopital/agenda"],
     "Infirmière":             ["/hopital/dashboard", "/hopital/patients", "/hopital/consultations", "/hopital/lits", "/hopital/mon-service", "/hopital/alertes"],
     "Pharmacien hospitalier": ["/hopital/stock", "/hopital/patients", "/hopital/scanner", "/hopital/alertes"],
-    "Secrétaire médicale":    ["/hopital/consultations", "/hopital/patients", "/hopital/facturation", "/hopital/caisse"],
+    "Secrétaire médicale":    ["/hopital/dashboard", "/hopital/consultations", "/hopital/patients", "/hopital/facturation", "/hopital/caisse", "/hopital/agenda"],
     "Laborantin":             ["/hopital/examens", "/hopital/alertes"],
     "Caissier":               ["/hopital/facturation", "/hopital/caisse"],
     "Aide-soignant":          ["/hopital/lits", "/hopital/mon-service", "/hopital/alertes"],

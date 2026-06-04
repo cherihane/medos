@@ -605,3 +605,17 @@ export async function fetchFacturesAvecPaiements(etablissement_id) {
     .limit(200);
   return data ?? [];
 }
+
+// ─── RDV / Agenda ─────────────────────────────────────────────────────────────
+export async function fetchRdvSemaine(etablissement_id, dateDebut, dateFin) {
+  const { data } = await supabase
+    .from("consultations")
+    .select("*, patients(prenom, nom, telephone)")
+    .eq("etablissement_id", etablissement_id)
+    .eq("type", "rdv")
+    .gte("date_rdv", dateDebut)
+    .lte("date_rdv", dateFin)
+    .order("date_rdv", { ascending: true })
+    .order("heure_rdv", { ascending: true });
+  return data ?? [];
+}
