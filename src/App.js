@@ -50,7 +50,7 @@ const HoMonService     = lazy(() => import("./pages/hopital/MonService"));
 const HoMesConsult     = lazy(() => import("./pages/hopital/MesConsultations"));
 const HoCaisse         = lazy(() => import("./pages/hopital/CaissePage"));
 const HoAgenda         = lazy(() => import("./pages/hopital/Agenda"));
-const HoTransmission   = lazy(() => import("./pages/hopital/TransmissionGarde"));
+const HoTransmissionGarde = lazy(() => import("./pages/hopital/TransmissionGarde"));
 const HoRenouvellements = lazy(() => import("./pages/hopital/Renouvellements"));
 
 // Distributeur
@@ -155,8 +155,8 @@ function AppRoutes() {
         <Route path="/hopital/mes-consultations" element={<ProtectedRoute requiredRole="hopital"><HoMesConsult /></ProtectedRoute>} />
         <Route path="/hopital/caisse"           element={<ProtectedRoute requiredRole="hopital"><HoCaisse /></ProtectedRoute>} />
         <Route path="/hopital/agenda"            element={<ProtectedRoute requiredRole="hopital"><HoAgenda /></ProtectedRoute>} />
-        <Route path="/hopital/transmission"       element={<ProtectedRoute requiredRole="hopital"><HoTransmission /></ProtectedRoute>} />
-        <Route path="/hopital/transmission-garde" element={<ProtectedRoute requiredRole="hopital"><HoTransmission /></ProtectedRoute>} />
+        <Route path="/hopital/transmission"       element={<ProtectedRoute requiredRole="hopital"><HoTransmissionGarde /></ProtectedRoute>} />
+        <Route path="/hopital/transmission-garde" element={<ProtectedRoute requiredRole="hopital"><HoTransmissionGarde /></ProtectedRoute>} />
         <Route path="/hopital/renouvellements"  element={<ProtectedRoute requiredRole="hopital"><HoRenouvellements /></ProtectedRoute>} />
 
         {/* Distributeur */}

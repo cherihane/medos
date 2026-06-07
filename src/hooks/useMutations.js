@@ -625,6 +625,16 @@ export async function insertTransmissionGarde(fields) {
   return run(supabase.from("transmissions_garde").insert(fields).select().single());
 }
 
+export async function fetchTransmissionsGarde(etablissement_id) {
+  const { data } = await supabase
+    .from("transmissions_garde")
+    .select("*")
+    .eq("etablissement_id", etablissement_id)
+    .order("created_at", { ascending: false })
+    .limit(20);
+  return data ?? [];
+}
+
 export async function fetchDerniereTransmission(etablissement_id, service) {
   let q = supabase
     .from("transmissions_garde")
