@@ -381,7 +381,7 @@ function AppRoutes() {
           path="/hopital/caisse"
           element={
             <ProtectedRoute requiredRole="hopital">
-              <HoCaisse />
+              <HoCaissePage />
             </ProtectedRoute>
           }
         />
@@ -461,7 +461,7 @@ function AppRoutes() {
           path="/hopital/mes-consultations"
           element={
             <ProtectedRoute requiredRole="hopital">
-              <HoMesConsultations />
+              <HoMesConsult />
             </ProtectedRoute>
           }
         />
