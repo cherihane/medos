@@ -228,7 +228,23 @@ export default function Sidebar({ mobileOpen, onMobileClose }) {
 
         {/* Nav */}
         <nav style={{ flex: 1, padding: "10px 0", overflowY: "auto" }}>
-          {auth.nav.map((item) => {
+          {auth.nav.map((item, index) => {
+            if (item.type === "separator") {
+              return (
+                <div key={`sep-${index}`} style={{
+                  padding: "16px 20px 6px",
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: "rgba(255,255,255,0.25)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.8px",
+                  userSelect: "none",
+                }}>
+                  {item.label}
+                </div>
+              );
+            }
+
             const badgeType = BADGE_MAP[item.icon];
             const badgeCount = badgeType ? unreadByType[badgeType] : 0;
 
