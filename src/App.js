@@ -50,25 +50,12 @@ const HoExamens = lazy(() => import("./pages/hopital/Examens"));
 const HoLits = lazy(() => import("./pages/hopital/Lits"));
 const HoMonService = lazy(() => import("./pages/hopital/MonService"));
 const HoMesConsult = lazy(() => import("./pages/hopital/MesConsultations"));
-const HoCaisse = lazy(() => import("./pages/hopital/CaissePage"));
 const HoAgenda = lazy(() => import("./pages/hopital/Agenda"));
 const HoTransmissionGarde = lazy(
   () => import("./pages/hopital/TransmissionGarde"),
 );
 const HoRenouvellements = lazy(() => import("./pages/hopital/Renouvellements"));
-const HoConsultations = lazy(() => import("./pages/hopital/Consultations"));
-const HoExamens = lazy(() => import("./pages/hopital/Examens"));
-const HoLits = lazy(() => import("./pages/hopital/Lits"));
 const HoCaissePage = lazy(() => import("./pages/hopital/CaissePage"));
-const HoMonService = lazy(() => import("./pages/hopital/MonService"));
-const HoMesConsultations = lazy(
-  () => import("./pages/hopital/MesConsultations"),
-);
-const HoAgenda = lazy(() => import("./pages/hopital/Agenda"));
-const HoTransmissionGarde = lazy(
-  () => import("./pages/hopital/TransmissionGarde"),
-);
-const HoRenouvellements = lazy(() => import("./pages/hopital/Renouvellements"));
 
 // Distributeur
 const DiDashboard = lazy(() => import("./pages/distributeur/Dashboard"));
