@@ -19,43 +19,54 @@ const NAV_INTERNE = {
   },
   hopital: {
     directeur: null,
-    medecin: ["/hopital/dashboard", "/hopital/assistant", "/hopital/alertes"],
-    infirmiere: ["/hopital/dashboard", "/hopital/alertes"],
-    pharmacien_hospitalier: [
-      "/hopital/stock",
-      "/hopital/scanner",
-      "/hopital/alertes",
-    ],
     medecin: [
       "/hopital/dashboard",
+      "/hopital/mes-consultations",
       "/hopital/patients",
-      "/hopital/consultations",
       "/hopital/examens",
+      "/hopital/renouvellements",
+      "/hopital/transmission-garde",
       "/hopital/assistant",
       "/hopital/alertes",
-      "/hopital/mes-consultations",
     ],
     infirmiere: [
       "/hopital/dashboard",
+      "/hopital/mon-service",
       "/hopital/patients",
-      "/hopital/consultations",
-      "/hopital/lits",
-      "/hopital/alertes",
-      "/hopital/mon-service",
-    ],
-    aide_soignant: [
-      "/hopital/mon-service",
       "/hopital/lits",
       "/hopital/alertes",
     ],
-    secretaire: [
+    "Secrétaire médicale": [
+      "/hopital/dashboard",
       "/hopital/consultations",
+      "/hopital/agenda",
       "/hopital/patients",
       "/hopital/facturation",
       "/hopital/caisse",
     ],
-    laborantin: ["/hopital/examens", "/hopital/alertes"],
-    caissier: ["/hopital/facturation", "/hopital/caisse"],
+    pharmacien_hospitalier: [
+      "/hopital/dashboard",
+      "/hopital/stock",
+      "/hopital/patients",
+      "/hopital/scanner",
+      "/hopital/alertes",
+    ],
+    laborantin: [
+      "/hopital/dashboard",
+      "/hopital/examens",
+      "/hopital/alertes",
+    ],
+    caissier: [
+      "/hopital/dashboard",
+      "/hopital/caisse",
+      "/hopital/facturation",
+    ],
+    "Aide-soignant": [
+      "/hopital/dashboard",
+      "/hopital/mon-service",
+      "/hopital/lits",
+      "/hopital/alertes",
+    ],
   },
   distributeur: {
     directeur: null,
@@ -127,60 +138,45 @@ export const roleConfig = {
     initial: "H",
     dashboardPath: "/hopital/dashboard",
     nav: [
-      { path: "/hopital/dashboard", label: "Dashboard", icon: "dashboard" },
-      { path: "/hopital/stock", label: "Stock", icon: "inventaire" },
-      {
-        path: "/hopital/fournisseurs",
-        label: "Fournisseurs",
-        icon: "fournisseurs",
-      },
-      { path: "/hopital/patients", label: "Patients", icon: "patients" },
-      {
-        path: "/hopital/predictions",
-        label: "Prédictions IA",
-        icon: "predictions",
-      },
-      { path: "/hopital/scanner", label: "Scanner", icon: "scanner" },
-      { path: "/hopital/assistant", label: "Assistant IA", icon: "assistant" },
-      {
-        path: "/hopital/facturation",
-        label: "Facturation",
-        icon: "facturation",
-      },
-      { path: "/hopital/planning", label: "Planning gardes", icon: "planning" },
-      { path: "/hopital/reseau", label: "Réseau", icon: "reseau" },
-      { path: "/hopital/alertes", label: "Alertes", icon: "alertes" },
-      { path: "/hopital/rapports", label: "Rapports", icon: "rapports" },
-      { path: "/parametres", label: "Paramètres", icon: "parametres" },
-      {
-        path: "/hopital/consultations",
-        label: "Consultations",
-        icon: "consultations",
-      },
-      { path: "/hopital/examens", label: "Examens / Labo", icon: "examens" },
-      { path: "/hopital/lits", label: "Gestion des lits", icon: "lits" },
-      {
-        path: "/hopital/mon-service",
-        label: "Mon service",
-        icon: "mon-service",
-      },
-      {
-        path: "/hopital/mes-consultations",
-        label: "Mes consultations",
-        icon: "mes-consultations",
-      },
-      { path: "/hopital/caisse", label: "Caisse", icon: "caisse" },
-      { path: "/hopital/agenda", label: "Agenda", icon: "agenda" },
-      {
-        path: "/hopital/transmission-garde",
-        label: "Transmission de garde",
-        icon: "transmission",
-      },
-      {
-        path: "/hopital/renouvellements",
-        label: "Renouvellements",
-        icon: "renouvellements",
-      },
+      // ── Vue globale
+      { type: "separator", label: "Vue globale" },
+      { path: "/hopital/dashboard",         label: "Dashboard",          icon: "dashboard"        },
+      { path: "/hopital/rapports",           label: "Rapports",           icon: "rapports"         },
+
+      // ── Patients et soins
+      { type: "separator", label: "Patients et soins" },
+      { path: "/hopital/consultations",      label: "Consultations",      icon: "consultations"    },
+      { path: "/hopital/agenda",             label: "Agenda RDV",         icon: "agenda"           },
+      { path: "/hopital/patients",           label: "Patients",           icon: "patients"         },
+      { path: "/hopital/mes-consultations",  label: "Mes consultations",  icon: "patients"         },
+      { path: "/hopital/examens",            label: "Examens / Labo",     icon: "examens"          },
+      { path: "/hopital/lits",               label: "Gestion des lits",   icon: "lits"             },
+      { path: "/hopital/mon-service",        label: "Mon service",        icon: "mon-service"      },
+
+      // ── Personnel
+      { type: "separator", label: "Personnel" },
+      { path: "/hopital/planning",           label: "Planning gardes",    icon: "planning"         },
+      { path: "/hopital/transmission-garde", label: "Transmission garde", icon: "transmission"     },
+      { path: "/hopital/renouvellements",    label: "Renouvellements",    icon: "renouvellements"  },
+
+      // ── Stock
+      { type: "separator", label: "Stock" },
+      { path: "/hopital/stock",              label: "Stock",              icon: "inventaire"       },
+      { path: "/hopital/fournisseurs",       label: "Fournisseurs",       icon: "fournisseurs"     },
+      { path: "/hopital/scanner",            label: "Scanner",            icon: "scanner"          },
+      { path: "/hopital/predictions",        label: "Prédictions IA",     icon: "predictions"      },
+
+      // ── Finance
+      { type: "separator", label: "Finance" },
+      { path: "/hopital/caisse",             label: "Caisse",             icon: "caisse"           },
+      { path: "/hopital/facturation",        label: "Facturation",        icon: "facturation"      },
+
+      // ── Outils
+      { type: "separator", label: "Outils" },
+      { path: "/hopital/assistant",          label: "Assistant IA",       icon: "assistant"        },
+      { path: "/hopital/reseau",             label: "Réseau",             icon: "reseau"           },
+      { path: "/hopital/alertes",            label: "Alertes",            icon: "alertes"          },
+      { path: "/parametres",                 label: "Paramètres",         icon: "parametres"       },
     ],
   },
   distributeur: {
@@ -267,9 +263,20 @@ export function AuthProvider({ children }) {
     const allowedPaths = role_interne
       ? (NAV_INTERNE[role]?.[role_interne] ?? null)
       : null;
-    const nav = allowedPaths
-      ? config.nav.filter((item) => allowedPaths.includes(item.path))
-      : config.nav;
+    const nav = (() => {
+      if (!allowedPaths) return config.nav;
+      const result = [];
+      let pendingSeparator = null;
+      for (const item of config.nav) {
+        if (item.type === "separator") {
+          pendingSeparator = item;
+        } else if (allowedPaths.includes(item.path)) {
+          if (pendingSeparator) { result.push(pendingSeparator); pendingSeparator = null; }
+          result.push(item);
+        }
+      }
+      return result;
+    })();
 
     // dashboardPath = premier item de nav autorisé (hors /parametres)
     const firstNav = nav.find((item) => item.path !== "/parametres");
@@ -310,7 +317,16 @@ export function AuthProvider({ children }) {
         // Si le membre a des permissions custom, on filtre le nav selon celles-ci
         const perms = membreRes.data?.permissions_nav;
         if (Array.isArray(perms) && perms.length > 0) {
-          patch.nav = prev.nav.filter((item) => perms.includes(item.path));
+          const enrichNav = [];
+          let pending = null;
+          for (const item of prev.nav) {
+            if (item.type === "separator") { pending = item; }
+            else if (perms.includes(item.path)) {
+              if (pending) { enrichNav.push(pending); pending = null; }
+              enrichNav.push(item);
+            }
+          }
+          patch.nav = enrichNav;
           const firstNav = patch.nav.find(
             (item) => item.path !== "/parametres",
           );
