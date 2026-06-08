@@ -9,7 +9,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "rec
 import Layout from "../../components/Layout";
 import { usePatientsPaginated, usePatientsStats, useMedicaments } from "../../hooks/useSupabaseData";
 import Pagination from "../../components/Pagination";
-import { insertPatient, insertOrdonnance, upsertHospitalisation, fetchHospitalisation, insertConstante, fetchConstantes, updatePatientTriage, insertNoteEvolution, fetchNotesEvolution } from "../../hooks/useMutations";
+import { insertPatient, insertOrdonnance, upsertHospitalisation, fetchHospitalisation, insertConstante, fetchConstantes, updatePatientTriage, insertNoteEvolution, fetchNotesEvolution, fetchPlanSoinsPatient, fetchPerfusionsPatient, insertAdministration, insertPlanSoins } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../supabaseClient";
 import { openDocument, tableHTML, infoGridHTML, alertBannerHTML, signatureRowHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
@@ -826,6 +826,10 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
   // Hospitalisation form
   const [hospiForm, setHospiForm]     = useState({ statut: "ambulatoire", service: patient.service ?? "Medecine generale", chambre: "", lit: "", date_entree: "", date_sortie_prevue: "", motif_hospitalisation: "" });
   const [savingHospi, setSavingHospi] = useState(false);
+  // Soins
+  const [planSoins, setPlanSoins]     = useState([]);
+  const [perfusions, setPerfusions]   = useState([]);
+  const [loadingSoins, setLoadingSoins] = useState(false);
   const [hospiSaved, setHospiSaved]   = useState(false);
   // Notes d'evolution
   const [notes, setNotes]             = useState([]);
@@ -918,12 +922,23 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
   const peutVoirHistorique = !ri || ["Secrétaire médicale", "Caissier", "Directeur"].includes(ri);
   const peutSaisirConst    = !ri || ri === "Médecin" || ri === "Infirmière" || ri === "Directeur";
   const peutCreerOrd       = !ri || ri === "Médecin" || ri === "Directeur";
+  const peutVoirSoins      = !ri || ri === "Médecin" || ri === "Infirmière" || ri === "Directeur";
+
+  // Charger soins quand l'onglet est ouvert
+  useEffect(() => {
+    if (onglet !== "soins" || !patient?.id) return;
+    setLoadingSoins(true);
+    Promise.all([fetchPlanSoinsPatient(patient.id), fetchPerfusionsPatient(patient.id)])
+      .then(([ps, pf]) => { setPlanSoins(ps); setPerfusions(pf); })
+      .finally(() => setLoadingSoins(false));
+  }, [onglet, patient?.id]); // eslint-disable-line
 
   const onglets = [
     ...(peutVoirDossier    ? [["dossier", `Dossier (${dossier.length})`]] : []),
     ...(ri !== "Caissier"  ? [["infos", "Informations"]] : []),
     ...(peutVoirHospi      ? [["hospitalisation", "Hospitalisation"]] : []),
     ...(peutVoirConst      ? [["constantes", `Constantes (${constantes.length})`]] : []),
+    ...(peutVoirSoins      ? [["soins", "Soins"]] : []),
     ...(peutVoirOrd        ? [["ordonnances", `Ordonnances (${ordonnances.length})`]] : []),
     ...(peutVoirComptes    ? [["comptes", `Comptes rendus (${comptes.length})`]] : []),
     ...(peutVoirHistorique ? [["historique", `Historique (${historique.length})`]] : []),
@@ -1372,6 +1387,66 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
                 >
                   Imprimer le QR Code
                 </button>
+              </div>
+            )}
+
+            {/* ── Soins ── */}
+            {onglet === "soins" && (
+              <div style={{ padding: "16px 0" }}>
+                {loadingSoins && <div style={{ textAlign: "center", color: colors.textMuted, padding: 24 }}>Chargement...</div>}
+                {!loadingSoins && (
+                  <>
+                    {/* Plan de soins actif */}
+                    <div style={{ marginBottom: 20 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: colors.navy, marginBottom: 10 }}>Plan de soins actif</div>
+                      {planSoins.length === 0
+                        ? <div style={{ fontSize: 13, color: colors.textMuted, padding: "12px 0" }}>Aucun medicament dans le plan de soins.</div>
+                        : planSoins.map((ps) => (
+                          <div key={ps.id} style={{ padding: "10px 14px", backgroundColor: colors.bgSurface, borderRadius: 10, marginBottom: 8, borderLeft: `3px solid ${ACCENT}` }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: colors.navy }}>{ps.medicament_nom}</div>
+                            <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>{ps.dose} · {ps.voie} · Horaires : {(ps.horaires ?? []).join(", ")}</div>
+                            {ps.prescripteur && <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>Prescripteur : {ps.prescripteur}</div>}
+                          </div>
+                        ))
+                      }
+                      {peutCreerOrd && (
+                        <button
+                          onClick={async () => {
+                            const medicament_nom = window.prompt("Medicament :");
+                            if (!medicament_nom) return;
+                            const dose = window.prompt("Dose :") || "1";
+                            const voie = window.prompt("Voie (Oral/IV/IM/SC) :") || "Oral";
+                            await insertPlanSoins({ patient_id: patient.id, etablissement_id: etablissement_id ?? null, medicament_nom, dose, voie, horaires: ["08:00","20:00"], date_debut: new Date().toISOString().slice(0,10), prescripteur: medecinNom || null, actif: true });
+                            setLoadingSoins(true);
+                            fetchPlanSoinsPatient(patient.id).then(setPlanSoins).finally(() => setLoadingSoins(false));
+                          }}
+                          style={{ padding: "6px 14px", backgroundColor: ACCENT, color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", marginTop: 6 }}>
+                          + Ajouter au plan de soins
+                        </button>
+                      )}
+                    </div>
+                    {/* Perfusions */}
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: colors.navy, marginBottom: 10 }}>Perfusions actives et recentes</div>
+                      {perfusions.length === 0
+                        ? <div style={{ fontSize: 13, color: colors.textMuted, padding: "12px 0" }}>Aucune perfusion enregistree.</div>
+                        : perfusions.map((p) => (
+                          <div key={p.id} style={{ padding: "10px 14px", backgroundColor: p.statut === "en_cours" ? "#EFF6FF" : colors.bgSurface, borderRadius: 10, marginBottom: 8, borderLeft: `3px solid ${p.statut === "en_cours" ? "#3B82F6" : "#D1D5DB"}` }}>
+                            <div style={{ display: "flex", justifyContent: "space-between" }}>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: colors.navy }}>{p.type_solute} {p.volume_ml}mL</div>
+                              <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 6, backgroundColor: p.statut === "en_cours" ? "#DBEAFE" : "#F3F4F6", color: p.statut === "en_cours" ? "#2563EB" : "#6B7280" }}>{p.statut}</span>
+                            </div>
+                            <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+                              {p.debit_ml_h ? `${p.debit_ml_h}mL/h · ` : ""}
+                              Debut : {new Date(p.heure_debut).toLocaleString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+                              {p.heure_fin_prevue ? ` · Fin prevue : ${new Date(p.heure_fin_prevue).toLocaleString("fr-FR", { hour: "2-digit", minute: "2-digit" })}` : ""}
+                            </div>
+                          </div>
+                        ))
+                      }
+                    </div>
+                  </>
+                )}
               </div>
             )}
 

@@ -7,7 +7,7 @@ import { useAlertes, useKpiHopital, usePatients } from "../../hooks/useSupabaseD
 import { supabase } from "../../supabaseClient";
 import { colors, radius, shadow, font } from "../../theme";
 import { useAuth } from "../../context/AuthContext";
-import { fetchLitsOccupes, fetchDerniereTransmission } from "../../hooks/useMutations";
+import { fetchLitsOccupes, fetchDerniereTransmission, fetchPerfusionsActives, fetchPlanSoinsJour } from "../../hooks/useMutations";
 
 function useTendanceHopital() {
   const [hier, setHier] = useState(null);
@@ -275,11 +275,13 @@ function DashboardRole({ ri }) {
   const [kpis, setKpis] = useState([]);
   const [shortcut, setShortcut] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [rdvJourDetail, setRdvJourDetail]     = useState([]);
-  const [patientsRecents, setPatientsRecents] = useState([]);
-  const [fileMedecin, setFileMedecin]         = useState([]);
-  const [examensDispos, setExamensDispos]     = useState([]);
-  const [transmission, setTransmission]       = useState(null);
+  const [rdvJourDetail, setRdvJourDetail]       = useState([]);
+  const [patientsRecents, setPatientsRecents]   = useState([]);
+  const [fileMedecin, setFileMedecin]           = useState([]);
+  const [examensDispos, setExamensDispos]       = useState([]);
+  const [transmission, setTransmission]         = useState(null);
+  const [perfusionsInfirmiere, setPerfusionsInfirmiere] = useState([]);
+  const [medsMaintenantInf, setMedsMaintenantInf]       = useState([]);
   const todayISO = new Date().toISOString().slice(0, 10);
   const debutJour = todayISO + "T00:00:00.000Z";
   const finJour   = todayISO + "T23:59:59.999Z";
@@ -317,22 +319,40 @@ function DashboardRole({ ri }) {
 
         } else if (ri === "Infirmière") {
           const seuil6h = new Date(Date.now() - 6 * 3600 * 1000).toISOString();
-          const [hRes, cRes, aRes, lRes] = await Promise.all([
+          const heureActuelle = new Date().toTimeString().slice(0,5);
+          const [hRes, cRes, aRes, lRes, perfs, planJour] = await Promise.all([
             supabase.from("hospitalisations").select("patient_id").eq("etablissement_id", eid).eq("statut", "hospitalise"),
             supabase.from("consultations").select("id").eq("etablissement_id", eid).gte("heure_arrivee", debutJour).eq("statut", "en_attente"),
-            supabase.from("alertes").select("id").eq("resolu", false),
+            supabase.from("alertes").select("id", { count: "exact", head: true }).eq("etablissement_id", eid).eq("resolu", false),
             supabase.from("constantes_vitales").select("patient_id").gte("created_at", seuil6h),
+            fetchPerfusionsActives(eid),
+            fetchPlanSoinsJour(eid),
           ]);
           const hospitalises = hRes.data ?? [];
           const constRecents = new Set((lRes.data ?? []).map((c) => c.patient_id));
           const manquantes   = hospitalises.filter((h) => !constRecents.has(h.patient_id)).length;
+          const finDepassee  = perfs.filter((p) => p.heure_fin_prevue && new Date(p.heure_fin_prevue) < new Date()).length;
+          // Medicaments a administrer dans ±30min et pas encore administres
+          const today = todayISO;
+          const medsNow = [];
+          planJour.forEach((plan) => {
+            (plan.horaires ?? []).forEach((heure) => {
+              const diffMin = Math.abs(new Date(`1970-01-01T${heure}:00`) - new Date(`1970-01-01T${heureActuelle}:00`)) / 60000;
+              if (diffMin <= 30) {
+                const dejaDonne = (plan.administrations_medicament ?? []).some((a) => a.heure_prevue === heure && new Date(a.heure_reelle).toISOString().slice(0,10) === today);
+                if (!dejaDonne) medsNow.push({ plan, heure });
+              }
+            });
+          });
           setKpis([
-            { label: "Patients hospitalises",   value: hospitalises.length,      color: "#EF4444" },
-            { label: "Constantes manquantes",   value: manquantes,               color: manquantes > 0 ? "#EF4444" : "#9CA3AF" },
-            { label: "Consultations en attente",value: cRes.data?.length ?? 0,   color: "#F59E0B" },
-            { label: "Alertes non resolues",    value: aRes.data?.length ?? 0,   color: "#8B5CF6" },
+            { label: "Patients hospitalises",     value: hospitalises.length, color: "#EF4444" },
+            { label: "Perfusions en cours",       value: perfs.length,        color: finDepassee > 0 ? "#EF4444" : "#3B82F6" },
+            { label: "Medicaments maint.",        value: medsNow.length,      color: medsNow.length > 0 ? "#F59E0B" : "#9CA3AF" },
+            { label: "Alertes non resolues",      value: aRes.count ?? 0,     color: "#8B5CF6" },
           ]);
-          setShortcut({ label: "Aller a mon service", path: "/hopital/mon-service" });
+          setShortcut({ label: "Ouvrir mon service", path: "/hopital/mon-service" });
+          setPerfusionsInfirmiere(perfs);
+          setMedsMaintenantInf(medsNow);
 
         } else if (ri === "Secrétaire médicale") {
           const [cRes, rdvRes, pRes, fRes, rdvDetailRes, pRecentRes] = await Promise.all([
@@ -408,8 +428,9 @@ function DashboardRole({ ri }) {
 
   if (!kpis.length && !loading) return null;
 
-  const isSecretaire = ri === "Secrétaire médicale";
-  const isMedecin    = ri === "Médecin";
+  const isSecretaire  = ri === "Secrétaire médicale";
+  const isMedecin     = ri === "Médecin";
+  const isInfirmiere  = ri === "Infirmière";
 
   return (
     <div style={{ marginBottom: 24 }}>
@@ -421,6 +442,61 @@ function DashboardRole({ ri }) {
           </div>
         )) : kpis.map((k) => <KpiRoleCard key={k.label} {...k} />)}
       </div>
+
+      {/* Alerte perfusions fin depassee — Infirmière */}
+      {isInfirmiere && !loading && perfusionsInfirmiere.filter((p) => p.heure_fin_prevue && new Date(p.heure_fin_prevue) < new Date()).length > 0 && (
+        <div style={{ padding: "10px 16px", backgroundColor: "#FEF2F2", border: "1.5px solid #EF4444", borderRadius: 10, marginBottom: 16, fontSize: 13, color: "#DC2626", fontWeight: 700 }}>
+          {perfusionsInfirmiere.filter((p) => p.heure_fin_prevue && new Date(p.heure_fin_prevue) < new Date()).length} perfusion(s) dont la fin est depassee — verifier immediatement
+        </div>
+      )}
+
+      {/* Dashboard enrichi Infirmière */}
+      {isInfirmiere && !loading && (medsMaintenantInf.length > 0 || perfusionsInfirmiere.length > 0) && (
+        <div className="dash-grid-2" style={{ marginBottom: 16 }}>
+          {/* Medicaments maintenant */}
+          <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+            <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 700, color: colors.navy }}>Medicaments a administrer maintenant</h3>
+            {medsMaintenantInf.length === 0
+              ? <div style={{ fontSize: 13, color: colors.textMuted, textAlign: "center", padding: 16 }}>Aucun medicament dans la prochaine heure.</div>
+              : medsMaintenantInf.map(({ plan, heure }) => (
+                <div key={`${plan.id}-${heure}`} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: `1px solid ${colors.borderLight}`, fontSize: 12 }}>
+                  <div>
+                    <span style={{ fontWeight: 700, color: colors.navy }}>{plan.patients?.prenom} {plan.patients?.nom}</span>
+                    <span style={{ color: colors.textSecondary, marginLeft: 8 }}>{plan.medicament_nom} {plan.dose} · {plan.voie}</span>
+                  </div>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "#F59E0B" }}>{heure}</span>
+                </div>
+              ))
+            }
+          </div>
+          {/* Perfusions actives */}
+          <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: colors.navy }}>Perfusions actives</h3>
+              <button onClick={() => navigate("/hopital/mon-service")}
+                style={{ fontSize: 11, padding: "3px 10px", backgroundColor: "#EFF6FF", color: "#2563EB", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600 }}>Mon service</button>
+            </div>
+            {perfusionsInfirmiere.length === 0
+              ? <div style={{ fontSize: 13, color: colors.textMuted, textAlign: "center", padding: 16 }}>Aucune perfusion en cours.</div>
+              : perfusionsInfirmiere.slice(0, 5).map((p) => {
+                const urgent = p.heure_fin_prevue && new Date(p.heure_fin_prevue) < new Date();
+                const diffMin = p.heure_fin_prevue ? Math.round((new Date(p.heure_fin_prevue) - Date.now()) / 60000) : null;
+                return (
+                  <div key={p.id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: `1px solid ${colors.borderLight}`, fontSize: 12 }}>
+                    <div>
+                      <span style={{ fontWeight: 700, color: colors.navy }}>{p.patients?.prenom} {p.patients?.nom}</span>
+                      <span style={{ color: colors.textSecondary, marginLeft: 8 }}>{p.type_solute} {p.volume_ml}mL</span>
+                    </div>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: urgent ? "#EF4444" : "#3B82F6" }}>
+                      {urgent ? "Fin depassee" : diffMin != null ? `${Math.floor(diffMin/60)}h${diffMin%60}min` : "—"}
+                    </span>
+                  </div>
+                );
+              })
+            }
+          </div>
+        </div>
+      )}
 
       {/* Alerte transmission de garde */}
       {isMedecin && !loading && transmission && (
