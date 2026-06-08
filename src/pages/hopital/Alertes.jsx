@@ -3,8 +3,10 @@ import { useState } from "react";
 import Layout from "../../components/Layout";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
+import { useAuth } from "../../context/AuthContext";
 import { useAlertesPaginated, useAlertesStats } from "../../hooks/useSupabaseData";
-import { updateAlerte } from "../../hooks/useMutations";
+import { updateAlerte, insertAlerte, fetchLitsOccupes, fetchConstantes, fetchPerfusionsActives } from "../../hooks/useMutations";
+import { supabase } from "../../supabaseClient";
 import Pagination from "../../components/Pagination";
 
 const severityStyle = {
@@ -19,12 +21,68 @@ function fmt(iso) {
 }
 
 export default function Alertes() {
+  const { auth } = useAuth();
   const [filter, setFilter] = useState("tous");
   const { data: alertes, loading, error, total, page, setPage, totalPages, refetch } = useAlertesPaginated(filter);
   const stats = useAlertesStats();
   const { toasts, success, error: toastError } = useToast();
   const [readIds, setReadIds] = useState(new Set());
   const [actioning, setActioning] = useState(null);
+  const [generating, setGenerating] = useState(false);
+
+  const genererAlertesCliniques = async () => {
+    if (!auth?.etablissement_id) return;
+    setGenerating(true);
+    try {
+      const now = new Date();
+      const alertesACreer = [];
+      const eid = auth.etablissement_id;
+
+      const [hospit, perfusions] = await Promise.all([
+        fetchLitsOccupes(eid),
+        fetchPerfusionsActives(eid),
+      ]);
+
+      // 1. Patients sans constante depuis 6h
+      for (const h of hospit) {
+        const constantes = await fetchConstantes(h.patient_id, 1);
+        const derniere = constantes?.[0];
+        if (!derniere || (now - new Date(derniere.created_at)) > 6 * 3600000) {
+          const nom = `${h.patients?.prenom ?? ""} ${h.patients?.nom ?? ""}`.trim();
+          alertesACreer.push({ etablissement_id: eid, titre: "Constantes non enregistrees", message: `${nom} — Aucune constante depuis plus de 6h (${h.service ?? ""} Lit ${h.lit ?? "—"})`, severite: "alerte", resolu: false });
+        }
+      }
+
+      // 2. Perfusions dont la fin est depassee
+      for (const p of perfusions) {
+        if (p.heure_fin_prevue && new Date(p.heure_fin_prevue) < now) {
+          const nom = `${p.patients?.prenom ?? ""} ${p.patients?.nom ?? ""}`.trim();
+          const retardMin = Math.round((now - new Date(p.heure_fin_prevue)) / 60000);
+          alertesACreer.push({ etablissement_id: eid, titre: "Fin de perfusion depassee", message: `${nom} — Perfusion ${p.type_solute} ${p.volume_ml}mL terminee depuis ${retardMin} min`, severite: "critique", resolu: false });
+        }
+      }
+
+      // 3. Sorties depassees
+      for (const h of hospit) {
+        if (h.date_sortie_prevue && new Date(h.date_sortie_prevue) < now) {
+          const nom = `${h.patients?.prenom ?? ""} ${h.patients?.nom ?? ""}`.trim();
+          alertesACreer.push({ etablissement_id: eid, titre: "Sortie depassee", message: `${nom} — Sortie prevue le ${new Date(h.date_sortie_prevue).toLocaleDateString("fr-FR")} non effectuee (${h.service ?? ""} Lit ${h.lit ?? "—"})`, severite: "alerte", resolu: false });
+        }
+      }
+
+      let nbCreees = 0;
+      for (const alerte of alertesACreer) {
+        const { data: existing } = await supabase.from("alertes").select("id").eq("etablissement_id", alerte.etablissement_id).eq("titre", alerte.titre).eq("message", alerte.message).eq("resolu", false).maybeSingle();
+        if (!existing) { await insertAlerte(alerte); nbCreees++; }
+      }
+      success(`${nbCreees} alerte(s) clinique(s) generee(s).`);
+      refetch();
+    } catch (e) {
+      toastError("Erreur : " + e.message);
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   const markRead = async (id) => {
     setActioning(id);
@@ -74,11 +132,16 @@ export default function Alertes() {
             </span>
           )}
         </div>
-        {unreadCount > 0 && (
-          <button onClick={markAllRead} style={{ padding: "8px 16px", backgroundColor: colors.bgCard, border: "1.5px solid var(--border)", borderRadius: 10, fontSize: 13, color: colors.text, cursor: "pointer", fontWeight: 600 }}>
-            Tout marquer comme lu
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={genererAlertesCliniques} disabled={generating} style={{ padding: "8px 16px", backgroundColor: generating ? "#E5E7EB" : "#10B981", color: generating ? "#9CA3AF" : "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: generating ? "wait" : "pointer" }}>
+            {generating ? "Analyse..." : "Actualiser alertes cliniques"}
           </button>
-        )}
+          {unreadCount > 0 && (
+            <button onClick={markAllRead} style={{ padding: "8px 16px", backgroundColor: colors.bgCard, border: "1.5px solid var(--border)", borderRadius: 10, fontSize: 13, color: colors.text, cursor: "pointer", fontWeight: 600 }}>
+              Tout marquer comme lu
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="kpi-row">

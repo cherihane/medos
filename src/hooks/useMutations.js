@@ -660,3 +660,75 @@ export async function fetchOrdonnancesExpirantBientot(etablissement_id, jours = 
     .order("date_expiration", { ascending: true });
   return data ?? [];
 }
+
+// ─── Perfusions ───────────────────────────────────────────────────────────────
+export async function insertPerfusion(fields) {
+  return run(supabase.from("perfusions").insert(fields).select().single());
+}
+
+export async function fetchPerfusionsActives(etablissement_id) {
+  const { data } = await supabase
+    .from("perfusions")
+    .select("*, patients(prenom, nom, triage)")
+    .eq("etablissement_id", etablissement_id)
+    .eq("statut", "en_cours")
+    .order("heure_debut", { ascending: true });
+  return data ?? [];
+}
+
+export async function fetchPerfusionsPatient(patient_id) {
+  const { data } = await supabase
+    .from("perfusions")
+    .select("*")
+    .eq("patient_id", patient_id)
+    .order("created_at", { ascending: false })
+    .limit(10);
+  return data ?? [];
+}
+
+export async function updatePerfusion(id, fields) {
+  return run(supabase.from("perfusions").update(fields).eq("id", id).select().single());
+}
+
+// ─── Plan de soins ────────────────────────────────────────────────────────────
+export async function insertPlanSoins(fields) {
+  return run(supabase.from("plan_soins").insert(fields).select().single());
+}
+
+export async function fetchPlanSoinsPatient(patient_id) {
+  const { data } = await supabase
+    .from("plan_soins")
+    .select("*")
+    .eq("patient_id", patient_id)
+    .eq("actif", true)
+    .order("created_at", { ascending: false });
+  return data ?? [];
+}
+
+export async function fetchPlanSoinsJour(etablissement_id) {
+  const today = new Date().toISOString().slice(0, 10);
+  const { data } = await supabase
+    .from("plan_soins")
+    .select("*, patients(prenom, nom, triage), administrations_medicament(*)")
+    .eq("etablissement_id", etablissement_id)
+    .eq("actif", true)
+    .or(`date_fin.is.null,date_fin.gte.${today}`)
+    .order("created_at", { ascending: false });
+  return data ?? [];
+}
+
+// ─── Administrations ──────────────────────────────────────────────────────────
+export async function insertAdministration(fields) {
+  return run(supabase.from("administrations_medicament").insert(fields).select().single());
+}
+
+export async function fetchAdministrationsJour(etablissement_id, dateISO) {
+  const { data } = await supabase
+    .from("administrations_medicament")
+    .select("*, patients(prenom, nom)")
+    .eq("etablissement_id", etablissement_id)
+    .gte("heure_reelle", dateISO + "T00:00:00")
+    .lte("heure_reelle", dateISO + "T23:59:59")
+    .order("heure_reelle", { ascending: false });
+  return data ?? [];
+}
