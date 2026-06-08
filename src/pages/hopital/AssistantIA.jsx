@@ -277,24 +277,24 @@ Utilise ce contexte pour personnaliser tes reponses cliniques.`;
     setLoading(true);
 
     try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-api-key": process.env.REACT_APP_ANTHROPIC_API_KEY ?? "",
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
+          "Authorization": `Bearer ${process.env.REACT_APP_GROQ_API_KEY ?? ""}`,
         },
         body: JSON.stringify({
-          model: "claude-opus-4-5",
+          model: "llama3-70b-8192",
           max_tokens: 1024,
-          system: systemPrompt,
-          messages: newMessages.map((m) => ({ role: m.role, content: m.content })),
+          messages: [
+            { role: "system", content: systemPrompt },
+            ...newMessages.map((m) => ({ role: m.role, content: m.content })),
+          ],
         }),
       });
 
       const data = await response.json();
-      const reply = data.content?.[0]?.text ?? "Je n'ai pas pu generer une reponse. Veuillez reessayer.";
+      const reply = data.choices?.[0]?.message?.content ?? "Je n'ai pas pu generer une reponse. Veuillez reessayer.";
       setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
     } catch {
       setMessages((prev) => [...prev, {
