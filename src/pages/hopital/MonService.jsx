@@ -11,8 +11,9 @@ import {
   insertNoteEvolution, fetchNotesEvolution,
   insertPerfusion, fetchPerfusionsActives, updatePerfusion,
   fetchPlanSoinsJour, insertPlanSoins, insertAdministration,
-  fetchMembresPersonnel,
+  fetchMembresPersonnel, insertCommandeInterne, fetchCommandesInternes,
 } from "../../hooks/useMutations";
+import { useMedicaments } from "../../hooks/useSupabaseData";
 
 const ACCENT = "#10B981";
 
@@ -358,6 +359,110 @@ function ModalPlanSoins({ litsOccupes, auth, onClose, onSaved }) {
   );
 }
 
+// ── Section demande de médicament (infirmière / aide-soignant) ────────────────
+function DemanderMedicament({ auth, etabId, serviceFil }) {
+  const { success } = useToast();
+  const { data: medicaments } = useMedicaments();
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ medicament_id: "", medicament_nom: "", autre: false, autreNom: "", quantite: 1, motif: "" });
+  const [saving, setSaving] = useState(false);
+  const [mesDemandes, setMesDemandes] = useState([]);
+
+  const STATUT_LABEL = { en_attente: "En attente", approuvee: "Approuvee", servie: "Servie", refusee: "Refusee" };
+  const STATUT_COLOR = { en_attente: "#D97706", approuvee: "#16A34A", servie: "#2563EB", refusee: "#EF4444" };
+
+  const loadDemandes = useCallback(async () => {
+    if (!etabId || !auth?.user?.email) return;
+    const data = await fetchCommandesInternes(etabId);
+    setMesDemandes(data.filter((c) => c.demandeur_email === auth.user.email).slice(0, 5));
+  }, [etabId, auth?.user?.email]); // eslint-disable-line
+
+  useEffect(() => { loadDemandes(); }, [loadDemandes]);
+
+  const handleSend = async () => {
+    const nom = form.autre ? form.autreNom.trim() : medicaments.find((m) => m.id === form.medicament_id)?.nom ?? "";
+    if (!nom) return alert("Selectionnez ou saisissez un medicament.");
+    if (!form.quantite || Number(form.quantite) < 1) return alert("Quantite invalide.");
+    setSaving(true);
+    try {
+      await insertCommandeInterne({
+        etablissement_id: etabId ?? null,
+        demandeur_email: auth?.user?.email ?? "",
+        demandeur_service: serviceFil || null,
+        medicament_id: !form.autre && form.medicament_id ? form.medicament_id : null,
+        medicament_nom: nom,
+        quantite_demandee: Number(form.quantite),
+        motif: form.motif || null,
+        statut: "en_attente",
+      });
+      success("Demande envoyee au pharmacien");
+      setForm({ medicament_id: "", medicament_nom: "", autre: false, autreNom: "", quantite: 1, motif: "" });
+      setOpen(false);
+      loadDemandes();
+    } catch (e) { alert(e.message); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{ backgroundColor: colors.bgCard, borderRadius: 12, padding: "16px 20px", marginBottom: 16, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: open ? 14 : 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: colors.navy }}>Demander un medicament a la pharmacie</div>
+        <button onClick={() => setOpen((v) => !v)} style={{ padding: "5px 12px", fontSize: 12, fontWeight: 700, backgroundColor: open ? colors.bgSurface : ACCENT, color: open ? colors.textSecondary : "white", border: `1px solid ${open ? colors.border : ACCENT}`, borderRadius: 7, cursor: "pointer" }}>
+          {open ? "Fermer" : "+ Nouvelle demande"}
+        </button>
+      </div>
+
+      {open && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+          <div style={{ gridColumn: "1/-1" }}>
+            <label style={labelSt}>Medicament *</label>
+            {!form.autre ? (
+              <select style={inputSt} value={form.medicament_id} onChange={(e) => setForm((f) => ({ ...f, medicament_id: e.target.value }))}>
+                <option value="">-- Selectionner --</option>
+                {medicaments.map((m) => <option key={m.id} value={m.id}>{m.nom}</option>)}
+              </select>
+            ) : (
+              <input style={inputSt} value={form.autreNom} onChange={(e) => setForm((f) => ({ ...f, autreNom: e.target.value }))} placeholder="Nom du medicament" />
+            )}
+            <button onClick={() => setForm((f) => ({ ...f, autre: !f.autre, medicament_id: "", autreNom: "" }))} style={{ background: "none", border: "none", fontSize: 11, color: "#6B7280", cursor: "pointer", marginTop: 4, textDecoration: "underline" }}>
+              {form.autre ? "Choisir dans le stock" : "Saisir manuellement"}
+            </button>
+          </div>
+          <div>
+            <label style={labelSt}>Quantite *</label>
+            <input style={inputSt} type="number" min="1" value={form.quantite} onChange={(e) => setForm((f) => ({ ...f, quantite: e.target.value }))} />
+          </div>
+          <div>
+            <label style={labelSt}>Motif</label>
+            <input style={inputSt} value={form.motif} onChange={(e) => setForm((f) => ({ ...f, motif: e.target.value }))} placeholder="Optionnel..." />
+          </div>
+          <div style={{ gridColumn: "1/-1", display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <button onClick={() => setOpen(false)} style={{ padding: "7px 14px", background: colors.bgSurface, border: `1px solid ${colors.border}`, borderRadius: 8, fontSize: 12, cursor: "pointer" }}>Annuler</button>
+            <button onClick={handleSend} disabled={saving} style={{ padding: "7px 16px", background: saving ? "#D1D5DB" : ACCENT, color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: saving ? "wait" : "pointer" }}>
+              {saving ? "Envoi..." : "Envoyer la demande"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {mesDemandes.length > 0 && (
+        <div style={{ marginTop: open ? 0 : 8 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted, textTransform: "uppercase", marginBottom: 6 }}>Mes 5 dernieres demandes</div>
+          {mesDemandes.map((d) => (
+            <div key={d.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: `1px solid ${colors.borderLight}`, fontSize: 12 }}>
+              <div>
+                <span style={{ fontWeight: 700, color: colors.navy }}>{d.medicament_nom}</span>
+                <span style={{ color: colors.textMuted, marginLeft: 8 }}>x{d.quantite_demandee}</span>
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 700, color: STATUT_COLOR[d.statut] ?? "#6B7280" }}>{STATUT_LABEL[d.statut] ?? d.statut}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Onglet 1 — Mes patients ────────────────────────────────────────────────────
 function OngletPatients({ litsOccupes, perfusionsActives, loading, auth, onRefresh }) {
   const { success } = useToast();
@@ -384,6 +489,8 @@ function OngletPatients({ litsOccupes, perfusionsActives, loading, auth, onRefre
 
       {loading && [1,2,3].map((i) => <div key={i} style={{ height: 80, backgroundColor: colors.bgSurface, borderRadius: 10, marginBottom: 10, animation: "pulse 1.5s ease-in-out infinite" }} />)}
       {!loading && filtres.length === 0 && <div style={{ textAlign: "center", color: colors.textMuted, padding: 32, fontSize: 13 }}>Aucun patient hospitalise.</div>}
+
+      <DemanderMedicament auth={auth} etabId={auth?.etablissement_id} serviceFil={serviceFil} />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 12 }}>
         {!loading && filtres.map((h) => {

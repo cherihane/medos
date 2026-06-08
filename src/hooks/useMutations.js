@@ -647,6 +647,35 @@ export async function fetchDerniereTransmission(etablissement_id, service) {
   return data?.[0] ?? null;
 }
 
+// ─── File de dispensation ─────────────────────────────────────────────────────
+export async function fetchOrdonnancesADispenser(etablissement_id) {
+  const { data } = await supabase
+    .from("ordonnances")
+    .select("*, patients(prenom, nom, date_naissance, triage, numero_dossier)")
+    .eq("etablissement_id", etablissement_id)
+    .eq("statut", "en_attente")
+    .order("date_emission", { ascending: true });
+  return data ?? [];
+}
+
+// ─── Commandes internes ───────────────────────────────────────────────────────
+export async function insertCommandeInterne(fields) {
+  return run(supabase.from("commandes_internes").insert(fields).select().single());
+}
+
+export async function fetchCommandesInternes(etablissement_id) {
+  const { data } = await supabase
+    .from("commandes_internes")
+    .select("*")
+    .eq("etablissement_id", etablissement_id)
+    .order("created_at", { ascending: false });
+  return data ?? [];
+}
+
+export async function updateCommandeInterne(id, fields) {
+  return run(supabase.from("commandes_internes").update(fields).eq("id", id).select().single());
+}
+
 // ─── Ordonnances expirant bientôt ─────────────────────────────────────────────
 export async function fetchOrdonnancesExpirantBientot(etablissement_id, jours = 7) {
   const today = new Date().toISOString().slice(0, 10);

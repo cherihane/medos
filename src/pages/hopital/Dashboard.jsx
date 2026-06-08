@@ -282,6 +282,7 @@ function DashboardRole({ ri }) {
   const [transmission, setTransmission]         = useState(null);
   const [perfusionsInfirmiere, setPerfusionsInfirmiere] = useState([]);
   const [medsMaintenantInf, setMedsMaintenantInf]       = useState([]);
+  const [examensUrgentsLabo, setExamensUrgentsLabo]     = useState([]);
   const todayISO = new Date().toISOString().slice(0, 10);
   const debutJour = todayISO + "T00:00:00.000Z";
   const finJour   = todayISO + "T23:59:59.999Z";
@@ -374,18 +375,22 @@ function DashboardRole({ ri }) {
           setPatientsRecents(pRecentRes.data ?? []);
 
         } else if (ri === "Laborantin") {
-          const [eRes, eResAuj, eUrgRes] = await Promise.all([
-            supabase.from("examens").select("id").eq("etablissement_id", eid).in("statut", ["prescrit", "en_cours"]),
-            supabase.from("examens").select("id").eq("etablissement_id", eid).eq("statut", "resultat_disponible").gte("updated_at", debutJour).lte("updated_at", finJour),
-            supabase.from("examens").select("id").eq("etablissement_id", eid).eq("urgence", true).neq("statut", "resultat_disponible"),
+          const today = todayISO;
+          const [aTraiterRes, rendusRes, urgentsRes, totalRes, urgentsListRes] = await Promise.all([
+            supabase.from("examens").select("id", { count: "exact", head: true }).eq("etablissement_id", eid).in("statut", ["prescrit", "en_cours"]),
+            supabase.from("examens").select("id", { count: "exact", head: true }).eq("etablissement_id", eid).eq("statut", "resultat_disponible").gte("updated_at", today + "T00:00:00"),
+            supabase.from("examens").select("id", { count: "exact", head: true }).eq("etablissement_id", eid).eq("urgence", true).in("statut", ["prescrit", "en_cours"]),
+            supabase.from("examens").select("id", { count: "exact", head: true }).eq("etablissement_id", eid).gte("created_at", today + "T00:00:00"),
+            supabase.from("examens").select("id, type_examen, libelle, patients(prenom, nom)").eq("etablissement_id", eid).eq("urgence", true).in("statut", ["prescrit", "en_cours"]).order("created_at", { ascending: true }).limit(5),
           ]);
           setKpis([
-            { label: "Examens a traiter",          value: eRes.data?.length ?? 0,    color: "#3B82F6" },
-            { label: "Resultats saisis auj.",       value: eResAuj.data?.length ?? 0, color: "#10B981" },
-            { label: "Urgents en attente",          value: eUrgRes.data?.length ?? 0, color: eUrgRes.data?.length > 0 ? "#EF4444" : "#9CA3AF" },
-            { label: "Total en base",               value: (eRes.data?.length ?? 0) + (eResAuj.data?.length ?? 0), color: "#8B5CF6" },
+            { label: "Examens a traiter",     value: aTraiterRes.count ?? 0, color: (aTraiterRes.count ?? 0) > 0 ? "#EF4444" : "#9CA3AF" },
+            { label: "Urgents en attente",    value: urgentsRes.count ?? 0,  color: (urgentsRes.count ?? 0) > 0 ? "#EF4444" : "#9CA3AF" },
+            { label: "Resultats saisis auj.", value: rendusRes.count ?? 0,   color: ACCENT },
+            { label: "Total examens du jour", value: totalRes.count ?? 0,    color: "#8B5CF6" },
           ]);
           setShortcut({ label: "Traiter les examens", path: "/hopital/examens" });
+          setExamensUrgentsLabo(urgentsListRes.data ?? []);
 
         } else if (ri === "Caissier") {
           const [fERes, fPRes] = await Promise.all([
@@ -405,21 +410,29 @@ function DashboardRole({ ri }) {
           setShortcut({ label: "Ouvrir la caisse", path: "/hopital/caisse" });
 
         } else if (ri === "Pharmacien hospitalier") {
-          const [mRes, oRes] = await Promise.all([
-            supabase.from("medicaments").select("id, stock_actuel, stock_minimum, prix_unitaire"),
-            supabase.from("ordonnances").select("id").eq("etablissement_id", eid).eq("statut", "en_attente"),
+          const dans30j = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+          const [mRes, oRes, oUrgRes, peremRes, ciRes] = await Promise.all([
+            supabase.from("medicaments").select("id, stock_actuel, stock_minimum").eq("etablissement_id", eid),
+            supabase.from("ordonnances").select("id", { count: "exact", head: true }).eq("etablissement_id", eid).eq("statut", "en_attente"),
+            supabase.from("ordonnances").select("id, patients(triage)").eq("etablissement_id", eid).eq("statut", "en_attente"),
+            supabase.from("medicaments").select("id", { count: "exact", head: true }).eq("etablissement_id", eid).not("date_peremption", "is", null).lte("date_peremption", dans30j),
+            supabase.from("commandes_internes").select("id", { count: "exact", head: true }).eq("etablissement_id", eid).eq("statut", "en_attente"),
           ]);
-          const meds = mRes.data ?? [];
+          const meds    = mRes.data ?? [];
           const ruptures = meds.filter((m) => (m.stock_actuel ?? 0) === 0).length;
-          const alertes  = meds.filter((m) => (m.stock_actuel ?? 0) > 0 && (m.stock_actuel ?? 0) <= (m.stock_minimum ?? 0)).length;
-          const valeur   = meds.reduce((s, m) => s + (m.stock_actuel ?? 0) * (m.prix_unitaire ?? 0), 0);
+          const seuil    = meds.filter((m) => (m.stock_actuel ?? 0) > 0 && (m.stock_actuel ?? 0) <= (m.stock_minimum ?? 0)).length;
+          const urgentes = (oUrgRes.data ?? []).filter((o) => o.patients?.triage === "urgent").length;
           setKpis([
-            { label: "Medicaments en rupture", value: ruptures,                           color: ruptures > 0 ? "#EF4444" : "#9CA3AF" },
-            { label: "Sous le seuil",          value: alertes,                            color: alertes > 0 ? "#F59E0B" : "#9CA3AF" },
-            { label: "Ordonnances a dispenser",value: oRes.data?.length ?? 0,             color: "#3B82F6" },
-            { label: "Valeur du stock",        value: `${Math.round(valeur / 1000)}K FCFA`, color: "#8B5CF6" },
+            { label: "Ordonnances a dispenser", value: oRes.count ?? 0,       color: (oRes.count ?? 0) > 0 ? "#EF4444" : "#9CA3AF" },
+            { label: "Ruptures de stock",       value: ruptures,              color: ruptures > 0 ? "#EF4444" : "#9CA3AF" },
+            { label: "Peremptions dans 30j",    value: peremRes.count ?? 0,   color: (peremRes.count ?? 0) > 0 ? "#F59E0B" : "#9CA3AF" },
+            { label: "Commandes internes att.", value: ciRes.count ?? 0,      color: (ciRes.count ?? 0) > 0 ? "#F59E0B" : "#9CA3AF" },
           ]);
-          setShortcut({ label: "Voir le stock", path: "/hopital/stock" });
+          if (urgentes > 0) {
+            setShortcut({ label: "Ouvrir la file de dispensation", path: "/hopital/stock", urgentes });
+          } else {
+            setShortcut({ label: "Ouvrir la file de dispensation", path: "/hopital/stock" });
+          }
         }
       } finally { setLoading(false); }
     };
@@ -428,9 +441,13 @@ function DashboardRole({ ri }) {
 
   if (!kpis.length && !loading) return null;
 
-  const isSecretaire  = ri === "Secrétaire médicale";
-  const isMedecin     = ri === "Médecin";
-  const isInfirmiere  = ri === "Infirmière";
+  const isSecretaire   = ri === "Secrétaire médicale";
+  const isMedecin      = ri === "Médecin";
+  const isInfirmiere   = ri === "Infirmière";
+  const isLaborantin   = ri === "Laborantin";
+  const isPharmacien   = ri === "Pharmacien hospitalier";
+  const urgentsLabo    = kpis.find((k) => k.label === "Urgents en attente")?.value ?? 0;
+  const ordoUrgentes   = kpis.filter((k) => k.label === "Ordonnances a dispenser" && k.color === "#EF4444").length > 0 ? (kpis.find((k) => k.label === "Ordonnances a dispenser")?.value ?? 0) : 0;
 
   return (
     <div style={{ marginBottom: 24 }}>
@@ -442,6 +459,36 @@ function DashboardRole({ ri }) {
           </div>
         )) : kpis.map((k) => <KpiRoleCard key={k.label} {...k} />)}
       </div>
+
+      {/* Alerte ordonnances urgentes — Pharmacien */}
+      {isPharmacien && !loading && ordoUrgentes > 0 && (
+        <div style={{ padding: "12px 16px", backgroundColor: "#FEF2F2", border: "1.5px solid #EF4444", borderRadius: 10, marginBottom: 16, fontSize: 13, color: "#DC2626", fontWeight: 600 }}>
+          {ordoUrgentes} ordonnance(s) urgente(s) en attente de dispensation
+        </div>
+      )}
+
+      {/* Alerte examens urgents — Laborantin */}
+      {isLaborantin && !loading && urgentsLabo > 0 && (
+        <div style={{ padding: "12px 16px", backgroundColor: "#FEF2F2", border: "1.5px solid #EF4444", borderRadius: 10, marginBottom: 16, fontSize: 13, color: "#DC2626", fontWeight: 600 }}>
+          {urgentsLabo} examen(s) urgent(s) en attente — traiter en priorite
+        </div>
+      )}
+
+      {/* Liste examens urgents — Laborantin */}
+      {isLaborantin && !loading && examensUrgentsLabo.length > 0 && (
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 16 }}>
+          <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 700, color: colors.navy }}>Examens urgents a traiter</h3>
+          {examensUrgentsLabo.map((e) => (
+            <div key={e.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${colors.borderLight}`, fontSize: 12 }}>
+              <div>
+                <span style={{ fontWeight: 700, color: colors.navy }}>{e.patients ? `${e.patients.prenom} ${e.patients.nom}` : "—"}</span>
+                <span style={{ color: colors.textSecondary, marginLeft: 8 }}>{e.type_examen}{e.libelle ? ` — ${e.libelle}` : ""}</span>
+              </div>
+              <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 6, backgroundColor: "#FEF2F2", color: "#EF4444" }}>URGENT</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Alerte perfusions fin depassee — Infirmière */}
       {isInfirmiere && !loading && perfusionsInfirmiere.filter((p) => p.heure_fin_prevue && new Date(p.heure_fin_prevue) < new Date()).length > 0 && (

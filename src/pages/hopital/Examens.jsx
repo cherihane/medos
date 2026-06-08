@@ -12,6 +12,8 @@ import {
   fetchExamens,
 } from "../../hooks/useMutations";
 import { openDocument, tableHTML, infoGridHTML, signatureRowHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
+import { VALEURS_REFERENCE, evaluerValeur } from "../../data/valeurs_reference";
+import { supabase } from "../../supabaseClient";
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 const ACCENT = "#10B981";
@@ -139,18 +141,32 @@ function ModalPrescrire({ patients, etabId, onClose, onSaved }) {
 }
 
 // ── Modal saisir résultat ──────────────────────────────────────────────────────
-function ModalResultat({ examen, onClose, onSaved }) {
+function ModalResultat({ examen, patient, onClose, onSaved }) {
+  const refsDisponibles = VALEURS_REFERENCE[examen.type_examen] ?? [];
   const [form, setForm] = useState({
     resultat_texte: examen.resultat_texte ?? "",
     interpretation: examen.interpretation ?? "",
     date_realisation: new Date().toISOString().slice(0, 16),
   });
+  const [valeursForm, setValeursForm] = useState(() => {
+    if (examen.resultat_valeurs && typeof examen.resultat_valeurs === "object") return { ...examen.resultat_valeurs };
+    return {};
+  });
   const [saving, setSaving] = useState(false);
+
+  const patientAge = patient?.date_naissance
+    ? Math.floor((Date.now() - new Date(patient.date_naissance)) / (365.25 * 86400000))
+    : 30;
+  const patientGenre = patient?.genre ?? "adulte";
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await updateExamen(examen.id, { ...form, statut: "resultat_disponible" });
+      await updateExamen(examen.id, {
+        ...form,
+        statut: "resultat_disponible",
+        resultat_valeurs: Object.keys(valeursForm).length > 0 ? valeursForm : null,
+      });
       onSaved();
       onClose();
     } catch (e) { alert(e.message); setSaving(false); }
@@ -161,28 +177,49 @@ function ModalResultat({ examen, onClose, onSaved }) {
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div style={{ background: "white", borderRadius: 16, width: "100%", maxWidth: 480, padding: "26px 28px", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+      <div style={{ background: "white", borderRadius: 16, width: "100%", maxWidth: 520, maxHeight: "90vh", overflowY: "auto", padding: "26px 28px", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#0A1628" }}>Saisir le resultat</h3>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#0A1628" }}>Saisir le resultat — {examen.type_examen}</h3>
           <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9CA3AF" }}>x</button>
         </div>
 
+        {refsDisponibles.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <label style={labelSt}>Valeurs mesurees</label>
+            <div style={{ backgroundColor: "#F8FAFC", borderRadius: 10, padding: "10px 14px" }}>
+              {refsDisponibles.map((ref) => {
+                const val = valeursForm[ref.champ] ?? "";
+                const eval_ = val !== "" ? evaluerValeur(val, ref, patientGenre, patientAge) : null;
+                return (
+                  <div key={ref.champ} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    <label style={{ fontSize: 12, color: "#6B7280", width: 180, flexShrink: 0 }}>{ref.label} ({ref.unite})</label>
+                    <input type="number" step="0.1" value={val}
+                      onChange={(e) => setValeursForm((prev) => ({ ...prev, [ref.champ]: e.target.value }))}
+                      style={{ ...inputSt, width: 90, textAlign: "center" }} />
+                    {eval_ && (
+                      <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, backgroundColor: eval_.color + "20", color: eval_.color, fontWeight: 700, whiteSpace: "nowrap" }}>
+                        {eval_.label}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div style={{ marginBottom: 14 }}>
-          <label style={labelSt}>Resultat</label>
+          <label style={labelSt}>Resultat (texte libre)</label>
           <textarea value={form.resultat_texte} onChange={(e) => setForm((f) => ({ ...f, resultat_texte: e.target.value }))}
-            style={{ ...inputSt, minHeight: 80, resize: "vertical" }} placeholder="Saisir le resultat de l'examen..." />
+            style={{ ...inputSt, minHeight: 70, resize: "vertical" }} placeholder="Observations, commentaires..." />
         </div>
 
         <div style={{ marginBottom: 14 }}>
-          <label style={labelSt}>Interpretation</label>
+          <label style={labelSt}>Interpretation globale</label>
           <div style={{ display: "flex", gap: 8 }}>
             {Object.entries(INTERPRETATION_CONFIG).map(([v, t]) => (
               <button key={v} onClick={() => setForm((f) => ({ ...f, interpretation: v }))}
-                style={{ flex: 1, padding: "8px 0", borderRadius: 8,
-                  border: `2px solid ${form.interpretation === v ? t.color : "#E5E7EB"}`,
-                  backgroundColor: form.interpretation === v ? t.bg : "white",
-                  color: form.interpretation === v ? t.color : "#374151",
-                  fontSize: 12, fontWeight: 800, cursor: "pointer" }}>
+                style={{ flex: 1, padding: "8px 0", borderRadius: 8, border: `2px solid ${form.interpretation === v ? t.color : "#E5E7EB"}`, backgroundColor: form.interpretation === v ? t.bg : "white", color: form.interpretation === v ? t.color : "#374151", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>
                 {t.label}
               </button>
             ))}
@@ -245,6 +282,43 @@ function PanelResultat({ examen, patient, auth, onClose }) {
           <div style={{ fontSize: 12 }}><strong>Realise le :</strong> {fmtDate(examen.date_realisation)}</div>
           {examen.urgence && <div style={{ fontSize: 11, fontWeight: 800, color: "#EF4444" }}>URGENT</div>}
         </div>
+
+        {examen.resultat_valeurs && (() => {
+          const refs = VALEURS_REFERENCE[examen.type_examen] ?? [];
+          const valeurs = examen.resultat_valeurs;
+          if (refs.length === 0) return null;
+          return (
+            <div style={{ marginBottom: 14 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                <thead>
+                  <tr style={{ backgroundColor: "#F8FAFC" }}>
+                    {["Valeur", "Resultat", "Reference", "Statut"].map((h) => (
+                      <th key={h} style={{ padding: "8px 10px", textAlign: "left", fontWeight: 700, color: "#6B7280", fontSize: 11, textTransform: "uppercase", borderBottom: "1px solid #E5E7EB" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {refs.filter((ref) => valeurs[ref.champ] !== undefined && valeurs[ref.champ] !== "").map((ref) => {
+                    const val = valeurs[ref.champ];
+                    const eval_ = evaluerValeur(val, ref);
+                    const refMin = ref.min_adulte ?? ref.min_homme ?? "—";
+                    const refMax = ref.max_adulte ?? ref.max_homme ?? "—";
+                    return (
+                      <tr key={ref.champ} style={{ borderBottom: "1px solid #F3F4F6" }}>
+                        <td style={{ padding: "7px 10px", color: "#374151" }}>{ref.label}</td>
+                        <td style={{ padding: "7px 10px", fontWeight: 700, color: eval_?.color ?? "#374151" }}>{val} {ref.unite}</td>
+                        <td style={{ padding: "7px 10px", color: "#6B7280" }}>{refMin}–{refMax} {ref.unite}</td>
+                        <td style={{ padding: "7px 10px" }}>
+                          {eval_ && <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, backgroundColor: eval_.color + "20", color: eval_.color, fontWeight: 700 }}>{eval_.statut === "normal" ? "Normal" : eval_.statut === "bas" ? "Bas" : "Eleve"}</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          );
+        })()}
 
         {examen.resultat_texte && (
           <div style={{ background: "#F8FAFC", borderRadius: 10, padding: "14px 16px", marginBottom: 14, fontSize: 13, lineHeight: 1.6, whiteSpace: "pre-wrap", color: "#0A1628" }}>
@@ -331,6 +405,53 @@ export default function Examens() {
     return patients.find((p) => p.id === e.patient_id) ?? null;
   };
 
+  const imprimerRapportLabo = async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const [etab, examRes] = await Promise.all([
+      fetchEtabFromAuth(auth),
+      supabase.from("examens").select("*, patients(prenom, nom, numero_dossier)")
+        .eq("etablissement_id", etabId)
+        .gte("created_at", today + "T00:00:00")
+        .lte("created_at", today + "T23:59:59")
+        .order("created_at", { ascending: true }),
+    ]);
+    const examensJour = examRes.data ?? [];
+    const stats = {
+      total:    examensJour.length,
+      rendus:   examensJour.filter((e) => e.statut === "resultat_disponible").length,
+      enCours:  examensJour.filter((e) => e.statut === "en_cours").length,
+      urgents:  examensJour.filter((e) => e.urgence).length,
+    };
+    const rows = examensJour.map((e) => [
+      e.patients ? `${e.patients.prenom} ${e.patients.nom}` : "—",
+      e.patients?.numero_dossier ?? "—",
+      e.type_examen,
+      e.libelle ?? "—",
+      e.prescripteur ?? "—",
+      e.urgence ? "Oui" : "Non",
+      e.statut === "resultat_disponible" ? "Rendu" : e.statut === "en_cours" ? "En cours" : "Prescrit",
+      e.interpretation ?? "—",
+    ]);
+    openDocument({
+      titre: "Rapport journalier du laboratoire",
+      sousTitre: new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" }),
+      etablissement: etab,
+      sections: [
+        { titre: "Resume de la journee", html: infoGridHTML([
+          { label: "Total examens",    value: String(stats.total)   },
+          { label: "Resultats rendus", value: String(stats.rendus)  },
+          { label: "En cours",         value: String(stats.enCours) },
+          { label: "Urgents traites",  value: String(stats.urgents) },
+        ]) },
+        { titre: `Detail des ${stats.total} examens`, html: rows.length === 0
+          ? "<p style='color:#6B7280;font-size:13px'>Aucun examen enregistre aujourd'hui.</p>"
+          : tableHTML(["Patient", "Dossier", "Type", "Precision", "Prescripteur", "Urgent", "Statut", "Interpretation"], rows)
+        },
+        { titre: "", html: signatureRowHTML(["Responsable laboratoire", "Chef de service"]) },
+      ],
+    });
+  };
+
   return (
     <Layout title="Examens / Laboratoire" subtitle="Suivi des examens et resultats biologiques">
       <Toast toasts={toasts} />
@@ -346,6 +467,7 @@ export default function Examens() {
       {modalResultat && (
         <ModalResultat
           examen={modalResultat}
+          patient={getPatient(modalResultat)}
           onClose={() => setModalResultat(null)}
           onSaved={() => { load(); success("Resultat enregistre"); setModalResultat(null); }}
         />
@@ -401,6 +523,12 @@ export default function Examens() {
             {TYPES_EXAMENS.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
+        {isLaborantin && (
+          <button onClick={imprimerRapportLabo}
+            style={{ padding: "8px 16px", background: "#7C3AED", color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+            Rapport du jour
+          </button>
+        )}
         {!isLaborantin && (
           <button onClick={() => setShowPrescrire(true)}
             style={{ padding: "8px 16px", background: ACCENT, color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
