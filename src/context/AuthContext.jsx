@@ -53,20 +53,20 @@ const NAV_INTERNE = {
       "/hopital/scanner",
       "/hopital/alertes",
     ],
-    laborantin: [
-      "/hopital/dashboard",
-      "/hopital/examens",
-      "/hopital/alertes",
-    ],
-    caissier: [
-      "/hopital/dashboard",
-      "/hopital/caisse",
-      "/hopital/facturation",
-    ],
+    laborantin: ["/hopital/dashboard", "/hopital/examens", "/hopital/alertes"],
+    caissier: ["/hopital/dashboard", "/hopital/caisse", "/hopital/facturation"],
     "Aide-soignant": [
       "/hopital/dashboard",
       "/hopital/mon-service",
       "/hopital/lits",
+      "/hopital/alertes",
+    ],
+    medecin: [...existant, "/hopital/maternite"],
+    infirmiere: [...existant, "/hopital/maternite"],
+    "Sage-femme": [
+      "/hopital/dashboard",
+      "/hopital/maternite",
+      "/hopital/patients",
       "/hopital/alertes",
     ],
   },
@@ -142,44 +142,77 @@ export const roleConfig = {
     nav: [
       // ── Vue globale
       { type: "separator", label: "Vue globale" },
-      { path: "/hopital/dashboard",         label: "Dashboard",          icon: "dashboard"        },
-      { path: "/hopital/rapports",           label: "Rapports",           icon: "rapports"         },
+      { path: "/hopital/dashboard", label: "Dashboard", icon: "dashboard" },
+      { path: "/hopital/rapports", label: "Rapports", icon: "rapports" },
 
       // ── Patients et soins
       { type: "separator", label: "Patients et soins" },
-      { path: "/hopital/consultations",      label: "Consultations",      icon: "consultations"    },
-      { path: "/hopital/agenda",             label: "Agenda RDV",         icon: "agenda"           },
-      { path: "/hopital/patients",           label: "Patients",           icon: "patients"         },
-      { path: "/hopital/mes-consultations",  label: "Mes consultations",  icon: "patients"         },
-      { path: "/hopital/examens",            label: "Examens / Labo",     icon: "examens"          },
-      { path: "/hopital/lits",               label: "Gestion des lits",   icon: "lits"             },
-      { path: "/hopital/mon-service",        label: "Mon service",        icon: "mon-service"      },
-      { path: "/hopital/urgences",           label: "Urgences",           icon: "urgences"         },
+      {
+        path: "/hopital/consultations",
+        label: "Consultations",
+        icon: "consultations",
+      },
+      { path: "/hopital/agenda", label: "Agenda RDV", icon: "agenda" },
+      { path: "/hopital/patients", label: "Patients", icon: "patients" },
+      {
+        path: "/hopital/mes-consultations",
+        label: "Mes consultations",
+        icon: "patients",
+      },
+      { path: "/hopital/examens", label: "Examens / Labo", icon: "examens" },
+      { path: "/hopital/lits", label: "Gestion des lits", icon: "lits" },
+      {
+        path: "/hopital/mon-service",
+        label: "Mon service",
+        icon: "mon-service",
+      },
+      { path: "/hopital/urgences", label: "Urgences", icon: "urgences" },
+      { path: "/hopital/maternite", label: "Maternité", icon: "maternite" },
 
       // ── Personnel
       { type: "separator", label: "Personnel" },
-      { path: "/hopital/planning",           label: "Planning gardes",    icon: "planning"         },
-      { path: "/hopital/transmission-garde", label: "Transmission garde", icon: "transmission"     },
-      { path: "/hopital/renouvellements",    label: "Renouvellements",    icon: "renouvellements"  },
+      { path: "/hopital/planning", label: "Planning gardes", icon: "planning" },
+      {
+        path: "/hopital/transmission-garde",
+        label: "Transmission garde",
+        icon: "transmission",
+      },
+      {
+        path: "/hopital/renouvellements",
+        label: "Renouvellements",
+        icon: "renouvellements",
+      },
 
       // ── Stock
       { type: "separator", label: "Stock" },
-      { path: "/hopital/stock",              label: "Stock",              icon: "inventaire"       },
-      { path: "/hopital/fournisseurs",       label: "Fournisseurs",       icon: "fournisseurs"     },
-      { path: "/hopital/scanner",            label: "Scanner",            icon: "scanner"          },
-      { path: "/hopital/predictions",        label: "Prédictions IA",     icon: "predictions"      },
+      { path: "/hopital/stock", label: "Stock", icon: "inventaire" },
+      {
+        path: "/hopital/fournisseurs",
+        label: "Fournisseurs",
+        icon: "fournisseurs",
+      },
+      { path: "/hopital/scanner", label: "Scanner", icon: "scanner" },
+      {
+        path: "/hopital/predictions",
+        label: "Prédictions IA",
+        icon: "predictions",
+      },
 
       // ── Finance
       { type: "separator", label: "Finance" },
-      { path: "/hopital/caisse",             label: "Caisse",             icon: "caisse"           },
-      { path: "/hopital/facturation",        label: "Facturation",        icon: "facturation"      },
+      { path: "/hopital/caisse", label: "Caisse", icon: "caisse" },
+      {
+        path: "/hopital/facturation",
+        label: "Facturation",
+        icon: "facturation",
+      },
 
       // ── Outils
       { type: "separator", label: "Outils" },
-      { path: "/hopital/assistant",          label: "Assistant IA",       icon: "assistant"        },
-      { path: "/hopital/reseau",             label: "Réseau",             icon: "reseau"           },
-      { path: "/hopital/alertes",            label: "Alertes",            icon: "alertes"          },
-      { path: "/parametres",                 label: "Paramètres",         icon: "parametres"       },
+      { path: "/hopital/assistant", label: "Assistant IA", icon: "assistant" },
+      { path: "/hopital/reseau", label: "Réseau", icon: "reseau" },
+      { path: "/hopital/alertes", label: "Alertes", icon: "alertes" },
+      { path: "/parametres", label: "Paramètres", icon: "parametres" },
     ],
   },
   distributeur: {
@@ -274,7 +307,10 @@ export function AuthProvider({ children }) {
         if (item.type === "separator") {
           pendingSeparator = item;
         } else if (allowedPaths.includes(item.path)) {
-          if (pendingSeparator) { result.push(pendingSeparator); pendingSeparator = null; }
+          if (pendingSeparator) {
+            result.push(pendingSeparator);
+            pendingSeparator = null;
+          }
           result.push(item);
         }
       }
@@ -323,9 +359,13 @@ export function AuthProvider({ children }) {
           const enrichNav = [];
           let pending = null;
           for (const item of prev.nav) {
-            if (item.type === "separator") { pending = item; }
-            else if (perms.includes(item.path)) {
-              if (pending) { enrichNav.push(pending); pending = null; }
+            if (item.type === "separator") {
+              pending = item;
+            } else if (perms.includes(item.path)) {
+              if (pending) {
+                enrichNav.push(pending);
+                pending = null;
+              }
               enrichNav.push(item);
             }
           }
