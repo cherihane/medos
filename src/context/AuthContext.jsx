@@ -28,6 +28,7 @@ const NAV_INTERNE = {
       "/hopital/transmission-garde",
       "/hopital/assistant",
       "/hopital/alertes",
+      "/hopital/urgences",
     ],
     infirmiere: [
       "/hopital/dashboard",
@@ -35,6 +36,7 @@ const NAV_INTERNE = {
       "/hopital/patients",
       "/hopital/lits",
       "/hopital/alertes",
+      "/hopital/urgences",
     ],
     "Secrétaire médicale": [
       "/hopital/dashboard",
@@ -152,6 +154,7 @@ export const roleConfig = {
       { path: "/hopital/examens",            label: "Examens / Labo",     icon: "examens"          },
       { path: "/hopital/lits",               label: "Gestion des lits",   icon: "lits"             },
       { path: "/hopital/mon-service",        label: "Mon service",        icon: "mon-service"      },
+      { path: "/hopital/urgences",           label: "Urgences",           icon: "urgences"         },
 
       // ── Personnel
       { type: "separator", label: "Personnel" },

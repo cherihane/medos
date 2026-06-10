@@ -647,6 +647,39 @@ export async function fetchDerniereTransmission(etablissement_id, service) {
   return data?.[0] ?? null;
 }
 
+// ─── Décès ────────────────────────────────────────────────────────────────────
+export async function insertDeces(fields) {
+  return run(supabase.from("deces").insert(fields).select().single());
+}
+
+export async function fetchDecesByPatient(patient_id) {
+  const { data } = await supabase
+    .from("deces")
+    .select("*")
+    .eq("patient_id", patient_id)
+    .maybeSingle();
+  return data ?? null;
+}
+
+export async function fetchDecesEtablissement(etablissement_id) {
+  const { data } = await supabase
+    .from("deces")
+    .select("*, patients(prenom, nom, date_naissance, genre, numero_dossier)")
+    .eq("etablissement_id", etablissement_id)
+    .order("date_heure_deces", { ascending: false });
+  return data ?? [];
+}
+
+export async function genererNumeroCertificat(etablissement_id) {
+  const annee = new Date().getFullYear();
+  const { data, error } = await supabase.rpc("incrementer_compteur_certificat", {
+    p_etablissement_id: etablissement_id,
+    p_annee: annee,
+  });
+  if (error) return `CERT-${annee}-${Date.now().toString().slice(-5)}`;
+  return `CERT-${annee}-${String(data).padStart(5, "0")}`;
+}
+
 // ─── File de dispensation ─────────────────────────────────────────────────────
 export async function fetchOrdonnancesADispenser(etablissement_id) {
   const { data } = await supabase
