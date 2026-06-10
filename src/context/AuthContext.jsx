@@ -29,6 +29,7 @@ const NAV_INTERNE = {
       "/hopital/assistant",
       "/hopital/alertes",
       "/hopital/urgences",
+      "/hopital/maternite",
     ],
     infirmiere: [
       "/hopital/dashboard",
@@ -37,6 +38,13 @@ const NAV_INTERNE = {
       "/hopital/lits",
       "/hopital/alertes",
       "/hopital/urgences",
+      "/hopital/maternite",
+    ],
+    "Sage-femme": [
+      "/hopital/dashboard",
+      "/hopital/maternite",
+      "/hopital/patients",
+      "/hopital/alertes",
     ],
     "Secrétaire médicale": [
       "/hopital/dashboard",
@@ -59,12 +67,6 @@ const NAV_INTERNE = {
       "/hopital/dashboard",
       "/hopital/mon-service",
       "/hopital/lits",
-      "/hopital/alertes",
-    ],
-    Sage-femme: [
-      "/hopital/dashboard",
-      "/hopital/maternite",
-      "/hopital/patients",
       "/hopital/alertes",
     ],
   },
