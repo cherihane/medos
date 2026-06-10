@@ -61,9 +61,7 @@ const NAV_INTERNE = {
       "/hopital/lits",
       "/hopital/alertes",
     ],
-    medecin: [...existant, "/hopital/maternite"],
-    infirmiere: [...existant, "/hopital/maternite"],
-    "Sage-femme": [
+    Sage-femme: [
       "/hopital/dashboard",
       "/hopital/maternite",
       "/hopital/patients",
