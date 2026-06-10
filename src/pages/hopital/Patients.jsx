@@ -9,7 +9,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "rec
 import Layout from "../../components/Layout";
 import { usePatientsPaginated, usePatientsStats, useMedicaments } from "../../hooks/useSupabaseData";
 import Pagination from "../../components/Pagination";
-import { insertPatient, insertOrdonnance, upsertHospitalisation, fetchHospitalisation, insertConstante, fetchConstantes, updatePatientTriage, insertNoteEvolution, fetchNotesEvolution, fetchPlanSoinsPatient, fetchPerfusionsPatient, insertAdministration, insertPlanSoins } from "../../hooks/useMutations";
+import { insertPatient, insertOrdonnance, upsertHospitalisation, fetchHospitalisation, insertConstante, fetchConstantes, updatePatientTriage, insertNoteEvolution, fetchNotesEvolution, fetchPlanSoinsPatient, fetchPerfusionsPatient, insertAdministration, insertPlanSoins, insertDeces, fetchDecesEtablissement, genererNumeroCertificat, updatePatient } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../supabaseClient";
 import { openDocument, tableHTML, infoGridHTML, alertBannerHTML, signatureRowHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
@@ -805,6 +805,256 @@ function checkInteractions(lignes, antecedents) {
   return warnings;
 }
 
+// ── Certificat de décès ────────────────────────────────────────────────────────
+async function imprimerCertificatDeces(deces, patient, auth) {
+  const etab = await fetchEtabFromAuth(auth);
+  const age = patient.date_naissance
+    ? Math.floor((new Date(deces.date_heure_deces) - new Date(patient.date_naissance)) / 31557600000) + " ans"
+    : "Inconnu";
+  openDocument({
+    titre: "Certificat de deces",
+    sousTitre: `N° ${deces.numero_certificat} — ${new Date(deces.date_heure_deces).toLocaleDateString("fr-FR")}`,
+    etablissement: etab,
+    sections: [
+      {
+        titre: "Identite du defunt",
+        html: infoGridHTML([
+          { label: "Nom et prenom",     value: `${patient.prenom} ${patient.nom}` },
+          { label: "Date de naissance", value: patient.date_naissance ? new Date(patient.date_naissance).toLocaleDateString("fr-FR") : "—" },
+          { label: "Age au deces",      value: age },
+          { label: "Sexe",              value: patient.genre === "M" ? "Masculin" : patient.genre === "F" ? "Feminin" : "—" },
+          { label: "N° de dossier",     value: patient.numero_dossier ?? "—" },
+          { label: "Groupe sanguin",    value: patient.groupe_sanguin ?? "—" },
+        ]),
+      },
+      {
+        titre: "Informations du deces",
+        html: infoGridHTML([
+          { label: "Date et heure",  value: new Date(deces.date_heure_deces).toLocaleString("fr-FR") },
+          { label: "Lieu",           value: deces.lieu_deces },
+          { label: "Service",        value: deces.service ?? "—" },
+          { label: "Lit / Chambre",  value: deces.lit ? `Lit ${deces.lit} — Chambre ${deces.chambre ?? "?"}` : "—" },
+        ]),
+      },
+      {
+        titre: "Cause medicale du deces",
+        html: `<table style="width:100%;border-collapse:collapse;font-size:12px">
+          <tr style="border-bottom:1px solid #E5E7EB"><td style="padding:8px 0;color:#6B7280;width:40%">Cause immediate</td><td style="padding:8px 0;font-weight:600;color:#111827">${deces.cause_immediate}</td></tr>
+          ${deces.cause_intermediaire ? `<tr style="border-bottom:1px solid #E5E7EB"><td style="padding:8px 0;color:#6B7280">Cause intermediaire</td><td style="padding:8px 0;color:#374151">${deces.cause_intermediaire}</td></tr>` : ""}
+          ${deces.cause_initiale ? `<tr style="border-bottom:1px solid #E5E7EB"><td style="padding:8px 0;color:#6B7280">Cause initiale</td><td style="padding:8px 0;color:#374151">${deces.cause_initiale}</td></tr>` : ""}
+          ${deces.autres_affections ? `<tr><td style="padding:8px 0;color:#6B7280">Autres affections</td><td style="padding:8px 0;color:#374151">${deces.autres_affections}</td></tr>` : ""}
+        </table>`,
+      },
+      {
+        titre: "Certification",
+        html: infoGridHTML([
+          { label: "Medecin certificateur", value: deces.medecin_certificateur },
+          { label: "Date de certification", value: new Date().toLocaleDateString("fr-FR") },
+          { label: "Temoin",                value: deces.temoin_nom ? `${deces.temoin_nom}${deces.temoin_qualite ? " (" + deces.temoin_qualite + ")" : ""}` : "—" },
+          { label: "Famille prevenue",      value: deces.famille_prevenue ? "Oui" : "Non" },
+        ]),
+      },
+      { titre: "", html: signatureRowHTML(["Medecin certificateur", "Directeur de l'etablissement", "Cachet"]) },
+    ],
+  });
+}
+
+// ── Modal déclaration de décès ─────────────────────────────────────────────────
+const inputStDeces = { width: "100%", padding: "9px 11px", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 13, outline: "none", boxSizing: "border-box", color: "#0A1628", backgroundColor: "white" };
+const labelStDeces = { display: "block", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 5 };
+
+function ModalDeclarationDeces({ patient, hospitalisation, etablissement_id, auth, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    date_heure_deces: new Date().toISOString().slice(0, 16),
+    lieu_deces: "Etablissement",
+    cause_immediate: "",
+    cause_intermediaire: "",
+    cause_initiale: "",
+    autres_affections: "",
+    medecin_certificateur: auth?.user?.email ?? "",
+    temoin_nom: "",
+    temoin_qualite: "",
+    famille_prevenue: false,
+    famille_contact: patient.telephone ?? "",
+    transfert_morgue: false,
+    numero_case_morgue: "",
+    notes: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [errMsg, setErrMsg] = useState(null);
+  const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const handleSubmit = async () => {
+    if (!form.cause_immediate.trim() || !form.medecin_certificateur.trim()) {
+      setErrMsg("La cause immediate et le medecin certificateur sont obligatoires.");
+      return;
+    }
+    setSaving(true);
+    setErrMsg(null);
+    try {
+      const numero_certificat = await genererNumeroCertificat(etablissement_id);
+      const deces = await insertDeces({
+        patient_id: patient.id,
+        hospitalisation_id: hospitalisation?.id ?? null,
+        etablissement_id,
+        date_heure_deces: new Date(form.date_heure_deces).toISOString(),
+        lieu_deces: form.lieu_deces,
+        service: hospitalisation?.service ?? patient.service ?? "",
+        lit: hospitalisation?.lit ?? "",
+        chambre: hospitalisation?.chambre ?? "",
+        cause_immediate: form.cause_immediate,
+        cause_intermediaire: form.cause_intermediaire || null,
+        cause_initiale: form.cause_initiale || null,
+        autres_affections: form.autres_affections || null,
+        medecin_certificateur: form.medecin_certificateur,
+        temoin_nom: form.temoin_nom || null,
+        temoin_qualite: form.temoin_qualite || null,
+        famille_prevenue: form.famille_prevenue,
+        famille_contact: form.famille_contact || null,
+        transfert_morgue: form.transfert_morgue,
+        heure_transfert_morgue: form.transfert_morgue ? new Date().toISOString() : null,
+        numero_case_morgue: form.numero_case_morgue || null,
+        numero_certificat,
+        notes: form.notes || null,
+      });
+      await updatePatient(patient.id, { statut: "decede" });
+      if (hospitalisation?.id) {
+        await supabase.from("hospitalisations").update({ statut: "sorti", date_sortie_reelle: new Date().toISOString() }).eq("id", hospitalisation.id);
+      }
+      await imprimerCertificatDeces(deces, patient, auth);
+      onSaved();
+    } catch (e) {
+      setErrMsg("Erreur : " + e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const SectionTitle = ({ children }) => (
+    <div style={{ fontSize: 11, fontWeight: 700, color: "#1F2937", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 10, paddingBottom: 6, borderBottom: "1.5px solid #E5E7EB" }}>
+      {children}
+    </div>
+  );
+
+  const ToggleBtn = ({ value, current, label, onClick }) => (
+    <button type="button" onClick={onClick} style={{ padding: "7px 16px", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: "pointer", border: `1.5px solid ${current === value ? "#10B981" : "#E5E7EB"}`, backgroundColor: current === value ? "#DCFCE7" : "white", color: current === value ? "#16A34A" : "#374151" }}>
+      {label}
+    </button>
+  );
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 1300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div style={{ background: "white", borderRadius: 16, width: "100%", maxWidth: 680, maxHeight: "94vh", overflow: "auto", boxShadow: "0 24px 64px rgba(0,0,0,0.3)" }}>
+        {/* Header */}
+        <div style={{ padding: "18px 24px", background: "#1F2937", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "white" }}>Declaration de deces</div>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.65)", marginTop: 2 }}>{patient.prenom} {patient.nom}</div>
+          </div>
+          <button onClick={onClose} style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "white", width: 30, height: 30, borderRadius: 8, cursor: "pointer", fontSize: 18 }}>×</button>
+        </div>
+
+        <div style={{ padding: "20px 24px" }}>
+          {/* Section 1 — Informations du décès */}
+          <div style={{ marginBottom: 20 }}>
+            <SectionTitle>Informations du deces</SectionTitle>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div>
+                <label style={labelStDeces}>Date et heure du deces *</label>
+                <input type="datetime-local" value={form.date_heure_deces} onChange={(e) => set("date_heure_deces")(e.target.value)} style={inputStDeces} />
+              </div>
+              <div>
+                <label style={labelStDeces}>Lieu du deces</label>
+                <select value={form.lieu_deces} onChange={(e) => set("lieu_deces")(e.target.value)} style={inputStDeces}>
+                  <option value="Etablissement">Dans l'etablissement</option>
+                  <option value="Domicile">A domicile</option>
+                  <option value="Autre">Autre</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 2 — Cause médicale */}
+          <div style={{ marginBottom: 20 }}>
+            <SectionTitle>Cause medicale du deces</SectionTitle>
+            {[
+              { key: "cause_immediate",     label: "Cause immediate (maladie ayant directement entraine le deces) *", placeholder: "Ex : Arret cardio-respiratoire" },
+              { key: "cause_intermediaire", label: "Cause intermediaire (ayant entraine la cause immediate)",         placeholder: "Ex : Choc septique" },
+              { key: "cause_initiale",      label: "Cause initiale (maladie ou evenement a l'origine)",              placeholder: "Ex : Paludisme severe" },
+              { key: "autres_affections",   label: "Autres affections contributives",                                placeholder: "Ex : Anemie, malnutrition" },
+            ].map(({ key, label, placeholder }) => (
+              <div key={key} style={{ marginBottom: 10 }}>
+                <label style={labelStDeces}>{label}</label>
+                <input value={form[key]} onChange={(e) => set(key)(e.target.value)} placeholder={placeholder} style={inputStDeces} />
+              </div>
+            ))}
+          </div>
+
+          {/* Section 3 — Médecin certificateur */}
+          <div style={{ marginBottom: 20 }}>
+            <SectionTitle>Medecin certificateur</SectionTitle>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div>
+                <label style={labelStDeces}>Medecin certificateur *</label>
+                <input value={form.medecin_certificateur} onChange={(e) => set("medecin_certificateur")(e.target.value)} style={inputStDeces} />
+              </div>
+              <div>
+                <label style={labelStDeces}>Temoin (nom)</label>
+                <input value={form.temoin_nom} onChange={(e) => set("temoin_nom")(e.target.value)} placeholder="Nom du temoin" style={inputStDeces} />
+              </div>
+              <div>
+                <label style={labelStDeces}>Qualite du temoin</label>
+                <input value={form.temoin_qualite} onChange={(e) => set("temoin_qualite")(e.target.value)} placeholder="Ex : Infirmier de garde" style={inputStDeces} />
+              </div>
+            </div>
+          </div>
+
+          {/* Section 4 — Famille et morgue */}
+          <div style={{ marginBottom: 20 }}>
+            <SectionTitle>Famille et transfert</SectionTitle>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div>
+                <label style={labelStDeces}>Famille prevenue</label>
+                <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                  <ToggleBtn value={true}  current={form.famille_prevenue} label="Oui" onClick={() => set("famille_prevenue")(true)} />
+                  <ToggleBtn value={false} current={form.famille_prevenue} label="Non" onClick={() => set("famille_prevenue")(false)} />
+                </div>
+              </div>
+              <div>
+                <label style={labelStDeces}>Contact famille</label>
+                <input value={form.famille_contact} onChange={(e) => set("famille_contact")(e.target.value)} placeholder="Telephone ou nom" style={inputStDeces} />
+              </div>
+              <div>
+                <label style={labelStDeces}>Transfert a la morgue</label>
+                <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                  <ToggleBtn value={true}  current={form.transfert_morgue} label="Oui" onClick={() => set("transfert_morgue")(true)} />
+                  <ToggleBtn value={false} current={form.transfert_morgue} label="Non" onClick={() => set("transfert_morgue")(false)} />
+                </div>
+              </div>
+              {form.transfert_morgue && (
+                <div>
+                  <label style={labelStDeces}>Numero de case (morgue)</label>
+                  <input value={form.numero_case_morgue} onChange={(e) => set("numero_case_morgue")(e.target.value)} placeholder="Ex : A-07" style={inputStDeces} />
+                </div>
+              )}
+            </div>
+          </div>
+
+          {errMsg && <div style={{ padding: "10px 14px", backgroundColor: "#FEF2F2", borderRadius: 8, fontSize: 13, color: "#DC2626", marginBottom: 14 }}>{errMsg}</div>}
+
+          {/* Footer */}
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <button onClick={onClose} style={{ padding: "9px 18px", borderRadius: 8, border: "1.5px solid #E5E7EB", backgroundColor: "white", color: "#374151", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Annuler</button>
+            <button onClick={handleSubmit} disabled={saving} style={{ padding: "9px 20px", borderRadius: 8, border: "none", backgroundColor: saving ? "#E5E7EB" : "#1F2937", color: saving ? "#9CA3AF" : "white", fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer" }}>
+              {saving ? "Enregistrement..." : "Declarer le deces et imprimer le certificat"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medicaments, onClose, onPatientUpdated, auth }) {
   const [onglet, setOnglet]           = useState("dossier");
   const [ordonnances, setOrdonnances] = useState([]);
@@ -831,6 +1081,7 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
   const [perfusions, setPerfusions]   = useState([]);
   const [loadingSoins, setLoadingSoins] = useState(false);
   const [hospiSaved, setHospiSaved]   = useState(false);
+  const [showModalDeces, setShowModalDeces] = useState(false);
   // Notes d'evolution
   const [notes, setNotes]             = useState([]);
   const [showNoteForm, setShowNoteForm] = useState(false);
@@ -977,6 +1228,20 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
         </div>
       )}
 
+      {showModalDeces && (
+        <ModalDeclarationDeces
+          patient={patient}
+          hospitalisation={hospi}
+          etablissement_id={etablissement_id}
+          auth={auth}
+          onClose={() => setShowModalDeces(false)}
+          onSaved={() => {
+            setShowModalDeces(false);
+            onPatientUpdated("Deces declare — dossier mis a jour.");
+          }}
+        />
+      )}
+
       <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 900, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
         <div style={{ background: "white", borderRadius: 16, width: "100%", maxWidth: 720, maxHeight: "92vh", overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
 
@@ -998,9 +1263,16 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
               <button onClick={onClose} style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "white", width: 32, height: 32, borderRadius: 8, cursor: "pointer", fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
             </div>
             <div style={{ display: "flex", gap: 6, marginTop: 12, flexWrap: "wrap" }}>
-              <span style={{ padding: "3px 10px", background: patient.statut === "hospitalise" ? "#EF4444" : ACCENT, color: "white", borderRadius: 20, fontSize: 11, fontWeight: 700 }}>
-                {patient.statut === "hospitalise" ? "Hospitalisé" : "Ambulatoire"}
-              </span>
+              {(() => {
+                const STATUT_STYLE = {
+                  hospitalise: { bg: "#EF4444",  label: "Hospitalise" },
+                  ambulatoire: { bg: ACCENT,      label: "Ambulatoire" },
+                  sorti:       { bg: "#6B7280",   label: "Sorti"       },
+                  decede:      { bg: "#1F2937",   label: "Decede"      },
+                };
+                const ss = STATUT_STYLE[patient.statut] ?? STATUT_STYLE.ambulatoire;
+                return <span style={{ padding: "3px 10px", background: ss.bg, color: "white", borderRadius: 20, fontSize: 11, fontWeight: 700 }}>{ss.label}</span>;
+              })()}
               <span style={{ padding: "3px 10px", background: svcColor, color: "white", borderRadius: 20, fontSize: 11, fontWeight: 600 }}>{patient.service ?? "Médecine générale"}</span>
               {patient.medecin_referent && <span style={{ padding: "3px 10px", background: "rgba(255,255,255,0.15)", color: "white", borderRadius: 20, fontSize: 11 }}>Dr. {patient.medecin_referent}</span>}
               {hasAllergies(patient) && <span style={{ padding: "3px 10px", background: "#DC2626", color: "white", borderRadius: 20, fontSize: 11, fontWeight: 800, letterSpacing: 0.5 }}>URGENT — Allergies</span>}
@@ -1135,6 +1407,7 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
                       <option value="ambulatoire">Ambulatoire</option>
                       <option value="hospitalise">Hospitalise</option>
                       <option value="sorti">Sorti</option>
+                      <option value="decede">Decede</option>
                     </select>
                   </div>
                   <div>
@@ -1169,9 +1442,16 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
                     Ce patient sera marque comme hospitalise — verifiez que chambre et lit sont renseignes.
                   </div>
                 )}
-                <button onClick={handleSaveHospi} disabled={savingHospi} style={{ padding: "10px 20px", backgroundColor: ACCENT, color: "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", alignSelf: "flex-start" }}>
-                  {savingHospi ? "Enregistrement..." : hospiSaved ? "Sauvegarde !" : "Enregistrer le statut"}
-                </button>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <button onClick={handleSaveHospi} disabled={savingHospi} style={{ padding: "10px 20px", backgroundColor: ACCENT, color: "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                    {savingHospi ? "Enregistrement..." : hospiSaved ? "Sauvegarde !" : "Enregistrer le statut"}
+                  </button>
+                  {(ri === "Médecin" || ri === "Directeur" || !ri) && patient.statut === "hospitalise" && (
+                    <button onClick={() => setShowModalDeces(true)} style={{ padding: "10px 20px", backgroundColor: "#1F2937", color: "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                      Declarer un deces
+                    </button>
+                  )}
+                </div>
 
                 {/* ── Notes d'evolution (si hospitalise) ── */}
                 {hospi?.statut === "hospitalise" && (() => {
@@ -1673,8 +1953,8 @@ function PatientRow({ patient, onOpen, isLast }) {
             {attention && <span style={{ padding: "1px 6px", background: "#D97706", color: "white", borderRadius: 5, fontSize: 9, fontWeight: 800, letterSpacing: 0.5 }}>ATTENTION</span>}
             <TriageBadge triage={patient.triage} />
           </div>
-          <div style={{ fontSize: 11, color: patient.statut === "hospitalise" ? "#EF4444" : "#9CA3AF", marginTop: 1 }}>
-            {patient.statut === "hospitalise" ? "Hospitalisé" : "Ambulatoire"}
+          <div style={{ fontSize: 11, color: patient.statut === "hospitalise" ? "#EF4444" : patient.statut === "decede" ? "#374151" : "#9CA3AF", marginTop: 1 }}>
+            {patient.statut === "hospitalise" ? "Hospitalise" : patient.statut === "decede" ? "Decede" : patient.statut === "sorti" ? "Sorti" : "Ambulatoire"}
           </div>
         </div>
       </div>
@@ -1708,6 +1988,22 @@ export default function PatientsHopital() {
   const [showNouv, setShowNouv]              = useState(false);
   const [fichePatient, setFichePatient]      = useState(null);
   const [toast, setToast]                    = useState(null);
+  const [pageOnglet, setPageOnglet]          = useState("patients");
+  const [registreDeces, setRegistreDeces]    = useState([]);
+  const [loadingDeces, setLoadingDeces]      = useState(false);
+  const ri = auth?.role_interne;
+  const peutVoirDeces = !ri || ri === "Médecin" || ri === "Directeur";
+
+  const chargerDeces = useCallback(async () => {
+    if (!auth?.etablissement_id || !peutVoirDeces) return;
+    setLoadingDeces(true);
+    setRegistreDeces(await fetchDecesEtablissement(auth.etablissement_id));
+    setLoadingDeces(false);
+  }, [auth?.etablissement_id, peutVoirDeces]); // eslint-disable-line
+
+  useEffect(() => {
+    if (pageOnglet === "deces") chargerDeces();
+  }, [pageOnglet, chargerDeces]);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3500); };
 
@@ -1744,6 +2040,15 @@ export default function PatientsHopital() {
 
   return (
     <Layout title="Patients" subtitle="Gestion des dossiers patients, comptes rendus et ordonnances">
+      {peutVoirDeces && (
+        <div style={{ display: "flex", gap: 2, marginBottom: 20, borderBottom: "2px solid #E5E7EB" }}>
+          {[["patients", "Dossiers patients"], ["deces", "Registre des deces"]].map(([key, label]) => (
+            <button key={key} onClick={() => setPageOnglet(key)} style={{ padding: "9px 18px", background: "none", border: "none", cursor: "pointer", fontSize: 13, fontWeight: pageOnglet === key ? 800 : 400, color: pageOnglet === key ? ACCENT : "#6B7280", borderBottom: pageOnglet === key ? `3px solid ${ACCENT}` : "3px solid transparent", marginBottom: -2 }}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
       <style>{`
         @keyframes spin { to { transform: rotate(360deg) } }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
@@ -1754,6 +2059,8 @@ export default function PatientsHopital() {
 
       {showNouv && <ModalNouveauPatient etablissement_id={etablissement_id} medecinNom={medecinNom} onClose={() => setShowNouv(false)} onSaved={() => { setShowNouv(false); refetch(); showToast("Patient enregistré."); }} onDoublonSelected={(p) => { setShowNouv(false); setFichePatient(p); }} />}
       {fichePatient && <FichePatient patient={fichePatient} etablissement_id={etablissement_id} medecinNom={medecinNom} hopitalNom={hopitalNom} medicaments={medicaments} onClose={() => setFichePatient(null)} onPatientUpdated={(msg) => { refetch(); showToast(msg); }} auth={auth} />}
+
+      {pageOnglet === "deces" ? null : <>
 
       {/* KPI */}
       <div style={{ display: "flex", gap: 14, marginBottom: 20, flexWrap: "wrap" }}>
@@ -1841,6 +2148,83 @@ export default function PatientsHopital() {
       ))}
 
       <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
+      </>}
+      {/* fin onglet patients */}
+
+      {/* ── Registre des décès ── */}
+      {pageOnglet === "deces" && (
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#1F2937" }}>Registre des deces — {registreDeces.length} enregistrement(s)</div>
+            <button
+              onClick={() => {
+                const rows = registreDeces.map((d) => [
+                  d.numero_certificat,
+                  d.patients ? `${d.patients.prenom} ${d.patients.nom}` : "—",
+                  d.patients?.numero_dossier ?? "—",
+                  d.patients?.date_naissance ? Math.floor((new Date(d.date_heure_deces) - new Date(d.patients.date_naissance)) / 31557600000) + " ans" : "—",
+                  new Date(d.date_heure_deces).toLocaleDateString("fr-FR"),
+                  d.cause_immediate,
+                  d.medecin_certificateur,
+                  d.transfert_morgue ? "Oui" : "Non",
+                ]);
+                fetchEtabFromAuth(auth).then((etab) => {
+                  openDocument({
+                    titre: "Registre des deces",
+                    sousTitre: `${new Date().toLocaleDateString("fr-FR")}`,
+                    etablissement: etab,
+                    sections: [{
+                      titre: `${registreDeces.length} deces enregistres`,
+                      html: tableHTML(["N° Certificat", "Patient", "Dossier", "Age", "Date deces", "Cause immediate", "Medecin certif.", "Morgue"], rows),
+                    }],
+                  });
+                });
+              }}
+              style={{ padding: "7px 16px", backgroundColor: "#1F2937", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+              Exporter le registre
+            </button>
+          </div>
+          {loadingDeces && <div style={{ textAlign: "center", color: "#9CA3AF", padding: 32 }}>Chargement...</div>}
+          {!loadingDeces && registreDeces.length === 0 && (
+            <div style={{ background: "white", borderRadius: 14, padding: 40, textAlign: "center", color: "#9CA3AF", fontSize: 13, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>Aucun deces enregistre.</div>
+          )}
+          {!loadingDeces && registreDeces.length > 0 && (
+            <div style={{ background: "white", borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ backgroundColor: "#F8FAFC" }}>
+                    {["N° Certificat", "Patient", "Age", "Date deces", "Cause immediate", "Medecin certif.", "Morgue", "Actions"].map((h) => (
+                      <th key={h} style={{ padding: "11px 14px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", borderBottom: "1px solid #E5E7EB" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {registreDeces.map((d) => {
+                    const pat = d.patients;
+                    const age = pat?.date_naissance ? Math.floor((new Date(d.date_heure_deces) - new Date(pat.date_naissance)) / 31557600000) + " ans" : "—";
+                    return (
+                      <tr key={d.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
+                        <td style={{ padding: "10px 14px", fontFamily: "monospace", fontSize: 12, color: "#374151" }}>{d.numero_certificat}</td>
+                        <td style={{ padding: "10px 14px", fontWeight: 600, color: "#0A1628" }}>{pat ? `${pat.prenom} ${pat.nom}` : "—"}</td>
+                        <td style={{ padding: "10px 14px", color: "#6B7280" }}>{age}</td>
+                        <td style={{ padding: "10px 14px", color: "#374151" }}>{new Date(d.date_heure_deces).toLocaleString("fr-FR")}</td>
+                        <td style={{ padding: "10px 14px", color: "#374151" }}>{d.cause_immediate}</td>
+                        <td style={{ padding: "10px 14px", color: "#6B7280" }}>{d.medecin_certificateur}</td>
+                        <td style={{ padding: "10px 14px" }}><span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, backgroundColor: d.transfert_morgue ? "#DCFCE7" : "#F3F4F6", color: d.transfert_morgue ? "#16A34A" : "#6B7280" }}>{d.transfert_morgue ? "Oui" : "Non"}</span></td>
+                        <td style={{ padding: "10px 14px" }}>
+                          <button onClick={() => imprimerCertificatDeces(d, pat ?? {}, auth)} style={{ padding: "4px 10px", backgroundColor: "#1F2937", color: "white", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>
+                            Reimprimer
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </Layout>
   );
 }
