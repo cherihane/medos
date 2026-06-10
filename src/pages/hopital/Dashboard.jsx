@@ -667,343 +667,60 @@ function DashboardRole({ ri }) {
   );
 }
 
-// ── Dashboard Directeur ───────────────────────────────────────────────────────
-function DashboardDirecteur({ auth, navigate }) {
-  const [etabNom, setEtabNom] = useState("");
-  const [kpis, setKpis] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!auth?.etablissement_id) return;
-    loadAll();
-  }, [auth?.etablissement_id]); // eslint-disable-line
-
-  async function loadAll() {
-    setLoading(true);
-    const eid = auth.etablissement_id;
-    const today = new Date().toISOString().slice(0, 10);
-
-    const [
-      etab,
-      patientsHosp,
-      consultJour,
-      facturesJour,
-      encaisseJour,
-      facturesEnAttente,
-      alertesCritiques,
-      litsOccupes,
-      planningJour,
-      examensEnAttente,
-      ordonnancesEnAttente,
-    ] = await Promise.all([
-      supabase.from("etablissements").select("nom, ville").eq("id", eid).maybeSingle(),
-      supabase.from("hospitalisations").select("id", { count: "exact", head: true }).eq("etablissement_id", eid).eq("statut", "hospitalise"),
-      supabase.from("consultations").select("id, statut").eq("etablissement_id", eid).gte("heure_arrivee", today + "T00:00:00"),
-      supabase.from("factures_hopital").select("sous_total").eq("etablissement_id", eid).gte("created_at", today + "T00:00:00").in("statut", ["emise", "payee", "acompte"]),
-      supabase.from("paiements_facture").select("montant").eq("etablissement_id", eid).gte("created_at", today + "T00:00:00"),
-      supabase.from("factures_hopital").select("reste_patient").eq("etablissement_id", eid).eq("statut", "emise"),
-      supabase.from("alertes").select("id", { count: "exact", head: true }).eq("etablissement_id", eid).eq("resolu", false).eq("severite", "critique"),
-      supabase.from("hospitalisations").select("id, service, lit, patients(prenom, nom, triage)").eq("etablissement_id", eid).eq("statut", "hospitalise").order("date_entree", { ascending: false }).limit(6),
-      supabase.from("planning_gardes").select("personnel_nom, service, role, heure_debut, heure_fin").eq("etablissement_id", eid).eq("date_garde", today),
-      supabase.from("examens").select("id", { count: "exact", head: true }).eq("etablissement_id", eid).in("statut", ["prescrit", "en_cours"]),
-      supabase.from("ordonnances").select("id", { count: "exact", head: true }).eq("etablissement_id", eid).eq("statut", "en_attente"),
-    ]);
-
-    if (etab.data?.nom) setEtabNom(etab.data.nom);
-
-    const caJour    = (facturesJour.data ?? []).reduce((s, f) => s + (f.sous_total ?? 0), 0);
-    const encaisse  = (encaisseJour.data ?? []).reduce((s, p) => s + (p.montant ?? 0), 0);
-    const enAttente = (facturesEnAttente.data ?? []).reduce((s, f) => s + (f.reste_patient ?? 0), 0);
-    const consultTerminees = (consultJour.data ?? []).filter((c) => c.statut === "termine").length;
-
-    setKpis({
-      patientsHosp:         patientsHosp.count ?? 0,
-      consultJour:          consultJour.data?.length ?? 0,
-      consultTerminees,
-      caJour,
-      encaisse,
-      enAttente,
-      alertesCritiques:     alertesCritiques.count ?? 0,
-      litsOccupes:          litsOccupes.data ?? [],
-      planningJour:         planningJour.data ?? [],
-      examensEnAttente:     examensEnAttente.count ?? 0,
-      ordonnancesEnAttente: ordonnancesEnAttente.count ?? 0,
-    });
-    setLoading(false);
-  }
-
-  if (loading) {
-    return (
-      <Layout title="Dashboard Direction" subtitle={etabNom || "Chargement..."}>
-        <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {[1, 2, 3].map((i) => (
-            <div key={i} style={{ height: 80, backgroundColor: colors.borderLight, borderRadius: 12, animation: "pulse 1.5s infinite" }} />
-          ))}
-        </div>
-      </Layout>
-    );
-  }
-
-  const k = kpis;
-
-  return (
-    <Layout title="Dashboard Direction" subtitle={etabNom ? `Vue d'ensemble — ${etabNom}` : "Vue d'ensemble"}>
-      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
-
-      {k.alertesCritiques > 0 && (
-        <div
-          onClick={() => navigate("/hopital/alertes")}
-          style={{ padding: "12px 18px", marginBottom: 20, backgroundColor: "#FEF2F2", border: "1.5px solid #EF4444", borderRadius: 10, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}
-        >
-          <span style={{ fontSize: 13, fontWeight: 700, color: "#DC2626" }}>
-            {k.alertesCritiques} alerte(s) critique(s) non resolue(s)
-          </span>
-          <span style={{ fontSize: 12, color: "#DC2626" }}>Voir les alertes</span>
-        </div>
-      )}
-
-      <div style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted, textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>
-        Activite clinique — aujourd'hui
-      </div>
-      <div style={{ display: "flex", gap: 14, marginBottom: 20, flexWrap: "wrap" }}>
-        {[
-          { label: "Patients hospitalises",   value: k.patientsHosp,         color: "#3B82F6", to: "/hopital/lits"         },
-          { label: "Consultations du jour",   value: k.consultJour,          color: ACCENT,    to: "/hopital/consultations" },
-          { label: "Consultations terminees", value: k.consultTerminees,     color: "#8B5CF6", to: "/hopital/consultations" },
-          { label: "Examens en attente",      value: k.examensEnAttente,     color: k.examensEnAttente > 0     ? "#F59E0B" : "#6B7280", to: "/hopital/examens" },
-          { label: "Ordonnances a dispenser", value: k.ordonnancesEnAttente, color: k.ordonnancesEnAttente > 0 ? "#F59E0B" : "#6B7280", to: "/hopital/stock"   },
-        ].map((kpi) => (
-          <div key={kpi.label} onClick={() => navigate(kpi.to)} style={{ flex: "1 1 160px", backgroundColor: colors.bgCard, borderRadius: 12, padding: "16px 18px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", borderTop: `3px solid ${kpi.color}`, cursor: "pointer" }}
-            onMouseEnter={(e) => e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.1)"}
-            onMouseLeave={(e) => e.currentTarget.style.boxShadow = "0 1px 4px rgba(0,0,0,0.06)"}>
-            <div style={{ fontSize: 26, fontWeight: 800, color: kpi.color }}>{kpi.value}</div>
-            <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>{kpi.label}</div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted, textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>
-        Situation financiere — aujourd'hui
-      </div>
-      <div style={{ display: "flex", gap: 14, marginBottom: 20, flexWrap: "wrap" }}>
-        {[
-          { label: "CA du jour",             value: `${k.caJour.toLocaleString("fr-FR")} FCFA`,    color: ACCENT,    to: "/hopital/facturation" },
-          { label: "Encaisse",               value: `${k.encaisse.toLocaleString("fr-FR")} FCFA`,  color: "#3B82F6", to: "/hopital/caisse"      },
-          { label: "En attente de paiement", value: `${k.enAttente.toLocaleString("fr-FR")} FCFA`, color: k.enAttente > 0 ? "#F59E0B" : "#6B7280", to: "/hopital/facturation" },
-        ].map((kpi) => (
-          <div key={kpi.label} onClick={() => navigate(kpi.to)} style={{ flex: "1 1 200px", backgroundColor: colors.bgCard, borderRadius: 12, padding: "16px 18px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", borderTop: `3px solid ${kpi.color}`, cursor: "pointer" }}
-            onMouseEnter={(e) => e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.1)"}
-            onMouseLeave={(e) => e.currentTarget.style.boxShadow = "0 1px 4px rgba(0,0,0,0.06)"}>
-            <div style={{ fontSize: 20, fontWeight: 800, color: kpi.color }}>{kpi.value}</div>
-            <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>{kpi.label}</div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 20 }}>
-        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: colors.navy }}>Lits occupes</div>
-            <button onClick={() => navigate("/hopital/lits")} style={{ fontSize: 11, color: ACCENT, background: "none", border: "none", cursor: "pointer", fontWeight: 600 }}>Voir tout</button>
-          </div>
-          {k.litsOccupes.length === 0 ? (
-            <div style={{ fontSize: 13, color: colors.textMuted, textAlign: "center", padding: "20px 0" }}>Aucun patient hospitalise</div>
-          ) : k.litsOccupes.map((h) => (
-            <div key={h.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", marginBottom: 6, backgroundColor: colors.bgSurface, borderRadius: 8, borderLeft: `3px solid ${h.patients?.triage === "urgent" ? "#EF4444" : ACCENT}` }}>
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: colors.navy }}>{h.patients?.prenom} {h.patients?.nom}</div>
-                <div style={{ fontSize: 11, color: colors.textMuted }}>{h.service ?? "—"}</div>
-              </div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: colors.textSecondary }}>Lit {h.lit ?? "?"}</div>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: colors.navy }}>Personnel de garde — aujourd'hui</div>
-            <button onClick={() => navigate("/hopital/planning")} style={{ fontSize: 11, color: ACCENT, background: "none", border: "none", cursor: "pointer", fontWeight: 600 }}>Planning complet</button>
-          </div>
-          {k.planningJour.length === 0 ? (
-            <div style={{ fontSize: 13, color: colors.textMuted, textAlign: "center", padding: "20px 0" }}>Aucune garde planifiee aujourd'hui</div>
-          ) : k.planningJour.map((g, i) => (
-            <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", marginBottom: 6, backgroundColor: colors.bgSurface, borderRadius: 8 }}>
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: colors.navy }}>{g.personnel_nom}</div>
-                <div style={{ fontSize: 11, color: colors.textMuted }}>{g.service} — {g.role}</div>
-              </div>
-              <div style={{ fontSize: 11, color: colors.textSecondary, fontFamily: "monospace" }}>
-                {g.heure_debut?.slice(0, 5)} – {g.heure_fin?.slice(0, 5)}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted, textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>
-        Acces rapide
-      </div>
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-        {[
-          { label: "Rapports",        path: "/hopital/rapports",    color: "#3B82F6" },
-          { label: "Facturation",     path: "/hopital/facturation", color: ACCENT    },
-          { label: "Planning gardes", path: "/hopital/planning",    color: "#8B5CF6" },
-          { label: "Alertes",         path: "/hopital/alertes",     color: "#EF4444" },
-          { label: "Parametres",      path: "/parametres",          color: "#6B7280" },
-        ].map((r) => (
-          <button key={r.path} onClick={() => navigate(r.path)} style={{ padding: "10px 18px", borderRadius: 8, backgroundColor: r.color + "15", border: `1.5px solid ${r.color}30`, color: r.color, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-            {r.label}
-          </button>
-        ))}
-      </div>
-    </Layout>
-  );
-}
-
-// ── Dashboard Aide-soignant ───────────────────────────────────────────────────
-function DashboardAideSoignant({ auth, navigate }) {
-  const [kpis, setKpis] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!auth?.etablissement_id) return;
-    load();
-  }, [auth?.etablissement_id]); // eslint-disable-line
-
-  async function load() {
-    setLoading(true);
-    const eid = auth.etablissement_id;
-    const [hospit, alertes, commandes] = await Promise.all([
-      supabase.from("hospitalisations").select("id, service, lit, chambre, date_sortie_prevue, patients(prenom, nom, triage)").eq("etablissement_id", eid).eq("statut", "hospitalise").order("service", { ascending: true }),
-      supabase.from("alertes").select("id", { count: "exact", head: true }).eq("etablissement_id", eid).eq("resolu", false),
-      supabase.from("commandes_internes").select("id, statut, medicament_nom").eq("etablissement_id", eid).eq("demandeur_email", auth.user?.email ?? "").order("created_at", { ascending: false }).limit(3),
-    ]);
-    setKpis({
-      hospit:    hospit.data ?? [],
-      alertes:   alertes.count ?? 0,
-      commandes: commandes.data ?? [],
-    });
-    setLoading(false);
-  }
-
-  if (loading) {
-    return (
-      <Layout title="Mon tableau de bord" subtitle="Aide-soignant">
-        <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
-        <div style={{ height: 200, backgroundColor: colors.borderLight, borderRadius: 12, animation: "pulse 1.5s infinite" }} />
-      </Layout>
-    );
-  }
-
-  const k = kpis;
-  const today = new Date().toISOString().slice(0, 10);
-  const sortiesAujourdhui = k.hospit.filter((h) => h.date_sortie_prevue === today);
-
-  const STATUT_CI = {
-    servie:     { bg: "#DCFCE7", color: "#16A34A", label: "Servie"     },
-    approuvee:  { bg: "#DBEAFE", color: "#2563EB", label: "Approuvee"  },
-    refusee:    { bg: "#FEE2E2", color: "#DC2626", label: "Refusee"    },
-    en_attente: { bg: "#FEF3C7", color: "#D97706", label: "En attente" },
-  };
-
-  return (
-    <Layout title="Mon tableau de bord" subtitle="Aide-soignant">
-      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
-
-      <div style={{ display: "flex", gap: 14, marginBottom: 24, flexWrap: "wrap" }}>
-        {[
-          { label: "Patients hospitalises", value: k.hospit.length,          color: "#3B82F6" },
-          { label: "Sorties prevues auj.",  value: sortiesAujourdhui.length, color: sortiesAujourdhui.length > 0 ? "#F59E0B" : "#6B7280" },
-          { label: "Alertes non resolues",  value: k.alertes,                color: k.alertes > 0 ? "#EF4444" : "#6B7280" },
-        ].map((kpi) => (
-          <div key={kpi.label} style={{ flex: "1 1 150px", backgroundColor: colors.bgCard, borderRadius: 12, padding: "16px 18px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", borderTop: `3px solid ${kpi.color}` }}>
-            <div style={{ fontSize: 26, fontWeight: 800, color: kpi.color }}>{kpi.value}</div>
-            <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>{kpi.label}</div>
-          </div>
-        ))}
-      </div>
-
-      {sortiesAujourdhui.length > 0 && (
-        <div style={{ backgroundColor: "#FFFBEB", border: "1.5px solid #F59E0B", borderRadius: 10, padding: "14px 18px", marginBottom: 20 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "#92400E", marginBottom: 10 }}>
-            Sorties prevues aujourd'hui — preparer les chambres
-          </div>
-          {sortiesAujourdhui.map((h) => (
-            <div key={h.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderTop: "1px solid #FDE68A", fontSize: 12 }}>
-              <span style={{ fontWeight: 600, color: colors.navy }}>{h.patients?.prenom} {h.patients?.nom}</span>
-              <span style={{ color: colors.textMuted }}>{h.service} — Chambre {h.chambre ?? "?"} Lit {h.lit ?? "?"}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {k.commandes.length > 0 && (
-        <div style={{ backgroundColor: colors.bgCard, borderRadius: 12, padding: 18, marginBottom: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: colors.navy, marginBottom: 12 }}>
-            Mes dernieres demandes au pharmacien
-          </div>
-          {k.commandes.map((c) => {
-            const st = STATUT_CI[c.statut] ?? { bg: "#F3F4F6", color: "#6B7280", label: c.statut };
-            return (
-              <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderTop: `1px solid ${colors.border}`, fontSize: 12 }}>
-                <span style={{ color: colors.text, fontWeight: 600 }}>{c.medicament_nom}</span>
-                <span style={{ padding: "2px 8px", borderRadius: 4, fontSize: 11, fontWeight: 600, backgroundColor: st.bg, color: st.color }}>{st.label}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <button onClick={() => navigate("/hopital/mon-service")} style={{ padding: "14px 20px", backgroundColor: ACCENT, color: "white", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
-          Voir mes patients
-        </button>
-        <button onClick={() => navigate("/hopital/lits")} style={{ padding: "14px 20px", backgroundColor: colors.bgCard, color: colors.navy, border: `1.5px solid ${colors.border}`, borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
-          Gestion des lits
-        </button>
-        <button onClick={() => navigate("/hopital/alertes")} style={{ padding: "14px 20px", backgroundColor: k.alertes > 0 ? "#FEF2F2" : colors.bgCard, color: k.alertes > 0 ? "#DC2626" : colors.textMuted, border: `1.5px solid ${k.alertes > 0 ? "#EF4444" : colors.border}`, borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
-          Alertes {k.alertes > 0 ? `(${k.alertes})` : ""}
-        </button>
-      </div>
-    </Layout>
-  );
-}
-
-// ── Wrappers nommés (réutilisent DashboardRole + panels existants) ─────────────
-function DashboardRoleLayout({ ri }) {
-  return (
-    <Layout title="Dashboard Hopital" subtitle="Vue d'ensemble">
-      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
-      <DashboardRole ri={ri} />
-      <div className="dash-grid-2">
-        <AlertesPanel />
-        <PatientsPanel />
-      </div>
-    </Layout>
-  );
-}
-
-function DashboardMedecin()    { return <DashboardRoleLayout ri="Médecin" />; }
-function DashboardInfirmiere() { return <DashboardRoleLayout ri="Infirmière" />; }
-function DashboardSecretaire() { return <DashboardRoleLayout ri="Secrétaire médicale" />; }
-function DashboardLaborantin() { return <DashboardRoleLayout ri="Laborantin" />; }
-function DashboardCaissier()   { return <DashboardRoleLayout ri="Caissier" />; }
-function DashboardPharmacien() { return <DashboardRoleLayout ri="Pharmacien hospitalier" />; }
-
-// ── Dashboard principal — routeur de rôles ────────────────────────────────────
+// ── Dashboard principal ───────────────────────────────────────────────────────
 export default function DashboardHopital() {
   const { auth } = useAuth();
-  const navigate = useNavigate();
   const ri = auth?.role_interne;
+  const isDirecteur = !ri || ri === "Directeur";
+  const [etabNom, setEtabNom] = useState("");
 
-  if (!ri || ri === "Directeur")              return <DashboardDirecteur    auth={auth} navigate={navigate} />;
-  if (ri === "Médecin")                        return <DashboardMedecin />;
-  if (ri === "Infirmière")                     return <DashboardInfirmiere />;
-  if (ri === "Secrétaire médicale")            return <DashboardSecretaire />;
-  if (ri === "Laborantin")                     return <DashboardLaborantin />;
-  if (ri === "Caissier")                       return <DashboardCaissier />;
-  if (ri === "Pharmacien hospitalier")         return <DashboardPharmacien />;
-  if (ri === "Aide-soignant")                  return <DashboardAideSoignant auth={auth} navigate={navigate} />;
-  return <DashboardDirecteur auth={auth} navigate={navigate} />;
+  useEffect(() => {
+    if (!auth?.etablissement_id) return;
+    supabase
+      .from("etablissements")
+      .select("nom")
+      .eq("id", auth.etablissement_id)
+      .maybeSingle()
+      .then(({ data }) => { if (data?.nom) setEtabNom(data.nom); });
+  }, [auth?.etablissement_id]);
+
+  return (
+    <Layout title="Dashboard Hôpital" subtitle={etabNom ? `Vue d'ensemble — ${etabNom}` : "Vue d'ensemble"}>
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
+        }
+      `}</style>
+
+      {/* Dashboard role-specific pour tous sauf Directeur */}
+      {!isDirecteur && <DashboardRole ri={ri} />}
+
+      {/* Dashboard complet pour Directeur (ou compte principal) */}
+      {isDirecteur && (
+        <>
+          <KpiSection />
+          <div className="dash-grid-2">
+            <AlertesPanel />
+            <PatientsPanel />
+          </div>
+          <div className="dash-grid-2" style={{ marginTop: 20 }}>
+            <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+              <h3 style={{ margin: "0 0 8px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Dispensation médicaments</h3>
+              <p style={{ margin: 0, fontSize: 13, color: colors.textMuted }}>Données de dispensation disponibles après enregistrement des ventes en caisse.</p>
+            </div>
+            <PredictionsIA />
+          </div>
+        </>
+      )}
+
+      {/* Pour les roles avec dashboard reduit, afficher quand meme alertes */}
+      {!isDirecteur && (
+        <div className="dash-grid-2">
+          <AlertesPanel />
+          <PatientsPanel />
+        </div>
+      )}
+    </Layout>
+  );
 }
