@@ -647,6 +647,111 @@ export async function fetchDerniereTransmission(etablissement_id, service) {
   return data?.[0] ?? null;
 }
 
+// ─── Maternité ────────────────────────────────────────────────────────────────
+export async function insertGrossesse(fields) {
+  return run(supabase.from("grossesses").insert(fields).select().single());
+}
+export async function updateGrossesse(id, fields) {
+  return run(supabase.from("grossesses").update(fields).eq("id", id).select().single());
+}
+export async function fetchGrossessesActives(etablissement_id) {
+  const { data } = await supabase
+    .from("grossesses")
+    .select("*, patients(prenom, nom, date_naissance, telephone)")
+    .eq("etablissement_id", etablissement_id)
+    .eq("statut", "en_cours")
+    .order("date_accouchement_prevue", { ascending: true });
+  return data ?? [];
+}
+export async function fetchGrossessesEtablissement(etablissement_id) {
+  const { data } = await supabase
+    .from("grossesses")
+    .select("*, patients(prenom, nom, date_naissance, telephone)")
+    .eq("etablissement_id", etablissement_id)
+    .order("created_at", { ascending: false });
+  return data ?? [];
+}
+export async function fetchGrossessePatient(patient_id) {
+  const { data } = await supabase
+    .from("grossesses")
+    .select("*, consultations_prenatales(*), accouchements(*)")
+    .eq("patient_id", patient_id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data ?? null;
+}
+export async function insertCPN(fields) {
+  return run(supabase.from("consultations_prenatales").insert(fields).select().single());
+}
+export async function fetchCPNGrossesse(grossesse_id) {
+  const { data } = await supabase
+    .from("consultations_prenatales")
+    .select("*")
+    .eq("grossesse_id", grossesse_id)
+    .order("date_cpn", { ascending: true });
+  return data ?? [];
+}
+export async function insertPartogramme(fields) {
+  return run(supabase.from("partogrammes").insert(fields).select().single());
+}
+export async function updatePartogramme(id, fields) {
+  return run(supabase.from("partogrammes").update(fields).eq("id", id).select().single());
+}
+export async function fetchPartogrammesActifs(etablissement_id) {
+  const { data } = await supabase
+    .from("partogrammes")
+    .select("*, patients(prenom, nom), grossesses(numero_grossesse)")
+    .eq("etablissement_id", etablissement_id)
+    .eq("statut", "en_cours")
+    .order("heure_debut_travail", { ascending: true });
+  return data ?? [];
+}
+export async function fetchPartogrammeActif(patient_id) {
+  const { data } = await supabase
+    .from("partogrammes")
+    .select("*")
+    .eq("patient_id", patient_id)
+    .eq("statut", "en_cours")
+    .maybeSingle();
+  return data ?? null;
+}
+export async function insertAccouchement(fields) {
+  return run(supabase.from("accouchements").insert(fields).select().single());
+}
+export async function fetchAccouchementsEtablissement(etablissement_id, limit = 100) {
+  const { data } = await supabase
+    .from("accouchements")
+    .select("*, patients(prenom, nom, date_naissance), nouveau_nes(*)")
+    .eq("etablissement_id", etablissement_id)
+    .order("date_heure_accouchement", { ascending: false })
+    .limit(limit);
+  return data ?? [];
+}
+export async function insertNouveauNe(fields) {
+  return run(supabase.from("nouveau_nes").insert(fields).select().single());
+}
+export async function fetchNouveauNesEtablissement(etablissement_id, limit = 100) {
+  const { data } = await supabase
+    .from("nouveau_nes")
+    .select("*, accouchements(date_heure_accouchement, sage_femme, type_accouchement), patients!nouveau_nes_mere_patient_id_fkey(prenom, nom)")
+    .eq("etablissement_id", etablissement_id)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  return data ?? [];
+}
+export async function genererNumeroMaternite(etablissement_id, type) {
+  const annee = new Date().getFullYear();
+  const { data, error } = await supabase.rpc("incrementer_compteur_maternite", {
+    p_etablissement_id: etablissement_id,
+    p_annee: annee,
+    p_type: type,
+  });
+  const prefixes = { grossesse: "GR", accouchement: "ACC", naissance: "NAIS" };
+  if (error) return `${prefixes[type] ?? "MAT"}-${annee}-${Date.now().toString().slice(-5)}`;
+  return `${prefixes[type] ?? "MAT"}-${annee}-${String(data).padStart(5, "0")}`;
+}
+
 // ─── Décès ────────────────────────────────────────────────────────────────────
 export async function insertDeces(fields) {
   return run(supabase.from("deces").insert(fields).select().single());
