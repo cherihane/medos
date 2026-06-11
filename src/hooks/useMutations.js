@@ -647,6 +647,81 @@ export async function fetchDerniereTransmission(etablissement_id, service) {
   return data?.[0] ?? null;
 }
 
+// ─── Bloc opératoire ──────────────────────────────────────────────────────────
+export async function fetchSallesOperation(etablissement_id) {
+  const { data } = await supabase.from("salles_operation").select("*")
+    .eq("etablissement_id", etablissement_id).order("nom");
+  return data ?? [];
+}
+export async function upsertSalleOperation(fields) {
+  return run(supabase.from("salles_operation").upsert(fields).select().single());
+}
+export async function updateSalleStatut(id, statut) {
+  return run(supabase.from("salles_operation").update({ statut }).eq("id", id).select().single());
+}
+export async function insertIntervention(fields) {
+  return run(supabase.from("interventions").insert(fields).select().single());
+}
+export async function updateIntervention(id, fields) {
+  return run(supabase.from("interventions").update(fields).eq("id", id).select().single());
+}
+export async function fetchInterventionsJour(etablissement_id, dateISO) {
+  const { data } = await supabase.from("interventions")
+    .select("*, patients(prenom, nom, date_naissance, groupe_sanguin, allergies), salles_operation(nom)")
+    .eq("etablissement_id", etablissement_id)
+    .eq("date_prevue", dateISO)
+    .order("heure_prevue", { ascending: true });
+  return data ?? [];
+}
+export async function fetchInterventionsSemaine(etablissement_id, dateDebut, dateFin) {
+  const { data } = await supabase.from("interventions")
+    .select("*, patients(prenom, nom), salles_operation(nom)")
+    .eq("etablissement_id", etablissement_id)
+    .gte("date_prevue", dateDebut).lte("date_prevue", dateFin)
+    .order("date_prevue").order("heure_prevue");
+  return data ?? [];
+}
+export async function genererNumeroIntervention(etablissement_id) {
+  const annee = new Date().getFullYear();
+  const { data, error } = await supabase.rpc("incrementer_compteur_bloc",
+    { p_etablissement_id: etablissement_id, p_annee: annee });
+  if (error) return `INT-${annee}-${Date.now().toString().slice(-5)}`;
+  return `INT-${annee}-${String(data).padStart(5, "0")}`;
+}
+export async function insertChecklist(fields) {
+  return run(supabase.from("checklists_preop").insert(fields).select().single());
+}
+export async function updateChecklist(id, fields) {
+  return run(supabase.from("checklists_preop").update(fields).eq("id", id).select().single());
+}
+export async function fetchChecklistIntervention(intervention_id) {
+  const { data } = await supabase.from("checklists_preop").select("*")
+    .eq("intervention_id", intervention_id).maybeSingle();
+  return data ?? null;
+}
+export async function insertCRO(fields) {
+  return run(supabase.from("comptes_rendus_operatoires").insert(fields).select().single());
+}
+export async function updateCRO(id, fields) {
+  return run(supabase.from("comptes_rendus_operatoires").update(fields).eq("id", id).select().single());
+}
+export async function fetchCROIntervention(intervention_id) {
+  const { data } = await supabase.from("comptes_rendus_operatoires").select("*")
+    .eq("intervention_id", intervention_id).maybeSingle();
+  return data ?? null;
+}
+export async function insertFeuilleReveil(fields) {
+  return run(supabase.from("feuilles_reveil").insert(fields).select().single());
+}
+export async function updateFeuilleReveil(id, fields) {
+  return run(supabase.from("feuilles_reveil").update(fields).eq("id", id).select().single());
+}
+export async function fetchFeuilleReveilIntervention(intervention_id) {
+  const { data } = await supabase.from("feuilles_reveil").select("*")
+    .eq("intervention_id", intervention_id).maybeSingle();
+  return data ?? null;
+}
+
 // ─── Maternité ────────────────────────────────────────────────────────────────
 export async function insertGrossesse(fields) {
   return run(supabase.from("grossesses").insert(fields).select().single());

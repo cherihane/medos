@@ -30,6 +30,7 @@ const NAV_INTERNE = {
       "/hopital/alertes",
       "/hopital/urgences",
       "/hopital/maternite",
+      "/hopital/bloc",
     ],
     infirmiere: [
       "/hopital/dashboard",
@@ -39,6 +40,7 @@ const NAV_INTERNE = {
       "/hopital/alertes",
       "/hopital/urgences",
       "/hopital/maternite",
+      "/hopital/bloc",
     ],
     "Sage-femme": [
       "/hopital/dashboard",
@@ -168,6 +170,7 @@ export const roleConfig = {
       },
       { path: "/hopital/urgences", label: "Urgences", icon: "urgences" },
       { path: "/hopital/maternite", label: "Maternité", icon: "maternite" },
+      { path: "/hopital/bloc", label: "Bloc opératoire", icon: "bloc" },
 
       // ── Personnel
       { type: "separator", label: "Personnel" },
