@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { colors } from "../../theme";
 import { useAuth } from "../../context/AuthContext";
+import Layout from "../../components/Layout";
 import { useToast } from "../../hooks/useToast";
 import {
   fetchLotsRecents,
@@ -10,6 +11,7 @@ import {
   upsertEquipementSterilisation,
   genererNumeroLot,
 } from "../../hooks/useMutations";
+import { supabase } from "../../supabaseClient";
 import { openDocument, tableHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
 import { SERVICES_HOPITAL } from "../../constants/hopital";
 
@@ -629,14 +631,29 @@ function OngletEquipements({ etablissement_id, equipements, reload }) {
 // ─── Page principale ──────────────────────────────────────────────────────────
 export default function Sterilisation() {
   const auth = useAuth();
-  const etablissement_id = auth?.etablissement_id ?? auth?.profile?.etablissement_id;
+  const [etabId, setEtabId] = useState(auth?.etablissement_id ?? null);
   const [onglet, setOnglet] = useState("jour");
   const [equipements, setEquipements] = useState([]);
 
+  // Résolution etabId (même pattern que BlocOperatoire)
+  useEffect(() => {
+    if (etabId) return;
+    const resolve = async () => {
+      let eid = auth?.etablissement_id;
+      if (!eid && auth?.user?.email) {
+        const { data } = await supabase.from("membres_personnel").select("etablissement_id").eq("email", auth.user.email).eq("actif", true).maybeSingle();
+        eid = data?.etablissement_id ?? null;
+      }
+      if (eid) setEtabId(eid);
+    };
+    resolve();
+  }, [auth, etabId]);
+
   const loadEquip = useCallback(async () => {
-    const d = await fetchEquipementsSterilistion(etablissement_id);
+    if (!etabId) return;
+    const d = await fetchEquipementsSterilistion(etabId);
     setEquipements(d);
-  }, [etablissement_id]);
+  }, [etabId]);
 
   useEffect(() => { loadEquip(); }, [loadEquip]);
 
@@ -647,12 +664,7 @@ export default function Sterilisation() {
   ];
 
   return (
-    <div style={{ padding: "24px 28px", maxWidth: 1100, margin: "0 auto" }}>
-      <div style={{ marginBottom: 20 }}>
-        <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: colors.navy }}>Stérilisation</h2>
-        <p style={{ margin: "4px 0 0", fontSize: 13, color: colors.textSecondary }}>Traçabilité des cycles de stérilisation des instruments</p>
-      </div>
-
+    <Layout title="Stérilisation" subtitle="Traçabilité des cycles de stérilisation des instruments">
       <div style={{ display: "flex", gap: 0, borderBottom: `2px solid ${colors.border}`, marginBottom: 24 }}>
         {ONGLETS.map(({ key, label }) => (
           <button key={key} onClick={() => setOnglet(key)}
@@ -662,9 +674,9 @@ export default function Sterilisation() {
         ))}
       </div>
 
-      {onglet === "jour"        && <OngletLotsJour etablissement_id={etablissement_id} equipements={equipements} loadEquip={loadEquip} />}
-      {onglet === "historique"  && <OngletHistorique etablissement_id={etablissement_id} />}
-      {onglet === "equipements" && <OngletEquipements etablissement_id={etablissement_id} equipements={equipements} reload={loadEquip} />}
-    </div>
+      {onglet === "jour"        && <OngletLotsJour etablissement_id={etabId} equipements={equipements} loadEquip={loadEquip} />}
+      {onglet === "historique"  && <OngletHistorique etablissement_id={etabId} />}
+      {onglet === "equipements" && <OngletEquipements etablissement_id={etabId} equipements={equipements} reload={loadEquip} />}
+    </Layout>
   );
 }

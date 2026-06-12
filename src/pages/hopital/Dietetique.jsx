@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { colors } from "../../theme";
 import { useAuth } from "../../context/AuthContext";
+import Layout from "../../components/Layout";
 import { useToast } from "../../hooks/useToast";
 import { supabase } from "../../supabaseClient";
 import {
@@ -612,24 +613,32 @@ function OngletSuiviNutritionnel({ etablissement_id }) {
 // ─── Page principale ──────────────────────────────────────────────────────────
 export default function Dietetique() {
   const auth = useAuth();
-  const etablissement_id = auth?.etablissement_id ?? auth?.profile?.etablissement_id;
+  const [etabId, setEtabId] = useState(auth?.etablissement_id ?? null);
   const role_interne = auth?.profile?.role_interne ?? auth?.role_interne ?? "";
   const [onglet, setOnglet] = useState("jour");
 
+  // Résolution etabId (même pattern que BlocOperatoire)
+  useEffect(() => {
+    if (etabId) return;
+    const resolve = async () => {
+      let eid = auth?.etablissement_id;
+      if (!eid && auth?.user?.email) {
+        const { data } = await supabase.from("membres_personnel").select("etablissement_id").eq("email", auth.user.email).eq("actif", true).maybeSingle();
+        eid = data?.etablissement_id ?? null;
+      }
+      if (eid) setEtabId(eid);
+    };
+    resolve();
+  }, [auth, etabId]);
+
   const ONGLETS = [
-    { key: "jour",        label: "Régimes du jour" },
+    { key: "jour",          label: "Régimes du jour" },
     { key: "prescriptions", label: "Prescriptions" },
-    { key: "suivi",       label: "Suivi nutritionnel" },
+    { key: "suivi",         label: "Suivi nutritionnel" },
   ];
 
   return (
-    <div style={{ padding: "24px 28px", maxWidth: 1100, margin: "0 auto" }}>
-      <div style={{ marginBottom: 20 }}>
-        <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: colors.navy }}>Diététique</h2>
-        <p style={{ margin: "4px 0 0", fontSize: 13, color: colors.textSecondary }}>Gestion des régimes alimentaires et suivi nutritionnel</p>
-      </div>
-
-      {/* Onglets */}
+    <Layout title="Diététique" subtitle="Gestion des régimes alimentaires et suivi nutritionnel">
       <div style={{ display: "flex", gap: 0, borderBottom: `2px solid ${colors.border}`, marginBottom: 24 }}>
         {ONGLETS.map(({ key, label }) => (
           <button key={key} onClick={() => setOnglet(key)}
@@ -639,9 +648,9 @@ export default function Dietetique() {
         ))}
       </div>
 
-      {onglet === "jour"          && <OngletRegimesJour etablissement_id={etablissement_id} />}
-      {onglet === "prescriptions" && <OngletPrescriptions etablissement_id={etablissement_id} role_interne={role_interne} />}
-      {onglet === "suivi"         && <OngletSuiviNutritionnel etablissement_id={etablissement_id} />}
-    </div>
+      {onglet === "jour"          && <OngletRegimesJour etablissement_id={etabId} />}
+      {onglet === "prescriptions" && <OngletPrescriptions etablissement_id={etabId} role_interne={role_interne} />}
+      {onglet === "suivi"         && <OngletSuiviNutritionnel etablissement_id={etabId} />}
+    </Layout>
   );
 }
