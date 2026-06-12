@@ -31,6 +31,7 @@ const NAV_INTERNE = {
       "/hopital/urgences",
       "/hopital/maternite",
       "/hopital/bloc",
+      "/hopital/dietetique",
     ],
     infirmiere: [
       "/hopital/dashboard",
@@ -71,6 +72,9 @@ const NAV_INTERNE = {
       "/hopital/lits",
       "/hopital/alertes",
     ],
+    "Dieteticien":            ["/hopital/dashboard", "/hopital/dietetique", "/hopital/alertes"],
+    "Cuisiniere":             ["/hopital/dashboard", "/hopital/dietetique", "/hopital/alertes"],
+    "Agent de sterilisation": ["/hopital/dashboard", "/hopital/sterilisation", "/hopital/alertes"],
   },
   distributeur: {
     directeur: null,

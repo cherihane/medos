@@ -240,17 +240,16 @@ function OngletRegimesJour({ etablissement_id }) {
       toastError("Établissement non identifié. Veuillez vous déconnecter et vous reconnecter.");
       return;
     }
-    console.log("[genererPlateaux] etablissement_id (prop):", etablissement_id);
 
     const today = dateISO;
     const existing = plateaux.length > 0;
     if (existing) { toastError("Des plateaux existent déjà pour cette date."); return; }
 
     const regimesActifs = await fetchRegimesActifs(etablissement_id);
-    console.log("[genererPlateaux] fetchRegimesActifs result:", regimesActifs);
+    const regimesHospitalises = regimesActifs.filter((r) => r.hospitalisations?.statut === "hospitalise");
 
     const rows = [];
-    for (const regime of regimesActifs) {
+    for (const regime of regimesHospitalises) {
       for (const m of MOMENTS) {
         rows.push({
           patient_id: regime.patient_id,
@@ -262,11 +261,9 @@ function OngletRegimesJour({ etablissement_id }) {
         });
       }
     }
-    console.log("[genererPlateaux] rows à insérer:", rows);
 
     if (rows.length === 0) { toastError("Aucun patient hospitalisé avec régime actif."); return; }
     const { error } = await supabase.from("plateaux_repas").insert(rows);
-    console.log("[genererPlateaux] erreur insertion:", error);
     if (error) { toastError(`Erreur insertion: ${error.message}`); return; }
     success(`${rows.length} plateaux générés.`);
     load();

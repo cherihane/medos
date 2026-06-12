@@ -986,10 +986,9 @@ export async function fetchRegimesActifs(etablissement_id) {
   const today = new Date().toISOString().slice(0, 10);
   const { data } = await supabase
     .from("prescriptions_dietetiques")
-    .select("*, patients(prenom, nom, date_naissance), hospitalisations!inner(service, lit, chambre, statut)")
+    .select("*, patients(prenom, nom, date_naissance), hospitalisations(service, lit, chambre, statut)")
     .eq("etablissement_id", etablissement_id)
     .eq("actif", true)
-    .eq("hospitalisations.statut", "hospitalise")
     .or(`date_fin.is.null,date_fin.gte.${today}`);
   return data ?? [];
 }
