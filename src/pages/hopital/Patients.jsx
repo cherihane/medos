@@ -9,7 +9,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "rec
 import Layout from "../../components/Layout";
 import { usePatientsPaginated, usePatientsStats, useMedicaments } from "../../hooks/useSupabaseData";
 import Pagination from "../../components/Pagination";
-import { insertPatient, insertOrdonnance, upsertHospitalisation, fetchHospitalisation, insertConstante, fetchConstantes, updatePatientTriage, insertNoteEvolution, fetchNotesEvolution, fetchPlanSoinsPatient, fetchPerfusionsPatient, insertAdministration, insertPlanSoins, insertDeces, fetchDecesEtablissement, genererNumeroCertificat, updatePatient } from "../../hooks/useMutations";
+import { insertPatient, insertOrdonnance, upsertHospitalisation, fetchHospitalisation, insertConstante, fetchConstantes, updatePatientTriage, insertNoteEvolution, fetchNotesEvolution, fetchPlanSoinsPatient, fetchPerfusionsPatient, insertAdministration, insertPlanSoins, insertDeces, fetchDecesEtablissement, genererNumeroCertificat, updatePatient, fetchRegimePatient } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../supabaseClient";
 import { openDocument, tableHTML, infoGridHTML, alertBannerHTML, signatureRowHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
@@ -1087,6 +1087,8 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
   const [showNoteForm, setShowNoteForm] = useState(false);
   const [noteForm, setNoteForm]       = useState({ auteur: medecinNom ?? "", type: "evolution", contenu: "" });
   const [savingNote, setSavingNote]   = useState(false);
+  // Régime alimentaire
+  const [regimeActif, setRegimeActif] = useState(null);
 
   const charger = useCallback(async () => {
     setLoading(true);
@@ -1113,6 +1115,10 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
   }, [patient.id]);
 
   useEffect(() => { charger(); }, [charger]);
+
+  useEffect(() => {
+    fetchRegimePatient(patient.id).then(setRegimeActif);
+  }, [patient.id]);
 
   const parseLignes = (notes) => { try { return JSON.parse(notes).lignes ?? []; } catch { return []; } };
   const parseInstr  = (notes) => { try { return JSON.parse(notes).instructions ?? null; } catch { return null; } };
@@ -1392,6 +1398,27 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
                       <div style={{ fontSize: 11, color: colors.textMuted }}>Vérifiez systématiquement avant toute prescription.</div>
                     </div>
                   </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Régime alimentaire ── */}
+            {onglet === "infos" && (
+              <div>
+                <h4 style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 700, color: colors.navy }}>Régime alimentaire</h4>
+                {regimeActif ? (
+                  <div style={{ padding: "10px 14px", backgroundColor: "#F0FDF4", borderRadius: 8, border: "1.5px solid #10B981", fontSize: 12 }}>
+                    <strong>Régime prescrit :</strong>{" "}
+                    {{ normal: "Normal", diabetique: "Diabétique", sans_sel: "Sans sel", sans_sel_strict: "Sans sel strict", hyperproteine: "Hyperprotéiné", hypocalorique: "Hypocalorique", mixe: "Mixé", liquide: "Liquide", jejune: "Jeûne", sonde_enterale: "Sonde entérale", parenteral: "Parentéral", personnalise: "Personnalisé" }[regimeActif.type_regime] ?? regimeActif.type_regime}
+                    {regimeActif.texture && regimeActif.texture !== "normal" && ` — Texture ${regimeActif.texture}`}
+                    {regimeActif.objectif_calorique && <span style={{ marginLeft: 8, color: "#047857" }}>{regimeActif.objectif_calorique} kcal/j</span>}
+                    {regimeActif.restrictions_specifiques && (
+                      <div style={{ color: "#DC2626", marginTop: 4, fontWeight: 600 }}>{regimeActif.restrictions_specifiques}</div>
+                    )}
+                    {regimeActif.prescripteur && <div style={{ color: "#6B7280", marginTop: 4 }}>Prescrit par : {regimeActif.prescripteur}</div>}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12, color: colors.textMuted, padding: "10px 14px", background: "#F9FAFB", borderRadius: 8 }}>Aucun régime prescrit</div>
                 )}
               </div>
             )}

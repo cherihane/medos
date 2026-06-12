@@ -59,6 +59,8 @@ const HoCaissePage = lazy(() => import("./pages/hopital/CaissePage"));
 const HoUrgences   = lazy(() => import("./pages/hopital/Urgences"));
 const HoMaternite      = lazy(() => import("./pages/hopital/Maternite"));
 const HoBlocOperatoire = lazy(() => import("./pages/hopital/BlocOperatoire"));
+const HoDietetique     = lazy(() => import("./pages/hopital/Dietetique"));
+const HoSterilisation  = lazy(() => import("./pages/hopital/Sterilisation"));
 
 // Distributeur
 const DiDashboard = lazy(() => import("./pages/distributeur/Dashboard"));
@@ -514,6 +516,23 @@ function AppRoutes() {
           element={
             <ProtectedRoute requiredRole="hopital">
               <HoBlocOperatoire />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/hopital/dietetique"
+          element={
+            <ProtectedRoute requiredRole="hopital">
+              <HoDietetique />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/hopital/sterilisation"
+          element={
+            <ProtectedRoute requiredRole="hopital">
+              <HoSterilisation />
             </ProtectedRoute>
           }
         />

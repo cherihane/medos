@@ -974,3 +974,78 @@ export async function fetchAdministrationsJour(etablissement_id, dateISO) {
     .order("heure_reelle", { ascending: false });
   return data ?? [];
 }
+
+// ─── Diététique ───────────────────────────────────────────────────────────────
+export async function insertPrescriptionDietetique(fields) {
+  return run(supabase.from("prescriptions_dietetiques").insert(fields).select().single());
+}
+export async function updatePrescriptionDietetique(id, fields) {
+  return run(supabase.from("prescriptions_dietetiques").update(fields).eq("id", id).select().single());
+}
+export async function fetchRegimesActifs(etablissement_id) {
+  const today = new Date().toISOString().slice(0, 10);
+  const { data } = await supabase
+    .from("prescriptions_dietetiques")
+    .select("*, patients(prenom, nom, date_naissance), hospitalisations!inner(service, lit, chambre, statut)")
+    .eq("etablissement_id", etablissement_id)
+    .eq("actif", true)
+    .eq("hospitalisations.statut", "hospitalise")
+    .or(`date_fin.is.null,date_fin.gte.${today}`);
+  return data ?? [];
+}
+export async function fetchRegimePatient(patient_id) {
+  const { data } = await supabase
+    .from("prescriptions_dietetiques")
+    .select("*")
+    .eq("patient_id", patient_id)
+    .eq("actif", true)
+    .maybeSingle();
+  return data ?? null;
+}
+export async function insertPlateauRepas(fields) {
+  return run(supabase.from("plateaux_repas").insert(fields).select().single());
+}
+export async function updatePlateauRepas(id, fields) {
+  return run(supabase.from("plateaux_repas").update(fields).eq("id", id).select().single());
+}
+export async function fetchPlateauxJour(etablissement_id, dateISO) {
+  const { data } = await supabase
+    .from("plateaux_repas")
+    .select("*, patients(prenom, nom)")
+    .eq("etablissement_id", etablissement_id)
+    .eq("date_repas", dateISO)
+    .order("moment").order("created_at");
+  return data ?? [];
+}
+
+// ─── Stérilisation ────────────────────────────────────────────────────────────
+export async function fetchEquipementsSterilistion(etablissement_id) {
+  const { data } = await supabase.from("equipements_sterilisation")
+    .select("*").eq("etablissement_id", etablissement_id).order("nom");
+  return data ?? [];
+}
+export async function upsertEquipementSterilisation(fields) {
+  return run(supabase.from("equipements_sterilisation").upsert(fields).select().single());
+}
+export async function insertLotSterilisation(fields) {
+  return run(supabase.from("lots_sterilisation").insert(fields).select().single());
+}
+export async function updateLotSterilisation(id, fields) {
+  return run(supabase.from("lots_sterilisation").update(fields).eq("id", id).select().single());
+}
+export async function fetchLotsRecents(etablissement_id, limit = 50) {
+  const { data } = await supabase
+    .from("lots_sterilisation")
+    .select("*, equipements_sterilisation(nom, type)")
+    .eq("etablissement_id", etablissement_id)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  return data ?? [];
+}
+export async function genererNumeroLot(etablissement_id) {
+  const annee = new Date().getFullYear();
+  const { data, error } = await supabase.rpc("incrementer_compteur_sterilisation",
+    { p_etablissement_id: etablissement_id, p_annee: annee });
+  if (error) return `LOT-${annee}-${Date.now().toString().slice(-5)}`;
+  return `LOT-${annee}-${String(data).padStart(5, "0")}`;
+}
