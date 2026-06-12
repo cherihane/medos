@@ -171,6 +171,12 @@ export const roleConfig = {
       { path: "/hopital/urgences", label: "Urgences", icon: "urgences" },
       { path: "/hopital/maternite", label: "Maternité", icon: "maternite" },
       { path: "/hopital/bloc", label: "Bloc opératoire", icon: "bloc" },
+      { path: "/hopital/dietetique", label: "Diététique", icon: "dietetique" },
+      {
+        path: "/hopital/sterilisation",
+        label: "Stérilisation",
+        icon: "sterilisation",
+      },
 
       // ── Personnel
       { type: "separator", label: "Personnel" },
