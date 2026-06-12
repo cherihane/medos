@@ -629,25 +629,10 @@ function OngletSuiviNutritionnel({ etablissement_id }) {
 
 // ─── Page principale ──────────────────────────────────────────────────────────
 export default function Dietetique() {
-  const auth = useAuth();
-  const [etabId, setEtabId] = useState(auth?.etablissement_id ?? null);
-  const role_interne = auth?.profile?.role_interne ?? auth?.role_interne ?? "";
+  const { auth } = useAuth();
+  const etabId = auth?.etablissement_id ?? null;
+  const role_interne = auth?.role_interne ?? "";
   const [onglet, setOnglet] = useState("jour");
-
-  // Résolution etabId — se relance dès que auth.user est disponible
-  useEffect(() => {
-    if (etabId) return;
-    if (!auth?.user?.email) return;
-    const resolve = async () => {
-      let eid = auth?.etablissement_id;
-      if (!eid) {
-        const { data } = await supabase.from("membres_personnel").select("etablissement_id").eq("email", auth.user.email).eq("actif", true).maybeSingle();
-        eid = data?.etablissement_id ?? null;
-      }
-      if (eid) setEtabId(eid);
-    };
-    resolve();
-  }, [auth?.user?.email, auth?.etablissement_id, etabId]);
 
   const ONGLETS = [
     { key: "jour",          label: "Régimes du jour" },
