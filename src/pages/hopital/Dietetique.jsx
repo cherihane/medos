@@ -236,6 +236,10 @@ function OngletRegimesJour({ etablissement_id }) {
   }
 
   async function genererPlateaux() {
+    if (!etablissement_id) {
+      toastError("Établissement non identifié. Veuillez vous déconnecter et vous reconnecter.");
+      return;
+    }
     console.log("[genererPlateaux] etablissement_id (prop):", etablissement_id);
 
     const today = dateISO;
@@ -335,7 +339,11 @@ function OngletRegimesJour({ etablissement_id }) {
       {/* Actions */}
       <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
         {plateaux.length === 0 && (
-          <button onClick={genererPlateaux} style={{ padding: "9px 16px", background: ACCENT, color: "white", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+          <button
+            onClick={genererPlateaux}
+            disabled={!etablissement_id}
+            style={{ padding: "9px 16px", background: etablissement_id ? ACCENT : "#9CA3AF", color: "white", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: etablissement_id ? "pointer" : "not-allowed", opacity: etablissement_id ? 1 : 0.6 }}
+          >
             Générer les plateaux du jour
           </button>
         )}
@@ -626,19 +634,20 @@ export default function Dietetique() {
   const role_interne = auth?.profile?.role_interne ?? auth?.role_interne ?? "";
   const [onglet, setOnglet] = useState("jour");
 
-  // Résolution etabId (même pattern que BlocOperatoire)
+  // Résolution etabId — se relance dès que auth.user est disponible
   useEffect(() => {
     if (etabId) return;
+    if (!auth?.user?.email) return;
     const resolve = async () => {
       let eid = auth?.etablissement_id;
-      if (!eid && auth?.user?.email) {
+      if (!eid) {
         const { data } = await supabase.from("membres_personnel").select("etablissement_id").eq("email", auth.user.email).eq("actif", true).maybeSingle();
         eid = data?.etablissement_id ?? null;
       }
       if (eid) setEtabId(eid);
     };
     resolve();
-  }, [auth, etabId]);
+  }, [auth?.user?.email, auth?.etablissement_id, etabId]);
 
   const ONGLETS = [
     { key: "jour",          label: "Régimes du jour" },
