@@ -424,7 +424,7 @@ function OngletPrescriptions({ etablissement_id, role_interne }) {
   const [loading, setLoading] = useState(false);
   const { success } = useToast();
 
-  const canPrescribe = ["Médecin", "Directeur", "medecin", "directeur"].some((r) => (role_interne ?? "").toLowerCase().includes(r.toLowerCase()));
+  const canPrescribe = role_interne === null || ["médecin", "directeur"].some((r) => (role_interne ?? "").toLowerCase().includes(r));
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -628,7 +628,7 @@ function OngletSuiviNutritionnel({ etablissement_id }) {
 export default function Dietetique() {
   const { auth } = useAuth();
   const etabId = auth?.etablissement_id ?? null;
-  const role_interne = auth?.role_interne ?? "";
+  const role_interne = auth?.role_interne ?? null;
   const [onglet, setOnglet] = useState("jour");
 
   const ONGLETS = [
