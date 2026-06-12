@@ -46,9 +46,22 @@ function NouvelleModal({ patients, onClose, onSaved }) {
     notes: "",
     statut: "en_attente",
   });
+  const [lignes, setLignes] = useState([
+    { medicament_nom: "", dose: "", frequence: "", duree: "", voie: "Oral" }
+  ]);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
   const set = (k) => (e) => { setFormError(null); setForm((f) => ({ ...f, [k]: e.target.value })); };
+
+  function addLigne() {
+    setLignes((prev) => [...prev, { medicament_nom: "", dose: "", frequence: "", duree: "", voie: "Oral" }]);
+  }
+  function removeLigne(i) {
+    setLignes((prev) => prev.filter((_, idx) => idx !== i));
+  }
+  function updateLigne(i, key, val) {
+    setLignes((prev) => prev.map((l, idx) => idx === i ? { ...l, [key]: val } : l));
+  }
 
   const handleSave = async () => {
     if (!form.patient_id) { setFormError("Veuillez sélectionner un patient."); return; }
@@ -63,6 +76,7 @@ function NouvelleModal({ patients, onClose, onSaved }) {
         notes: form.notes || null,
         statut: form.statut,
         reference: ref,
+        lignes: lignes.filter((l) => l.medicament_nom.trim() !== ""),
       });
       onSaved();
       onClose();
@@ -94,20 +108,64 @@ function NouvelleModal({ patients, onClose, onSaved }) {
           <input style={inputStyle} type="date" value={form.date_expiration} onChange={set("date_expiration")} />
         </Field>
       </Row>
-      <Field label={
-        <span style={{ display: "inline-flex", alignItems: "center" }}>
-          Notes / médicaments prescrits
-          <Tooltip
-            text="Posologie : indiquez le médicament, la dose unitaire, la fréquence et la durée. Exemple : Amoxicilline 500 mg — 1 cp × 3 fois/j pendant 7 jours."
-            position="right"
-          />
-        </span>
-      }>
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <label style={{ fontSize: 12, fontWeight: 700, color: colors.text }}>Medicaments prescrits</label>
+          <button type="button" onClick={addLigne} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, backgroundColor: "#DCFCE7", color: "#16A34A", border: "none", cursor: "pointer", fontWeight: 700 }}>
+            + Ajouter
+          </button>
+        </div>
+        {lignes.map((ligne, i) => (
+          <div key={i} style={{ backgroundColor: colors.bgSurface, borderRadius: 8, padding: "10px 12px", marginBottom: 6, border: `1px solid ${colors.border}` }}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+              <input
+                style={{ ...inputStyle, flex: "2 1 140px", minWidth: 0 }}
+                value={ligne.medicament_nom}
+                onChange={(e) => updateLigne(i, "medicament_nom", e.target.value)}
+                placeholder="Medicament"
+              />
+              <input
+                style={{ ...inputStyle, flex: "1 1 80px", minWidth: 0 }}
+                value={ligne.dose}
+                onChange={(e) => updateLigne(i, "dose", e.target.value)}
+                placeholder="Dose (ex: 500mg)"
+              />
+              <input
+                style={{ ...inputStyle, flex: "1 1 100px", minWidth: 0 }}
+                value={ligne.frequence}
+                onChange={(e) => updateLigne(i, "frequence", e.target.value)}
+                placeholder="Frequence (ex: 3x/j)"
+              />
+              <input
+                style={{ ...inputStyle, flex: "1 1 80px", minWidth: 0 }}
+                value={ligne.duree}
+                onChange={(e) => updateLigne(i, "duree", e.target.value)}
+                placeholder="Duree (ex: 7j)"
+              />
+              <select
+                style={{ ...selectStyle, flex: "1 1 80px", minWidth: 0 }}
+                value={ligne.voie}
+                onChange={(e) => updateLigne(i, "voie", e.target.value)}
+              >
+                {["Oral", "IV", "IM", "SC", "Topique", "Sublingual", "Inhalation"].map((v) => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
+              {lignes.length > 1 && (
+                <button type="button" onClick={() => removeLigne(i)} style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 16, fontWeight: 700, padding: "0 4px" }}>
+                  x
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+      <Field label="Notes complémentaires">
         <textarea
-          style={{ ...inputStyle, height: 80, resize: "vertical" }}
+          style={{ ...inputStyle, height: 60, resize: "vertical" }}
           value={form.notes}
           onChange={set("notes")}
-          placeholder="Ex: Amoxicilline 500 mg — 1 cp × 3/j pendant 7 jours"
+          placeholder="Observations, instructions particulières..."
         />
       </Field>
       {formError && (

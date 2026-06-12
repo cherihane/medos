@@ -67,8 +67,9 @@ const PERMISSIONS_DEFAUT = {
     Directeur:                null,
     "Médecin":                ["/hopital/dashboard", "/hopital/patients", "/hopital/consultations", "/hopital/mes-consultations", "/hopital/examens", "/hopital/assistant", "/hopital/alertes", "/hopital/agenda", "/hopital/transmission", "/hopital/transmission-garde", "/hopital/renouvellements", "/hopital/urgences", "/hopital/maternite", "/hopital/bloc", "/hopital/dietetique", "/hopital/sterilisation"],
     "Infirmière":             ["/hopital/dashboard", "/hopital/patients", "/hopital/consultations", "/hopital/lits", "/hopital/mon-service", "/hopital/alertes", "/hopital/transmission-garde", "/hopital/urgences", "/hopital/maternite", "/hopital/bloc"],
-    "Dieteticien":            ["/hopital/dietetique", "/hopital/alertes"],
-    "Agent de sterilisation": ["/hopital/sterilisation", "/hopital/alertes"],
+    "Dieteticien":            ["/hopital/dashboard", "/hopital/dietetique", "/hopital/alertes"],
+    "Cuisiniere":             ["/hopital/dashboard", "/hopital/dietetique", "/hopital/alertes"],
+    "Agent de sterilisation": ["/hopital/dashboard", "/hopital/sterilisation", "/hopital/alertes"],
     "Sage-femme":             ["/hopital/dashboard", "/hopital/maternite", "/hopital/patients", "/hopital/alertes"],
     "Pharmacien hospitalier": ["/hopital/stock", "/hopital/patients", "/hopital/scanner", "/hopital/alertes"],
     "Secrétaire médicale":    ["/hopital/dashboard", "/hopital/consultations", "/hopital/patients", "/hopital/facturation", "/hopital/caisse", "/hopital/agenda"],
@@ -90,7 +91,7 @@ const PERMISSIONS_DEFAUT = {
 
 const ROLES_INTERNES = {
   pharmacie:    ["Gérant", "Pharmacien", "Caissier"],
-  hopital:      ["Directeur", "Médecin", "Infirmière", "Sage-femme", "Pharmacien hospitalier", "Secrétaire médicale", "Laborantin", "Caissier", "Aide-soignant", "Dieteticien", "Agent de sterilisation"],
+  hopital:      ["Directeur", "Médecin", "Infirmière", "Sage-femme", "Pharmacien hospitalier", "Secrétaire médicale", "Laborantin", "Caissier", "Aide-soignant", "Dieteticien", "Cuisiniere", "Agent de sterilisation"],
   distributeur: ["Directeur", "Commercial", "Logistique"],
   autorite:     ["Ministre", "Inspecteur", "Analyste"],
 };

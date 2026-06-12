@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import Layout from "../../components/Layout";
 import PredictionsIA from "../../components/PredictionsIA";
 import { useMedicamentsCritiques, useKpiPharmacie } from "../../hooks/useSupabaseData";
@@ -23,6 +25,73 @@ function useTendancePharmacie() {
     });
   }, []);
   return hier;
+}
+
+function useVentes7Jours() {
+  const { auth } = useAuth();
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!auth?.etablissement_id) return;
+    const labels = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      labels.push(d.toISOString().slice(0, 10));
+    }
+    Promise.all(
+      labels.map((date) =>
+        supabase
+          .from("ventes")
+          .select("montant_total")
+          .eq("etablissement_id", auth.etablissement_id)
+          .gte("created_at", date + "T00:00:00")
+          .lte("created_at", date + "T23:59:59")
+          .then(({ data: rows }) => ({
+            jour: new Date(date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" }),
+            total: (rows ?? []).reduce((s, r) => s + (r.montant_total ?? 0), 0),
+          }))
+      )
+    ).then((results) => { setData(results); setLoading(false); });
+  }, [auth?.etablissement_id]);
+
+  return { data, loading };
+}
+
+function VentesChart() {
+  const { data, loading } = useVentes7Jours();
+
+  if (loading) {
+    return <div style={{ height: 240, backgroundColor: colors.bgSurface, borderRadius: 10 }} />;
+  }
+
+  const totalSemaine = data.reduce((s, d) => s + d.total, 0);
+
+  if (totalSemaine === 0) {
+    return (
+      <div style={{ height: 240, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", backgroundColor: colors.bgSurface, borderRadius: 10, gap: 8 }}>
+        <div style={{ fontSize: 13, color: colors.textMuted }}>Aucune vente enregistree cette semaine.</div>
+        <div style={{ fontSize: 11, color: colors.textMuted }}>Les donnees apparaitront apres les premieres transactions en caisse.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 8 }}>
+        Total semaine : <strong style={{ color: colors.navy }}>{totalSemaine.toLocaleString("fr-FR")} FCFA</strong>
+      </div>
+      <ResponsiveContainer width="100%" height={220}>
+        <BarChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+          <XAxis dataKey="jour" tick={{ fontSize: 11 }} />
+          <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `${Math.round(v / 1000)}k` : v} />
+          <Tooltip formatter={(v) => [`${Number(v).toLocaleString("fr-FR")} FCFA`, "Ventes"]} />
+          <Bar dataKey="total" fill="#10B981" radius={[4, 4, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
 }
 
 function fmtChange(now, prev) {
@@ -237,11 +306,7 @@ export default function DashboardPharmacie() {
           <h3 style={{ margin: "0 0 12px", fontSize: 15, fontWeight: 700, color: colors.navy }}>
             Ventes — 7 derniers jours
           </h3>
-          <div style={{ height: 240, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: colors.bgSurface, borderRadius: 10 }}>
-            <p style={{ color: colors.textMuted, fontSize: 13, textAlign: "center", margin: 0 }}>
-              Données de ventes disponibles après enregistrement<br />des transactions en caisse.
-            </p>
-          </div>
+          <VentesChart />
         </div>
 
         <StockCritiquePanel />
