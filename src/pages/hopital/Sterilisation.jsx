@@ -11,7 +11,6 @@ import {
   upsertEquipementSterilisation,
   genererNumeroLot,
 } from "../../hooks/useMutations";
-import { supabase } from "../../supabaseClient";
 import { openDocument, tableHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
 import { SERVICES_HOPITAL } from "../../constants/hopital";
 
@@ -630,24 +629,10 @@ function OngletEquipements({ etablissement_id, equipements, reload }) {
 
 // ─── Page principale ──────────────────────────────────────────────────────────
 export default function Sterilisation() {
-  const auth = useAuth();
-  const [etabId, setEtabId] = useState(auth?.etablissement_id ?? null);
+  const { auth } = useAuth();
+  const etabId = auth?.etablissement_id ?? null;
   const [onglet, setOnglet] = useState("jour");
   const [equipements, setEquipements] = useState([]);
-
-  // Résolution etabId (même pattern que BlocOperatoire)
-  useEffect(() => {
-    if (etabId) return;
-    const resolve = async () => {
-      let eid = auth?.etablissement_id;
-      if (!eid && auth?.user?.email) {
-        const { data } = await supabase.from("membres_personnel").select("etablissement_id").eq("email", auth.user.email).eq("actif", true).maybeSingle();
-        eid = data?.etablissement_id ?? null;
-      }
-      if (eid) setEtabId(eid);
-    };
-    resolve();
-  }, [auth, etabId]);
 
   const loadEquip = useCallback(async () => {
     if (!etabId) return;
