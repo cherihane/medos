@@ -46,7 +46,7 @@ function printBonCommandeFabricant({ header, lignes, etab }) {
 }
 
 // ── Resend ────────────────────────────────────────────────────────────────────
-const RESEND_KEY = "re_iUaDVQFG_LAX2mHCRxm6rf216167mGdJY";
+const RESEND_KEY = process.env.REACT_APP_RESEND_KEY ?? "";
 
 // lignes = [{ medicamentNom, quantite }]
 async function sendCommandeEmail({ emailFabricant, fabricant, lignes, dateLivraison, notes, distributeur }) {
@@ -167,6 +167,7 @@ function ModalReception({ medicaments, onClose, onSuccess }) {
     date_fabrication: "",
     date_expiration: "",
     prix_unitaire: "",
+    prix_achat: "",
   });
   const [lotGenere, setLotGenere] = useState(genererNumeroLot());
   const [saving, setSaving] = useState(false);
@@ -194,6 +195,7 @@ function ModalReception({ medicaments, onClose, onSuccess }) {
         date_fabrication: form.date_fabrication || null,
         date_expiration: form.date_expiration,
         qr_code: JSON.stringify({ lot: lotGenere, medicament_id: form.medicament_id }),
+        ...(form.prix_achat ? { prix_achat: Number(form.prix_achat) } : {}),
       });
       // 2. Incrémenter le stock du médicament
       await incrementStock(form.medicament_id, qty);
@@ -272,10 +274,17 @@ function ModalReception({ medicaments, onClose, onSuccess }) {
             </div>
           </div>
 
-          <div>
-            <label style={labelStyle}>Prix unitaire grossiste (FCFA)</label>
-            <input type="number" min="0" value={form.prix_unitaire} onChange={(e) => set("prix_unitaire", e.target.value)}
-              placeholder="Ex: 2500" style={inputStyle} />
+          <div className="form-row-2">
+            <div>
+              <label style={labelStyle}>Prix unitaire grossiste (FCFA)</label>
+              <input type="number" min="0" value={form.prix_unitaire} onChange={(e) => set("prix_unitaire", e.target.value)}
+                placeholder="Ex: 2500" style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Prix d'achat unitaire (FCFA)</label>
+              <input type="number" min="0" value={form.prix_achat} onChange={(e) => set("prix_achat", e.target.value)}
+                placeholder="Ex: 450" style={inputStyle} />
+            </div>
           </div>
         </div>
 
@@ -521,10 +530,15 @@ export default function Entrepot() {
   const [recherche, setRecherche]               = useState("");
 
   const stockFaible = medicaments.filter((m) => m.stock_actuel < m.stock_minimum);
+  const enRupture   = medicaments.filter((m) => m.stock_actuel === 0);
 
   const filtered = medicaments.filter((m) =>
     m.nom.toLowerCase().includes(recherche.toLowerCase())
   );
+
+  const valeurStock = medicaments.reduce((sum, m) => {
+    return sum + (m.stock_actuel ?? 0) * (m.prix_achat ?? m.prix_unitaire ?? 0);
+  }, 0);
 
   const handleSuccess = useCallback((lot, qty) => {
     setShowModal(false);
@@ -557,6 +571,21 @@ export default function Entrepot() {
           onSuccess={(msg) => { setShowCommande(false); success(msg); }}
         />
       )}
+
+      {/* ── KPIs stock ── */}
+      <div className="kpi-row" style={{ marginBottom: 20 }}>
+        {[
+          { label: "Total références",  value: loading ? "…" : medicaments.length,    color: "#F59E0B" },
+          { label: "En rupture",        value: loading ? "…" : enRupture.length,      color: enRupture.length > 0 ? "#EF4444" : "#6B7280" },
+          { label: "Sous seuil min.",   value: loading ? "…" : stockFaible.length,    color: stockFaible.length > 0 ? "#F59E0B" : "#6B7280" },
+          { label: "Valeur du stock",   value: loading ? "…" : `${valeurStock.toLocaleString("fr-FR")} FCFA`, color: "#10B981" },
+        ].map((k) => (
+          <div key={k.label} style={{ backgroundColor: colors.bgCard, borderRadius: 12, padding: "16px 20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", borderLeft: `4px solid ${k.color}`, flex: 1 }}>
+            <div style={{ fontSize: 22, fontWeight: 800, color: k.color }}>{k.value}</div>
+            <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>{k.label}</div>
+          </div>
+        ))}
+      </div>
 
       {/* ── Alertes stock faible ── */}
       {stockFaible.length > 0 && (

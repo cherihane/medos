@@ -307,14 +307,93 @@ export default function ReseauClients() {
   const [historiqueModal, setHistoriqueModal] = useState(null);
   const [toast, setToast] = useState(null);
 
+  // Drawer commandes client
+  const [clientCommandeDrawer, setClientCommandeDrawer] = useState(null);
+  const [commandesClient, setCommandesClient] = useState([]);
+  const [loadingCommandes, setLoadingCommandes] = useState(false);
+
+  async function voirCommandesClient(client) {
+    setClientCommandeDrawer(client);
+    setLoadingCommandes(true);
+    const { data } = await supabase
+      .from("commandes")
+      .select("id, reference, statut, created_at, notes, montant_total")
+      .eq("etablissement_id", client.id)
+      .order("created_at", { ascending: false })
+      .limit(20);
+    setCommandesClient(data ?? []);
+    setLoadingCommandes(false);
+  }
+
   const showToast = (msg) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3500);
   };
 
+  const STATUT_CMD = {
+    brouillon:  { bg: "#F3F4F6", color: "#6B7280" },
+    envoyee:    { bg: "#FEF9C3", color: "#A16207" },
+    confirmee:  { bg: "#DBEAFE", color: "#2563EB" },
+    en_transit: { bg: "#E0E7FF", color: "#4F46E5" },
+    livree:     { bg: "#DCFCE7", color: "#16A34A" },
+    annulee:    { bg: "#FEF2F2", color: "#DC2626" },
+  };
+
   return (
     <Layout title="Réseau Clients" subtitle="Gestion du portefeuille client et des relations commerciales">
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
+
+      {/* Drawer historique commandes */}
+      {clientCommandeDrawer && (
+        <div style={{ position: "fixed", right: 0, top: 0, bottom: 0, width: 420, backgroundColor: colors.bgCard, boxShadow: "-4px 0 20px rgba(0,0,0,0.1)", zIndex: 500, overflowY: "auto", padding: 24 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: colors.navy }}>{clientCommandeDrawer.nom}</div>
+              <div style={{ fontSize: 12, color: colors.textMuted }}>{clientCommandeDrawer.ville} · {clientCommandeDrawer.type}</div>
+            </div>
+            <button onClick={() => setClientCommandeDrawer(null)} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: colors.textMuted }}>×</button>
+          </div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: colors.navy, marginBottom: 12 }}>Historique des commandes</div>
+          {loadingCommandes ? (
+            <div style={{ color: colors.textMuted, fontSize: 13 }}>Chargement...</div>
+          ) : commandesClient.length === 0 ? (
+            <div style={{ color: colors.textMuted, fontSize: 13, textAlign: "center", padding: "30px 0" }}>
+              Aucune commande enregistree pour ce client.
+            </div>
+          ) : (
+            commandesClient.map((cmd) => {
+              const lignes = (() => { try { const p = JSON.parse(cmd.notes ?? "{}"); return Array.isArray(p.lignes) ? p.lignes : []; } catch { return []; } })();
+              const st = STATUT_CMD[cmd.statut] ?? { bg: "#F3F4F6", color: "#6B7280" };
+              return (
+                <div key={cmd.id} style={{ backgroundColor: colors.bgSurface, borderRadius: 10, padding: "12px 14px", marginBottom: 10, border: `1px solid ${colors.border ?? "var(--border)"}` }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: colors.navy }}>
+                      {cmd.reference ?? cmd.id?.slice(0, 8).toUpperCase()}
+                    </div>
+                    <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 6, fontWeight: 700, backgroundColor: st.bg, color: st.color }}>
+                      {cmd.statut}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11, color: colors.textMuted, marginBottom: 6 }}>
+                    {cmd.created_at ? new Date(cmd.created_at).toLocaleDateString("fr-FR") : "—"}
+                    {cmd.montant_total ? ` · ${Number(cmd.montant_total).toLocaleString("fr-FR")} FCFA` : ""}
+                  </div>
+                  {lignes.length > 0 && (
+                    <div style={{ fontSize: 11, color: colors.text }}>
+                      {lignes.slice(0, 2).map((l, i) => (
+                        <span key={i} style={{ marginRight: 8 }}>
+                          {l.medicament_nom ?? l.medicamentNom ?? l.nom ?? "—"} ×{l.quantite ?? "?"}
+                        </span>
+                      ))}
+                      {lignes.length > 2 && <span style={{ color: colors.textMuted }}>+{lignes.length - 2} autres</span>}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
 
       {toast && (
         <div style={{ position: "fixed", top: 20, right: 20, backgroundColor: "#10B981", color: "white", padding: "12px 20px", borderRadius: 10, fontWeight: 600, fontSize: 13, zIndex: 2000, boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}>
@@ -416,9 +495,12 @@ export default function ReseauClients() {
                   <span style={{ fontSize: 13, fontWeight: 600, color: colors.navy, textTransform: "capitalize" }}>{f.value}</span>
                 </div>
               ))}
-              <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
-                <button onClick={() => setCommandeModal(selected)} style={{ flex: 1, padding: "9px", backgroundColor: "#F59E0B", color: "white", border: "none", borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Créer commande</button>
-                <button onClick={() => setHistoriqueModal(selected)} style={{ flex: 1, padding: "9px", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)", borderRadius: 10, fontSize: 12, cursor: "pointer" }}>Historique</button>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 20 }}>
+                <button onClick={() => setCommandeModal(selected)} style={{ padding: "9px", backgroundColor: "#F59E0B", color: "white", border: "none", borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Créer commande</button>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => voirCommandesClient(selected)} style={{ flex: 1, padding: "9px", backgroundColor: "#EFF6FF", color: "#2563EB", border: "1px solid #BFDBFE", borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Voir les commandes</button>
+                  <button onClick={() => setHistoriqueModal(selected)} style={{ flex: 1, padding: "9px", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)", borderRadius: 10, fontSize: 12, cursor: "pointer" }}>Livraisons</button>
+                </div>
               </div>
             </>
           )}

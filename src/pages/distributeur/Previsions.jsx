@@ -2,7 +2,6 @@ import { colors } from "../../theme";
 import { useState, useEffect, useMemo } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
 import Layout from "../../components/Layout";
-import PredictionsIA from "../../components/PredictionsIA";
 import { useKpiDistributeur, useCommandes, useMedicamentsCritiques } from "../../hooks/useSupabaseData";
 import { insertCommande } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
@@ -17,7 +16,7 @@ const inputStyle = {
   color: colors.navy, backgroundColor: colors.bgCard,
 };
 
-const RESEND_KEY  = "re_iUaDVQFG_LAX2mHCRxm6rf216167mGdJY";
+const RESEND_KEY = process.env.REACT_APP_RESEND_KEY ?? "";
 
 async function sendCommandeEmail({ emailFabricant, fabricant, medicament, quantite, dateLivraison, notes, distributeur }) {
   const dateStr = dateLivraison
@@ -317,6 +316,102 @@ function AgirModal({ action, onClose, onSaved, etablissement_id, distributeurNom
   );
 }
 
+// ─── Analyse commandes distributeur ──────────────────────────────────────────
+function AnalyseCommandesDistributeur() {
+  const { auth } = useAuth();
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!auth?.etablissement_id) return;
+    const mois = new Date();
+    mois.setDate(1);
+    mois.setHours(0, 0, 0, 0);
+
+    Promise.all([
+      supabase.from("commandes").select("id, statut, notes", { count: "exact" })
+        .eq("etablissement_id", auth.etablissement_id)
+        .gte("created_at", mois.toISOString()),
+      supabase.from("livraisons").select("id", { count: "exact" })
+        .eq("etablissement_id", auth.etablissement_id)
+        .eq("statut", "livree")
+        .gte("created_at", mois.toISOString()),
+      supabase.from("commandes").select("id", { count: "exact" })
+        .eq("etablissement_id", auth.etablissement_id)
+        .in("statut", ["envoyee", "confirmee"]),
+    ]).then(([cmdRes, livRes, attRes]) => {
+      const commandes = cmdRes.data ?? [];
+      const compteurProduits = {};
+      commandes.forEach((cmd) => {
+        try {
+          const parsed = JSON.parse(cmd.notes ?? "{}");
+          const lignes = Array.isArray(parsed.lignes) ? parsed.lignes : [];
+          lignes.forEach((l) => {
+            const nom = l.medicament_nom ?? l.medicamentNom ?? l.nom ?? "Inconnu";
+            compteurProduits[nom] = (compteurProduits[nom] ?? 0) + (l.quantite ?? 1);
+          });
+        } catch { /* silencieux */ }
+      });
+      const topProduits = Object.entries(compteurProduits)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 5)
+        .map(([nom, qte]) => ({ nom, qte }));
+      setStats({
+        commandesMois: cmdRes.count ?? 0,
+        livraisonsMois: livRes.count ?? 0,
+        commandesEnAttente: attRes.count ?? 0,
+        topProduits,
+        tauxLivraison: (cmdRes.count ?? 0) > 0 ? Math.round(((livRes.count ?? 0) / (cmdRes.count ?? 1)) * 100) : 0,
+      });
+      setLoading(false);
+    });
+  }, [auth?.etablissement_id]);
+
+  if (loading) return (
+    <div style={{ height: 120, backgroundColor: colors.bgSurface, borderRadius: 12, animation: "pulse 1.5s infinite" }} />
+  );
+  if (!stats) return null;
+
+  return (
+    <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 20 }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: colors.navy, marginBottom: 16 }}>
+        Analyse du mois en cours
+      </div>
+      <div style={{ display: "flex", gap: 14, marginBottom: 20, flexWrap: "wrap" }}>
+        {[
+          { label: "Commandes recues",      value: stats.commandesMois,      color: "#F59E0B" },
+          { label: "Livraisons effectuees", value: stats.livraisonsMois,     color: "#10B981" },
+          { label: "En attente traitement", value: stats.commandesEnAttente, color: stats.commandesEnAttente > 0 ? "#EF4444" : "#6B7280" },
+          { label: "Taux de livraison",     value: `${stats.tauxLivraison}%`, color: "#3B82F6" },
+        ].map((k) => (
+          <div key={k.label} style={{ flex: "1 1 120px", backgroundColor: colors.bgSurface, borderRadius: 10, padding: "12px 16px", borderTop: `3px solid ${k.color}` }}>
+            <div style={{ fontSize: 20, fontWeight: 800, color: k.color }}>{k.value}</div>
+            <div style={{ fontSize: 11, color: colors.textSecondary, marginTop: 3 }}>{k.label}</div>
+          </div>
+        ))}
+      </div>
+      {stats.topProduits.length > 0 && (
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: colors.textSecondary, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+            Top produits commandes ce mois
+          </div>
+          {stats.topProduits.map((p, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: i < stats.topProduits.length - 1 ? "1px solid var(--border-light)" : "none" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ width: 20, height: 20, borderRadius: "50%", backgroundColor: i === 0 ? "#F59E0B" : colors.bgSurface, color: i === 0 ? "white" : colors.textMuted, fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {i + 1}
+                </span>
+                <span style={{ fontSize: 13, color: colors.navy, fontWeight: i === 0 ? 700 : 400 }}>{p.nom}</span>
+              </div>
+              <span style={{ fontSize: 12, fontWeight: 700, color: colors.textSecondary }}>{p.qte} unites</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Page principale ──────────────────────────────────────────────────────────
 export default function Previsions() {
   const { auth } = useAuth();
@@ -422,9 +517,7 @@ export default function Previsions() {
         )}
       </div>
 
-      <div style={{ marginBottom: 20 }}>
-        <PredictionsIA />
-      </div>
+      <AnalyseCommandesDistributeur />
 
       <div className="dash-grid-2">
         <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", minWidth: 0 }}>
