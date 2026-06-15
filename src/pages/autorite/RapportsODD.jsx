@@ -17,17 +17,62 @@ export default function RapportsODD() {
   const { toasts, success } = useToast();
   const [generating, setGenerating] = useState(null);
 
-  // ODD 3.8 : couverture = etablissements actifs / total
-  // null si aucun etablissement => affiche "Donnees insuffisantes"
   const totalEtab  = etablissements.length;
   const actifsEtab = etablissements.filter((e) => e.actif).length;
   const couverture38 = totalEtab > 0 ? Math.round((actifsEtab / totalEtab) * 100) : null;
 
+  const totalMeds   = medicaments.length;
+  const medsEnStock = medicaments.filter((m) => (m.stock_actuel ?? 0) > 0).length;
+  const accesMeds3b = totalMeds > 0 ? Math.round((medsEnStock / totalMeds) * 100) : null;
+
+  const alertesCritiques = alertes.filter((a) => a.severite === "critique").length;
+  const alertesResolues  = alertes.filter((a) => a.severite === "critique" && a.resolu).length;
+  const tauxResolution33 = alertesCritiques > 0
+    ? Math.round((alertesResolues / alertesCritiques) * 100)
+    : null;
+
+  const structuresAvecStockCorrect = etablissements.filter((e) => e.actif).length;
+  const progress34 = totalEtab > 0
+    ? Math.round((structuresAvecStockCorrect / totalEtab) * 100)
+    : null;
+
   const oddData = [
-    { goal: "ODD 3.3", label: "Maladies infectieuses",        progress: null,         target: 80 },
-    { goal: "ODD 3.4", label: "Maladies non transmissibles",  progress: null,         target: 70 },
-    { goal: "ODD 3.8", label: "Couverture sante universelle", progress: couverture38, target: 90 },
-    { goal: "ODD 3.b", label: "Acces medicaments essentiels", progress: null,         target: 85 },
+    {
+      goal: "ODD 3.3",
+      label: "Maladies infectieuses — Taux de resolution des alertes critiques",
+      progress: tauxResolution33,
+      target: 80,
+      source: tauxResolution33 !== null
+        ? `${alertesResolues} alertes resolues sur ${alertesCritiques} critiques`
+        : "Donnees insuffisantes",
+    },
+    {
+      goal: "ODD 3.4",
+      label: "Maladies non transmissibles — Structures actives sur le reseau",
+      progress: progress34,
+      target: 70,
+      source: progress34 !== null
+        ? `${structuresAvecStockCorrect} structures actives sur ${totalEtab}`
+        : "Donnees insuffisantes",
+    },
+    {
+      goal: "ODD 3.8",
+      label: "Couverture sante universelle — Structures enregistrees actives",
+      progress: couverture38,
+      target: 90,
+      source: couverture38 !== null
+        ? `${actifsEtab} actives sur ${totalEtab} enregistrees`
+        : "Donnees insuffisantes",
+    },
+    {
+      goal: "ODD 3.b",
+      label: "Acces medicaments essentiels — Medicaments avec stock disponible",
+      progress: accesMeds3b,
+      target: 85,
+      source: accesMeds3b !== null
+        ? `${medsEnStock} medicaments disponibles sur ${totalMeds}`
+        : "Donnees insuffisantes",
+    },
   ];
 
   const genererPDF = async (rapportNom) => {
@@ -126,6 +171,7 @@ export default function RapportsODD() {
                     <>
                       <div style={{ fontSize: 22, fontWeight: 800, color: o.progress >= o.target ? "#10B981" : "#F59E0B" }}>{o.progress}%</div>
                       <div style={{ fontSize: 10, color: colors.textMuted }}>cible : {o.target}%</div>
+                      <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 2, maxWidth: 160, textAlign: "right" }}>{o.source}</div>
                     </>
                   ) : (
                     <>
