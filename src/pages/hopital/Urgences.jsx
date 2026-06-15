@@ -59,6 +59,17 @@ function ModalArrivee({ patients, etabId, auth, onClose, onSaved }) {
         medecin_nom: form.medecin_nom || null,
         heure_arrivee: new Date().toISOString(),
       });
+      if (form.triage === "urgent" && etabId) {
+        const pat = patients.find((p) => p.id === form.patient_id);
+        await supabase.from("alertes").insert({
+          etablissement_id: etabId,
+          patient_id: form.patient_id,
+          titre: "Arrivee urgente aux urgences",
+          message: `${pat ? pat.prenom + " " + pat.nom : "Patient"} — ${form.motif || "Motif non precise"}`,
+          type: "urgence",
+          statut: "non_lu",
+        }).catch(() => {});
+      }
       onSaved();
       onClose();
     } catch (e) { alert(e.message); }

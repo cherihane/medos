@@ -141,7 +141,7 @@ function ModalPrescrire({ patients, etabId, onClose, onSaved }) {
 }
 
 // ── Modal saisir résultat ──────────────────────────────────────────────────────
-function ModalResultat({ examen, patient, onClose, onSaved }) {
+function ModalResultat({ examen, patient, etabId, onClose, onSaved }) {
   const refsDisponibles = VALEURS_REFERENCE[examen.type_examen] ?? [];
   const [form, setForm] = useState({
     resultat_texte: examen.resultat_texte ?? "",
@@ -167,6 +167,16 @@ function ModalResultat({ examen, patient, onClose, onSaved }) {
         statut: "resultat_disponible",
         resultat_valeurs: Object.keys(valeursForm).length > 0 ? valeursForm : null,
       });
+      if (etabId) {
+        await supabase.from("alertes").insert({
+          etablissement_id: etabId,
+          patient_id: examen.patient_id ?? null,
+          titre: "Resultat d'examen disponible",
+          message: `${examen.type_examen}${examen.libelle ? " — " + examen.libelle : ""}${patient ? " — " + patient.prenom + " " + patient.nom : ""}`,
+          type: "examen",
+          statut: "non_lu",
+        }).catch(() => {});
+      }
       onSaved();
       onClose();
     } catch (e) { alert(e.message); setSaving(false); }
@@ -468,6 +478,7 @@ export default function Examens() {
         <ModalResultat
           examen={modalResultat}
           patient={getPatient(modalResultat)}
+          etabId={etabId}
           onClose={() => setModalResultat(null)}
           onSaved={() => { load(); success("Resultat enregistre"); setModalResultat(null); }}
         />
