@@ -1048,3 +1048,21 @@ export async function genererNumeroLot(etablissement_id) {
   if (error) return `LOT-${annee}-${Date.now().toString().slice(-5)}`;
   return `LOT-${annee}-${String(data).padStart(5, "0")}`;
 }
+
+// ─── Vaccinations ─────────────────────────────────────────────────────────────
+export async function insertVaccination(fields) {
+  return run(supabase.from("vaccinations").insert(fields).select().single());
+}
+export async function fetchVaccinationsPatient(patient_id) {
+  const { data } = await supabase.from("vaccinations").select("*").eq("patient_id", patient_id).order("created_at");
+  return data ?? [];
+}
+
+// ─── Imagerie ─────────────────────────────────────────────────────────────────
+export async function insertImagerie(fields) {
+  return run(supabase.from("imagerie").insert(fields).select().single());
+}
+export async function fetchImageriePatient(patient_id) {
+  const { data } = await supabase.from("imagerie").select("*").eq("patient_id", patient_id).order("date_demande", { ascending: false });
+  return data ?? [];
+}

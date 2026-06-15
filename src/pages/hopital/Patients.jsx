@@ -9,7 +9,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "rec
 import Layout from "../../components/Layout";
 import { usePatientsPaginated, usePatientsStats, useMedicaments } from "../../hooks/useSupabaseData";
 import Pagination from "../../components/Pagination";
-import { insertPatient, insertOrdonnance, upsertHospitalisation, fetchHospitalisation, insertConstante, fetchConstantes, updatePatientTriage, insertNoteEvolution, fetchNotesEvolution, fetchPlanSoinsPatient, fetchPerfusionsPatient, insertAdministration, insertPlanSoins, insertDeces, fetchDecesEtablissement, genererNumeroCertificat, updatePatient, fetchRegimePatient } from "../../hooks/useMutations";
+import { insertPatient, insertOrdonnance, upsertHospitalisation, fetchHospitalisation, insertConstante, fetchConstantes, updatePatientTriage, insertNoteEvolution, fetchNotesEvolution, fetchPlanSoinsPatient, fetchPerfusionsPatient, insertAdministration, insertPlanSoins, insertDeces, fetchDecesEtablissement, genererNumeroCertificat, updatePatient, fetchRegimePatient, insertImagerie, fetchImageriePatient } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../supabaseClient";
 import { openDocument, tableHTML, infoGridHTML, alertBannerHTML, signatureRowHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
@@ -469,6 +469,16 @@ function ModalNouvelleOrdonnance({ patient, etablissement_id, medecinNom, medica
         notes: JSON.stringify({ lignes: lignesDetail, instructions: instructions.trim() || null }),
         ...(etablissement_id ? { etablissement_id } : {}),
       });
+      if (etablissement_id) {
+        await supabase.from("alertes").insert({
+          etablissement_id,
+          patient_id: patient.id,
+          titre: "Nouvelle ordonnance a dispenser",
+          message: `${patient.prenom} ${patient.nom} — ${lignesDetail.map((l) => l.nom).join(", ")}`,
+          type: "ordonnance",
+          statut: "non_lu",
+        }).catch(() => {});
+      }
       onSaved();
     } catch (e) { setErr(e.message); setSaving(false); }
   };
@@ -1055,6 +1065,80 @@ function ModalDeclarationDeces({ patient, hospitalisation, etablissement_id, aut
   );
 }
 
+const TYPES_IMAGERIE = ["Radiographie", "Echographie", "Scanner (TDM)", "IRM", "Mammographie", "Scintigraphie", "Endoscopie", "Autre"];
+
+function ModalNouvelleImagerie({ patient, etablissement_id, medecinNom, onClose, onSaved }) {
+  const [form, setForm] = useState({ type_examen: TYPES_IMAGERIE[0], region_anatomique: "", prescripteur: medecinNom ?? "", urgence: false, notes: "" });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(null);
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const handleSave = async () => {
+    setSaving(true);
+    setErr(null);
+    try {
+      await insertImagerie({
+        patient_id: patient.id,
+        etablissement_id: etablissement_id ?? null,
+        type_examen: form.type_examen,
+        region_anatomique: form.region_anatomique.trim() || null,
+        prescripteur: form.prescripteur.trim() || null,
+        urgence: form.urgence,
+        notes: form.notes.trim() || null,
+        statut: "demande",
+        date_demande: new Date().toISOString().slice(0, 10),
+      });
+      onSaved();
+    } catch (e) { setErr(e.message); setSaving(false); }
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1300, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ background: "white", borderRadius: 16, width: "100%", maxWidth: 480, padding: "24px 26px", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: colors.navy }}>Demande d'imagerie</h3>
+            <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>{patient.prenom} {patient.nom}</div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: colors.textMuted }}>×</button>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div>
+            <label style={labelSt}>Type d'examen</label>
+            <select style={inputSt} value={form.type_examen} onChange={(e) => set("type_examen", e.target.value)}>
+              {TYPES_IMAGERIE.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={labelSt}>Region anatomique</label>
+            <input style={inputSt} value={form.region_anatomique} onChange={(e) => set("region_anatomique", e.target.value)} placeholder="Ex : thorax, abdomen, crane..." />
+          </div>
+          <div>
+            <label style={labelSt}>Prescripteur</label>
+            <input style={inputSt} value={form.prescripteur} onChange={(e) => set("prescripteur", e.target.value)} placeholder="Dr. Nom" />
+          </div>
+          <div>
+            <label style={labelSt}>Notes / indication clinique</label>
+            <textarea style={{ ...inputSt, resize: "vertical", minHeight: 60 }} value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="Indication, contexte clinique..." />
+          </div>
+          <div>
+            <button type="button" onClick={() => set("urgence", !form.urgence)} style={{ padding: "7px 14px", borderRadius: 8, border: `2px solid ${form.urgence ? "#EF4444" : "#E5E7EB"}`, backgroundColor: form.urgence ? "#FEF2F2" : "white", color: form.urgence ? "#DC2626" : "#374151", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+              {form.urgence ? "URGENT" : "Marquer urgent"}
+            </button>
+          </div>
+          {err && <div style={{ padding: "8px 12px", background: "#FEF2F2", borderRadius: 8, fontSize: 12, color: "#DC2626" }}>{err}</div>}
+        </div>
+        <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: 10, background: "#F8FAFC", border: "1px solid var(--border)", borderRadius: 9, fontSize: 13, cursor: "pointer" }}>Annuler</button>
+          <button onClick={handleSave} disabled={saving} style={{ flex: 2, padding: 10, background: saving ? "#D1D5DB" : ACCENT, color: "white", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer" }}>
+            {saving ? "Enregistrement..." : "Enregistrer la demande"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medicaments, onClose, onPatientUpdated, auth }) {
   const [onglet, setOnglet]           = useState("dossier");
   const [ordonnances, setOrdonnances] = useState([]);
@@ -1089,6 +1173,9 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
   const [savingNote, setSavingNote]   = useState(false);
   // Régime alimentaire
   const [regimeActif, setRegimeActif] = useState(null);
+  // Imagerie
+  const [imagerie, setImagerie]       = useState([]);
+  const [showModalImagerie, setShowModalImagerie] = useState(false);
 
   const charger = useCallback(async () => {
     setLoading(true);
@@ -1118,6 +1205,7 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
 
   useEffect(() => {
     fetchRegimePatient(patient.id).then(setRegimeActif);
+    fetchImageriePatient(patient.id).then(setImagerie);
   }, [patient.id]);
 
   const parseLignes = (notes) => { try { return JSON.parse(notes).lignes ?? []; } catch { return []; } };
@@ -1199,6 +1287,7 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
     ...(peutVoirOrd        ? [["ordonnances", `Ordonnances (${ordonnances.length})`]] : []),
     ...(peutVoirComptes    ? [["comptes", `Comptes rendus (${comptes.length})`]] : []),
     ...(peutVoirHistorique ? [["historique", `Historique (${historique.length})`]] : []),
+    ...(ri !== "Caissier"  ? [["imagerie", `Imagerie (${imagerie.length})`]] : []),
     ["qrcode", "QR Code"],
   ];
 
@@ -1879,6 +1968,49 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {onglet === "imagerie" && (
+              <div>
+                {showModalImagerie && (
+                  <ModalNouvelleImagerie
+                    patient={patient}
+                    etablissement_id={etablissement_id}
+                    medecinNom={medecinNom}
+                    onClose={() => setShowModalImagerie(false)}
+                    onSaved={() => { setShowModalImagerie(false); fetchImageriePatient(patient.id).then(setImagerie); }}
+                  />
+                )}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: colors.navy }}>Examens d'imagerie</div>
+                  <button onClick={() => setShowModalImagerie(true)} style={{ padding: "7px 14px", background: ACCENT, color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>+ Demander une imagerie</button>
+                </div>
+                {imagerie.length === 0 ? (
+                  <div style={{ textAlign: "center", color: colors.textMuted, padding: "32px 0", fontSize: 13 }}>Aucun examen d'imagerie enregistre</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {imagerie.map((img) => {
+                      const statusCfg = { demande: { bg: "#DBEAFE", color: "#2563EB", label: "Demande" }, en_cours: { bg: "#FEF3C7", color: "#D97706", label: "En cours" }, disponible: { bg: "#DCFCE7", color: "#16A34A", label: "Disponible" }, annule: { bg: "#FEF2F2", color: "#EF4444", label: "Annule" } };
+                      const sc = statusCfg[img.statut] ?? statusCfg.demande;
+                      return (
+                        <div key={img.id} style={{ background: "white", border: "1px solid var(--border)", borderRadius: 10, padding: "12px 16px" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: colors.navy }}>{img.type_examen}</div>
+                              <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>{img.region_anatomique ?? "—"}{img.prescripteur ? ` · Dr. ${img.prescripteur}` : ""}</div>
+                              {img.date_demande && <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>Demande le {fmtDate(img.date_demande)}</div>}
+                            </div>
+                            <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 9px", borderRadius: 8, backgroundColor: sc.bg, color: sc.color }}>{sc.label}</span>
+                          </div>
+                          {img.conclusion && (
+                            <div style={{ marginTop: 8, padding: "8px 10px", background: "#F8FAFC", borderRadius: 8, fontSize: 12, color: colors.text }}>{img.conclusion}</div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>
