@@ -1,8 +1,10 @@
 import { colors } from "../../theme";
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import Layout from "../../components/Layout";
 import { useAlertes } from "../../hooks/useSupabaseData";
+import { useAuth } from "../../context/AuthContext";
+import { supabase } from "../../supabaseClient";
 
 const SEVERITE_STYLE = {
   critique: { bg: "#FEF2F2", color: "#EF4444" },
@@ -13,8 +15,58 @@ const SEVERITE_STYLE = {
 
 const MOIS_LABELS = ["Jan", "Fev", "Mar", "Avr", "Mai", "Jun", "Jul", "Aou", "Sep", "Oct", "Nov", "Dec"];
 
+function useEpiStats() {
+  const { auth } = useAuth();
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!auth?.etablissement_id) { setLoading(false); return; }
+    const sixMoisAgo = new Date();
+    sixMoisAgo.setMonth(sixMoisAgo.getMonth() - 6);
+
+    Promise.all([
+      supabase.from("consultations")
+        .select("motif, service, triage, heure_arrivee")
+        .gte("heure_arrivee", sixMoisAgo.toISOString())
+        .not("motif", "is", null),
+      supabase.from("examens")
+        .select("type_examen, interpretation, created_at")
+        .eq("interpretation", "critique")
+        .gte("created_at", sixMoisAgo.toISOString()),
+      supabase.from("hospitalisations")
+        .select("service, statut, date_entree")
+        .gte("date_entree", sixMoisAgo.toISOString()),
+    ]).then(([consult, examens, hospit]) => {
+      const compteurMotifs = {};
+      (consult.data ?? []).forEach((c) => {
+        const m = (c.motif ?? "").trim().toLowerCase();
+        if (m) compteurMotifs[m] = (compteurMotifs[m] ?? 0) + 1;
+      });
+      const topMotifs = Object.entries(compteurMotifs)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 5)
+        .map(([motif, count]) => ({ motif, count }));
+
+      const parService = {};
+      (hospit.data ?? []).forEach((h) => {
+        const s = h.service ?? "Inconnu";
+        if (!parService[s]) parService[s] = { total: 0, actifs: 0 };
+        parService[s].total += 1;
+        if (h.statut === "hospitalise") parService[s].actifs += 1;
+      });
+
+      setStats({ topMotifs, parService, totalConsult: consult.data?.length ?? 0 });
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, [auth?.etablissement_id]);
+
+  return { stats, loading };
+}
+
 export default function Épidémiologie() {
   const { data: alertes, loading } = useAlertes(100);
+  const { stats, loading: statsLoading } = useEpiStats();
 
   // Alertes de type épidémiologique
   const alertesEpi = useMemo(
@@ -90,6 +142,61 @@ export default function Épidémiologie() {
           </div>
         )}
       </div>
+
+      {!statsLoading && stats?.topMotifs?.length > 0 && (
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: 24, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 20 }}>
+          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>
+            Top motifs de consultation — 6 derniers mois
+          </h3>
+          {stats.topMotifs.map((m, i) => (
+            <div key={m.motif} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0", borderBottom: i < stats.topMotifs.length - 1 ? "1px solid var(--border-light)" : "none" }}>
+              <span style={{ width: 22, height: 22, borderRadius: "50%", backgroundColor: i === 0 ? "#8B5CF6" : colors.bgSurface, color: i === 0 ? "white" : colors.textMuted, fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                {i + 1}
+              </span>
+              <span style={{ flex: 1, fontSize: 13, color: colors.navy, textTransform: "capitalize" }}>{m.motif}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: colors.textSecondary }}>{m.count} cas</span>
+              <div style={{ width: 80, height: 6, backgroundColor: colors.borderLight ?? "#E5E7EB", borderRadius: 3 }}>
+                <div style={{ height: "100%", width: `${Math.round((m.count / stats.topMotifs[0].count) * 100)}%`, backgroundColor: "#8B5CF6", borderRadius: 3 }} />
+              </div>
+            </div>
+          ))}
+          <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 12 }}>
+            Base sur {stats.totalConsult} consultations enregistrees dans MedOS
+          </div>
+        </div>
+      )}
+
+      {!statsLoading && stats?.parService && Object.keys(stats.parService).length > 0 && (
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: 24, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 20 }}>
+          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>
+            Hospitalisations par service — 6 derniers mois
+          </h3>
+          {Object.entries(stats.parService)
+            .sort(([, a], [, b]) => b.total - a.total)
+            .slice(0, 6)
+            .map(([service, data]) => {
+              const tauxActifs = data.total > 0 ? Math.round((data.actifs / data.total) * 100) : 0;
+              const maxTotal = Math.max(...Object.values(stats.parService).map((d) => d.total));
+              return (
+                <div key={service} style={{ marginBottom: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
+                    <span style={{ color: colors.navy, fontWeight: 600 }}>{service}</span>
+                    <span style={{ color: colors.textMuted }}>{data.actifs} hospitalises actuellement / {data.total} total</span>
+                  </div>
+                  <div style={{ height: 8, backgroundColor: colors.borderLight ?? "#E5E7EB", borderRadius: 4 }}>
+                    <div style={{
+                      height: "100%",
+                      width: `${Math.min(100, Math.round((data.total / maxTotal) * 100))}%`,
+                      backgroundColor: tauxActifs > 70 ? "#EF4444" : tauxActifs > 40 ? "#F59E0B" : "#10B981",
+                      borderRadius: 4,
+                    }} />
+                  </div>
+                </div>
+              );
+            })
+          }
+        </div>
+      )}
 
       <div className="dash-grid-2">
         <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>

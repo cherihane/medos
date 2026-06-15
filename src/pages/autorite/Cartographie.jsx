@@ -53,38 +53,71 @@ export default function Cartographie() {
       </div>
 
       <div className="dash-grid-2-1">
-        {/* Zone carte */}
+        {/* Zone géographique hiérarchique */}
         <div style={{ backgroundColor: colors.bgCard, borderRadius: 16, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Carte des etablissements</h3>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: colors.navy }}>
+              Repartition geographique
+            </h3>
+            <span style={{ fontSize: 12, color: colors.textMuted }}>
+              {villes} ville{villes > 1 ? "s" : ""} · {etablissements.length} structure{etablissements.length > 1 ? "s" : ""}
+            </span>
+          </div>
 
           {loading ? (
-            <div style={{ height: 400, display: "flex", alignItems: "center", justifyContent: "center", color: colors.textMuted, fontSize: 14 }}>
-              Chargement…
-            </div>
+            [1,2,3,4].map((i) => <div key={i} style={{ height: 60, backgroundColor: colors.bgSurface, borderRadius: 10, marginBottom: 8, animation: "pulse 1.5s infinite" }} />)
           ) : etablissements.length === 0 ? (
-            <div style={{ height: 400, backgroundColor: colors.bgSurface, borderRadius: 12, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}>
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="1.5"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-              <div style={{ fontSize: 15, fontWeight: 700, color: colors.text }}>Aucun etablissement connecte dans votre region</div>
-              <div style={{ fontSize: 13, color: colors.textMuted }}>Les structures apparaîtront ici une fois enregistrées dans le systeme.</div>
+            <div style={{ padding: "48px 0", textAlign: "center", color: colors.textMuted, fontSize: 13 }}>
+              Aucun etablissement enregistre dans le systeme.
             </div>
           ) : (
-            <div style={{ width: "100%", height: 400, backgroundColor: "#E8F4F0", borderRadius: 12, position: "relative", overflow: "hidden" }}>
-              {[20, 40, 60, 80].map((v) => (
-                <div key={`h${v}`} style={{ position: "absolute", top: `${v}%`, left: 0, right: 0, height: 1, backgroundColor: "rgba(0,0,0,0.06)" }} />
-              ))}
-              {[20, 40, 60, 80].map((v) => (
-                <div key={`v${v}`} style={{ position: "absolute", left: `${v}%`, top: 0, bottom: 0, width: 1, backgroundColor: "rgba(0,0,0,0.06)" }} />
-              ))}
-              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 8 }}>
-                <div style={{ fontSize: 22, fontWeight: 800, color: "#8B5CF6" }}>{etablissements.length}</div>
-                <div style={{ fontSize: 13, color: colors.textSecondary }}>établissement{etablissements.length > 1 ? "s" : ""} enregistré{etablissements.length > 1 ? "s" : ""}</div>
-                <div style={{ fontSize: 12, color: colors.textMuted }}>{villes} ville{villes > 1 ? "s" : ""}</div>
-              </div>
-              <div style={{ position: "absolute", bottom: 12, right: 12, fontSize: 11, color: colors.textMuted, backgroundColor: "rgba(255,255,255,0.8)", padding: "4px 8px", borderRadius: 6 }}>
-                Vue par ville — {villes} zone{villes > 1 ? "s" : ""} couverte{villes > 1 ? "s" : ""}
-              </div>
+            <div style={{ maxHeight: 520, overflowY: "auto", paddingRight: 4 }}>
+              {parVille.map(([ville, structures]) => {
+                const actives = structures.filter((e) => e.actif).length;
+                const pct = Math.round((actives / structures.length) * 100);
+                return (
+                  <div key={ville} style={{ marginBottom: 12 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", backgroundColor: colors.bgSurface, borderRadius: 10, marginBottom: 4 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: pct > 70 ? "#10B981" : pct > 40 ? "#F59E0B" : "#EF4444" }} />
+                        <span style={{ fontSize: 13, fontWeight: 700, color: colors.navy }}>{ville}</span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 11, color: colors.textMuted }}>{structures.length} structure{structures.length > 1 ? "s" : ""}</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: pct > 70 ? "#10B981" : "#F59E0B" }}>{pct}% actives</span>
+                      </div>
+                    </div>
+                    {structures.map((e) => (
+                      <div key={e.id} style={{
+                        display: "flex", justifyContent: "space-between", alignItems: "center",
+                        padding: "7px 14px 7px 28px",
+                        borderLeft: `2px solid ${typeColor(e.type)}`,
+                        marginLeft: 16, marginBottom: 3,
+                        backgroundColor: colors.bgSurface,
+                        borderRadius: "0 8px 8px 0",
+                      }}>
+                        <div>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: colors.navy }}>{e.nom}</span>
+                          <span style={{ fontSize: 11, color: colors.textMuted, marginLeft: 6 }}>{e.type}</span>
+                        </div>
+                        <span style={{
+                          fontSize: 10, padding: "2px 7px", borderRadius: 6, fontWeight: 700,
+                          backgroundColor: e.actif ? "#DCFCE7" : "#FEF2F2",
+                          color: e.actif ? "#16A34A" : "#DC2626",
+                        }}>
+                          {e.actif ? "Actif" : "Inactif"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
             </div>
           )}
+
+          <div style={{ textAlign: "center", padding: "12px 0 0", fontSize: 11, color: colors.textMuted, borderTop: "1px solid var(--border-light)", marginTop: 12 }}>
+            Carte interactive disponible dans la prochaine version — integration Leaflet/OpenStreetMap prevue
+          </div>
         </div>
 
         {/* Panneau lateral */}
