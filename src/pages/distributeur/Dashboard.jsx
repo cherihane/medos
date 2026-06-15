@@ -63,6 +63,15 @@ function CommandesPanel() {
   const [newIds, setNewIds] = useState(new Set());
   const [actionError, setActionError] = useState(null);
 
+  function parseLignes(c) {
+    try {
+      if (Array.isArray(c.lignes)) return c.lignes;
+      const parsed = JSON.parse(c.notes ?? "{}");
+      if (Array.isArray(parsed.lignes)) return parsed.lignes;
+      return [];
+    } catch { return []; }
+  }
+
   // Détecte les nouvelles lignes arrivées via Realtime (hors chargement initial).
   // On utilise un ref pour mémoriser les IDs déjà vus sans provoquer de re-render.
   // null = chargement initial pas encore terminé.
@@ -92,11 +101,33 @@ function CommandesPanel() {
     return () => clearTimeout(timer);
   }, [commandes, loading]);
 
-  const handleAction = async (id, statut) => {
-    setUpdating(id);
+  const handleAction = async (cmd, statut) => {
+    setUpdating(cmd.id);
     setActionError(null);
     try {
-      await updateCommande(id, { statut });
+      await updateCommande(cmd.id, { statut });
+      if (["confirmee", "en_transit", "livree", "annulee"].includes(statut)) {
+        const { data: row } = await supabase
+          .from("commandes")
+          .select("etablissement_id")
+          .eq("id", cmd.id)
+          .single();
+        if (row?.etablissement_id) {
+          const titres = {
+            confirmee:  "Commande confirmee",
+            en_transit: "Commande en transit",
+            livree:     "Commande livree",
+            annulee:    "Commande annulee",
+          };
+          await supabase.from("alertes").insert({
+            etablissement_id: row.etablissement_id,
+            titre: titres[statut] ?? "Commande mise a jour",
+            message: `Ref. ${cmd.reference ?? cmd.id?.slice(0, 8).toUpperCase()}`,
+            severite: statut === "annulee" ? "critique" : "info",
+            resolu: false,
+          }).catch(() => {});
+        }
+      }
     } catch (e) {
       setActionError("Erreur : " + e.message);
     } finally {
@@ -153,11 +184,28 @@ function CommandesPanel() {
                   </div>
                   <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>
                     {c.reference ?? c.id.slice(0, 8).toUpperCase()} · {fmt(c.date_commande)}
-                    {c.notes && <span> · {c.notes.slice(0, 60)}{c.notes.length > 60 ? "…" : ""}</span>}
                   </div>
                 </div>
                 <StatutBadge statut={c.statut} />
               </div>
+
+              {(() => {
+                const lignes = parseLignes(c);
+                if (!lignes.length) return null;
+                return (
+                  <div style={{ backgroundColor: colors.bgCard, borderRadius: 8, padding: "6px 10px", marginBottom: 6, border: "1px solid var(--border-light)" }}>
+                    {lignes.slice(0, 3).map((l, i) => (
+                      <div key={i} style={{ fontSize: 11, color: colors.text, padding: "2px 0", borderBottom: i < Math.min(lignes.length, 3) - 1 ? "1px solid var(--border-light)" : "none" }}>
+                        <span style={{ fontWeight: 600 }}>{l.medicament_nom ?? l.medicamentNom ?? l.nom ?? "—"}</span>
+                        <span style={{ color: colors.textMuted, marginLeft: 6 }}>× {l.quantite ?? "?"}</span>
+                      </div>
+                    ))}
+                    {lignes.length > 3 && (
+                      <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 3 }}>+{lignes.length - 3} autre(s)</div>
+                    )}
+                  </div>
+                );
+              })()}
 
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div style={{ fontSize: 13, fontWeight: 800, color: colors.navy }}>
@@ -167,14 +215,14 @@ function CommandesPanel() {
                 {(c.statut === "envoyee" || c.statut === "brouillon") && (
                   <div style={{ display: "flex", gap: 6 }}>
                     <button
-                      onClick={() => handleAction(c.id, "confirmee")}
+                      onClick={() => handleAction(c, "confirmee")}
                       disabled={updating === c.id}
                       style={{ padding: "5px 12px", backgroundColor: "#DCFCE7", color: "#16A34A", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: updating === c.id ? "wait" : "pointer" }}
                     >
                       {updating === c.id ? "…" : "Valider"}
                     </button>
                     <button
-                      onClick={() => handleAction(c.id, "annulee")}
+                      onClick={() => handleAction(c, "annulee")}
                       disabled={updating === c.id}
                       style={{ padding: "5px 12px", backgroundColor: "#FEF2F2", color: "#DC2626", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: updating === c.id ? "wait" : "pointer" }}
                     >
@@ -184,7 +232,7 @@ function CommandesPanel() {
                 )}
                 {c.statut === "confirmee" && (
                   <button
-                    onClick={() => handleAction(c.id, "en_transit")}
+                    onClick={() => handleAction(c, "en_transit")}
                     disabled={updating === c.id}
                     style={{ padding: "5px 12px", backgroundColor: "#DBEAFE", color: "#2563EB", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: updating === c.id ? "wait" : "pointer" }}
                   >
@@ -193,7 +241,7 @@ function CommandesPanel() {
                 )}
                 {c.statut === "en_transit" && (
                   <button
-                    onClick={() => handleAction(c.id, "livree")}
+                    onClick={() => handleAction(c, "livree")}
                     disabled={updating === c.id}
                     style={{ padding: "5px 12px", backgroundColor: "#DCFCE7", color: "#16A34A", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: updating === c.id ? "wait" : "pointer" }}
                   >

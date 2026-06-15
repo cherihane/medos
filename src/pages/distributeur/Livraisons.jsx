@@ -83,10 +83,13 @@ function NouvelleModal({ etablissements, onClose, onSaved }) {
 // ── Modal Update statut ───────────────────────────────────────────────────────
 function StatutModal({ livraison, onClose, onSaved }) {
   const [statut, setStatut] = useState(livraison.statut);
-  const [medicamentNom, setMedicamentNom] = useState("");
-  const [quantiteLivree, setQuantiteLivree] = useState("");
+  const [lignesLivraison, setLignesLivraison] = useState([{ nom: "", quantite: "" }]);
   const [stockWarn, setStockWarn] = useState(null);
   const [saving, setSaving] = useState(false);
+
+  function addLigneL() { setLignesLivraison((prev) => [...prev, { nom: "", quantite: "" }]); }
+  function updateLigneL(i, key, val) { setLignesLivraison((prev) => prev.map((l, idx) => idx === i ? { ...l, [key]: val } : l)); }
+  function removeLigneL(i) { setLignesLivraison((prev) => prev.filter((_, idx) => idx !== i)); }
 
   const handleSave = async () => {
     setSaving(true);
@@ -95,28 +98,28 @@ function StatutModal({ livraison, onClose, onSaved }) {
       const update = { statut };
       if (statut === "livree") {
         update.date_arrivee_reelle = new Date().toISOString();
-        const nom = medicamentNom.trim();
-        const qte = parseInt(quantiteLivree, 10);
-        if (nom) update.medicament_nom = nom;
-        if (!isNaN(qte) && qte > 0) update.quantite_livree = qte;
-      }
-      await updateLivraison(livraison.id, update);
+        const lignesValides = lignesLivraison.filter((l) => l.nom.trim() && parseInt(l.quantite) > 0);
+        const avertissements = [];
 
-      // Incrément stock destinataire via RPC SECURITY DEFINER
-      if (statut === "livree") {
-        const nom = medicamentNom.trim();
-        const qte = parseInt(quantiteLivree, 10);
-        if (nom && !isNaN(qte) && qte > 0) {
-          const result = await receiveLivraison(nom, qte, livraison.etablissement_id);
-          if (result === "medicament_introuvable") {
-            setStockWarn(`Statut mis à jour, mais "${nom}" est introuvable dans l'inventaire du destinataire — stock non incrémenté.`);
-            setSaving(false);
-            onSaved(statut);
-            return;
+        for (const ligne of lignesValides) {
+          const res = await receiveLivraison(ligne.nom.trim(), parseInt(ligne.quantite), livraison.etablissement_id);
+          if (res === "medicament_introuvable") {
+            avertissements.push(`"${ligne.nom}" introuvable dans l'inventaire du destinataire`);
           }
         }
-      }
 
+        update.lignes_livrees = JSON.stringify(lignesValides);
+        update.quantite_livree = lignesValides.reduce((s, l) => s + (parseInt(l.quantite) || 0), 0);
+
+        if (avertissements.length > 0) {
+          await updateLivraison(livraison.id, update);
+          setStockWarn(`Stock non incremente pour : ${avertissements.join(", ")}`);
+          setSaving(false);
+          onSaved(statut);
+          return;
+        }
+      }
+      await updateLivraison(livraison.id, update);
       onSaved(statut);
       onClose();
     } catch (e) {
@@ -127,7 +130,7 @@ function StatutModal({ livraison, onClose, onSaved }) {
   };
 
   return (
-    <Modal title="Modifier le statut" onClose={onClose} width={420}>
+    <Modal title="Modifier le statut" onClose={onClose} width={480}>
       <Field label="Nouveau statut">
         <select style={selectStyle} value={statut} onChange={(e) => { setStatut(e.target.value); setStockWarn(null); }}>
           {Object.entries(statusStyle).map(([key, val]) => (
@@ -137,34 +140,44 @@ function StatutModal({ livraison, onClose, onSaved }) {
       </Field>
 
       {statut === "livree" && (
-        <>
-          <div style={{ margin: "12px 0 8px", padding: "10px 14px", backgroundColor: colors.bg, borderRadius: 8, fontSize: 12, color: colors.text }}>
-            Renseignez le médicament livré pour incrémenter automatiquement le stock de l'établissement destinataire.
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 8, padding: "8px 12px", backgroundColor: colors.bgSurface, borderRadius: 8 }}>
+            Renseignez les medicaments livres pour incrementer le stock du destinataire.
           </div>
-          <Field label="Médicament livré (nom exact)">
-            <input
-              style={inputStyle}
-              value={medicamentNom}
-              onChange={(e) => setMedicamentNom(e.target.value)}
-              placeholder="Ex: Paracétamol 500mg"
-            />
-          </Field>
-          <Field label="Quantité livrée">
-            <input
-              style={inputStyle}
-              type="number"
-              min="1"
-              value={quantiteLivree}
-              onChange={(e) => setQuantiteLivree(e.target.value)}
-              placeholder="Ex: 200"
-            />
-          </Field>
+          {lignesLivraison.map((l, i) => (
+            <div key={i} style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "center" }}>
+              <input
+                value={l.nom}
+                onChange={(e) => updateLigneL(i, "nom", e.target.value)}
+                placeholder="Nom du medicament"
+                style={{ ...inputStyle, flex: 2 }}
+              />
+              <input
+                type="number"
+                min="1"
+                value={l.quantite}
+                onChange={(e) => updateLigneL(i, "quantite", e.target.value)}
+                placeholder="Qte"
+                style={{ ...inputStyle, width: 80, flex: "none" }}
+              />
+              {lignesLivraison.length > 1 && (
+                <button type="button" onClick={() => removeLigneL(i)}
+                  style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 18, fontWeight: 700, padding: "0 4px" }}>
+                  ×
+                </button>
+              )}
+            </div>
+          ))}
+          <button type="button" onClick={addLigneL}
+            style={{ fontSize: 11, padding: "4px 12px", borderRadius: 6, backgroundColor: "#FEF3C7", color: "#92400E", border: "1px solid #F59E0B", cursor: "pointer", fontWeight: 600, marginTop: 4 }}>
+            + Ajouter un medicament
+          </button>
           {stockWarn && (
-            <div style={{ padding: "10px 14px", backgroundColor: "#FFFBEB", border: "1.5px solid #FCD34D", borderRadius: 8, fontSize: 12, color: "#92400E", marginTop: 8 }}>
+            <div style={{ marginTop: 10, padding: "8px 12px", backgroundColor: "#FFFBEB", border: "1px solid #F59E0B", borderRadius: 8, fontSize: 12, color: "#92400E" }}>
               {stockWarn}
             </div>
           )}
-        </>
+        </div>
       )}
 
       <ModalFooter onCancel={onClose} onSubmit={handleSave} submitLabel="Mettre à jour" saving={saving} />
