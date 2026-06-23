@@ -36,6 +36,7 @@ function TriageBadge({ triage, size = 11 }) {
 
 // ── Modal arrivée urgences ─────────────────────────────────────────────────────
 function ModalArrivee({ patients, etabId, auth, onClose, onSaved }) {
+  const { error: showError } = useToast();
   const [form, setForm] = useState({ patient_id: "", motif: "", triage: "non_urgent", medecin_nom: "" });
   const [saving, setSaving] = useState(false);
   const [filtre, setFiltre] = useState("");
@@ -46,7 +47,7 @@ function ModalArrivee({ patients, etabId, auth, onClose, onSaved }) {
   }).slice(0, 60);
 
   const handleSave = async () => {
-    if (!form.patient_id) return alert("Selectionnez un patient.");
+    if (!form.patient_id) return showError("Selectionnez un patient.");
     setSaving(true);
     try {
       await insertConsultation({
@@ -72,7 +73,7 @@ function ModalArrivee({ patients, etabId, auth, onClose, onSaved }) {
       }
       onSaved();
       onClose();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
     finally { setSaving(false); }
   };
 
@@ -125,6 +126,7 @@ function ModalArrivee({ patients, etabId, auth, onClose, onSaved }) {
 
 // ── Modal triage ABCDE ─────────────────────────────────────────────────────────
 function ModalTriage({ consultation, patients, onClose, onSaved }) {
+  const { error: showError } = useToast();
   const [abcde, setAbcde] = useState({ a: null, b: null, c_tension: "", c_pouls: "", d: "", e: "" });
   const [triageFinal, setTriageFinal] = useState("non_urgent");
   const [saving, setSaving] = useState(false);
@@ -151,7 +153,7 @@ function ModalTriage({ consultation, patients, onClose, onSaved }) {
       await updateConsultation(consultation.id, { triage: triageFinal, medecin_nom: consultation.medecin_nom ?? null });
       onSaved();
       onClose();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
     finally { setSaving(false); }
   };
 
@@ -243,7 +245,7 @@ function ModalTriage({ consultation, patients, onClose, onSaved }) {
 
 // ── Modal orientation ──────────────────────────────────────────────────────────
 function ModalOrientation({ consultation, auth, etabId, onClose, onSaved }) {
-  const { success } = useToast();
+  const { success, error: showError } = useToast();
   const [orientation, setOrientation] = useState("domicile");
   const [etabTransfert, setEtabTransfert] = useState("");
   const [saving, setSaving] = useState(false);
@@ -267,7 +269,7 @@ function ModalOrientation({ consultation, auth, etabId, onClose, onSaved }) {
       success("Patient oriente");
       onSaved();
       onClose();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
     finally { setSaving(false); }
   };
 
@@ -309,7 +311,7 @@ function ModalOrientation({ consultation, auth, etabId, onClose, onSaved }) {
 
 // ── Modal constantes rapides ───────────────────────────────────────────────────
 function ModalConstantesRapides({ consultation, etabId, auth, onClose, onSaved }) {
-  const { success } = useToast();
+  const { success, error: showError } = useToast();
   const [form, setForm] = useState({ temperature: "", tension_systolique: "", tension_diastolique: "", pouls: "", saturation_o2: "" });
   const [saving, setSaving] = useState(false);
 
@@ -321,7 +323,7 @@ function ModalConstantesRapides({ consultation, etabId, auth, onClose, onSaved }
       await insertConstante(payload);
       success("Constantes enregistrees");
       onSaved(); onClose();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
     finally { setSaving(false); }
   };
 
@@ -359,7 +361,7 @@ function ModalConstantesRapides({ consultation, etabId, auth, onClose, onSaved }
 
 // ── Carte patient urgences ─────────────────────────────────────────────────────
 function CartePatientUrgences({ consultation, patients, auth, etabId, onRefresh, phase }) {
-  const { success } = useToast();
+  const { success, error: showError } = useToast();
   const [modalTriage, setModalTriage]     = useState(false);
   const [modalOrient, setModalOrient]     = useState(false);
   const [modalConst, setModalConst]       = useState(false);
@@ -375,7 +377,7 @@ function CartePatientUrgences({ consultation, patients, auth, etabId, onRefresh,
       await updateConsultation(consultation.id, { statut: "en_cours", heure_debut: new Date().toISOString() });
       success("Patient appele — prise en charge en cours");
       onRefresh();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
   };
 
   return (
@@ -420,7 +422,7 @@ function CartePatientUrgences({ consultation, patients, auth, etabId, onRefresh,
 export default function Urgences() {
   const { auth }    = useAuth();
   const { toasts }  = useToast();
-  const { data: patients } = usePatients();
+  const { data: patients } = usePatients(auth?.etablissement_id);
   const [consultations, setConsultations] = useState([]);
   const [loading, setLoading]             = useState(true);
   const [showArrivee, setShowArrivee]     = useState(false);

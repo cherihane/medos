@@ -378,7 +378,7 @@ function OngletCalculDoses({ patient }) {
 export default function Pediatrie() {
   const { auth } = useAuth();
   const { toasts } = useToast();
-  const { data: patients } = usePatients();
+  const { data: patients } = usePatients(auth?.etablissement_id);
   const etabId = auth?.etablissement_id ?? null;
   const medecinNom = auth?.user?.email?.split("@")[0] ?? null;
 

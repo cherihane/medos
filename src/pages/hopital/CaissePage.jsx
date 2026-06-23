@@ -300,7 +300,7 @@ function ModalFermetureCaisse({ session, paiements, etabId, auth, onClose, onSav
         ],
       });
       onSaved(); onClose();
-    } catch (e) { alert("Erreur : " + e.message); }
+    } catch (e) { showError("Erreur : " + e.message); }
     finally { setSaving(false); }
   };
 
@@ -346,8 +346,8 @@ function OngletCaisseJour({ etabId, auth, config }) {
   const [loadingFile, setLoadingFile] = useState(false);
   const [encaisserModal, setEncaisserModal] = useState(null);
   const [fermerModal, setFermerModal] = useState(false);
-  const { data: patients }            = usePatients();
-  const { toasts, success }           = useToast();
+  const { data: patients }            = usePatients(auth?.etablissement_id);
+  const { toasts, success, error: showError } = useToast();
   const email = auth?.user?.email ?? "";
 
   const checkSession = useCallback(async () => {
@@ -373,7 +373,7 @@ function OngletCaisseJour({ etabId, auth, config }) {
   useEffect(() => { loadData(); }, [loadData]);
 
   const handleOuvrir = async () => {
-    if (!fondForm.fond_initial) return alert("Saisissez le fond de caisse.");
+    if (!fondForm.fond_initial) return showError("Saisissez le fond de caisse.");
     setOpening(true);
     try {
       const s = await ouvrirSessionCaisse({
@@ -383,7 +383,7 @@ function OngletCaisseJour({ etabId, auth, config }) {
         date_session: new Date().toISOString().slice(0, 10),
       });
       setSession(s); success("Caisse ouverte");
-    } catch (e) { alert("Erreur : " + e.message); }
+    } catch (e) { showError("Erreur : " + e.message); }
     finally { setOpening(false); }
   };
 
@@ -593,11 +593,11 @@ function FactureModal({ patients, etabId, config, onClose, onSaved }) {
   const assureurs = config?.assureurs ?? [];
 
   const handleSave = async () => {
-    if (!patient_id) return alert("Selectionnez un patient.");
+    if (!patient_id) return showError("Selectionnez un patient.");
     const lignesActes  = Object.values(actesCoches).map((a) => ({ libelle: a.libelle, quantite: 1, prix_unitaire: Number(a.prix_unitaire) || 0 }));
     const lignesValides = lignes.filter((l) => l.libelle.trim());
     const toutesLignes  = [...lignesActes, ...lignesValides];
-    if (toutesLignes.length === 0) return alert("Ajoutez au moins une ligne.");
+    if (toutesLignes.length === 0) return showError("Ajoutez au moins une ligne.");
     setSaving(true);
     try {
       await insertFacture({
@@ -609,7 +609,7 @@ function FactureModal({ patients, etabId, config, onClose, onSaved }) {
         date_facture: new Date().toISOString().slice(0, 10),
       });
       onSaved(); onClose();
-    } catch (e) { alert("Erreur : " + e.message); }
+    } catch (e) { showError("Erreur : " + e.message); }
     finally { setSaving(false); }
   };
 
@@ -744,14 +744,14 @@ function PanelTarifs({ etabId, onClose }) {
   const load = useCallback(async () => { setLoading(true); setTarifs(await fetchTarifsActesTous(etabId)); setLoading(false); }, [etabId]);
   useEffect(() => { load(); }, [load]);
   const handleSave = async () => {
-    if (!form.libelle.trim()) return alert("Libelle obligatoire.");
+    if (!form.libelle.trim()) return showError("Libelle obligatoire.");
     setSaving(true);
     try {
       if (editing) await updateTarifActe(editing.id, { libelle: form.libelle, categorie: form.categorie, prix_defaut: Number(form.prix_defaut) });
       else await insertTarifActe({ ...form, etablissement_id: etabId ?? null, prix_defaut: Number(form.prix_defaut) });
       setShowForm(false); setEditing(null); setForm({ libelle: "", categorie: "consultation", prix_defaut: 0 });
       load(); success(editing ? "Tarif mis a jour" : "Tarif ajoute");
-    } catch (e) { alert(e.message); } finally { setSaving(false); }
+    } catch (e) { showError(e.message); } finally { setSaving(false); }
   };
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1300, display: "flex", alignItems: "flex-start", justifyContent: "flex-end" }}>
@@ -807,7 +807,7 @@ function PanelTarifs({ etabId, onClose }) {
 
 // ── Onglet 2 — Factures ────────────────────────────────────────────────────────
 function OngletFactures({ etabId, auth, config, session }) {
-  const { data: patients } = usePatients();
+  const { data: patients } = usePatients(auth?.etablissement_id);
   const { toasts, success } = useToast();
   const [factures, setFactures]           = useState([]);
   const [loading, setLoading]             = useState(true);
@@ -1078,12 +1078,12 @@ function OngletConfiguration({ etabId, config, onConfigSaved }) {
       await upsertConfigCaisse(etabId, form);
       setSaved(true); setTimeout(() => setSaved(false), 2500);
       onConfigSaved(form);
-    } catch (e) { alert("Erreur : " + e.message); }
+    } catch (e) { showError("Erreur : " + e.message); }
     finally { setSaving(false); }
   };
 
   const ajouterAssureur = () => {
-    if (!newAssureur.nom.trim()) return alert("Le nom est obligatoire.");
+    if (!newAssureur.nom.trim()) return showError("Le nom est obligatoire.");
     setForm((f) => ({ ...f, assureurs: [...f.assureurs, { ...newAssureur }] }));
     setNewAssureur({ nom: "", code: "", contact: "", email: "" });
     setShowAssureurForm(false);

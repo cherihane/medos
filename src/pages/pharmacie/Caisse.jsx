@@ -166,7 +166,7 @@ function printTicket({ ref, date, items, paiement, total, montantRecu, monnaie, 
 </html>`;
 
   const w = window.open("", "_blank", "width=320,height=600,toolbar=0,menubar=0");
-  if (!w) { alert("Autorisez les pop-ups pour imprimer le ticket."); return; }
+  if (!w) { throw new Error("Autorisez les pop-ups pour imprimer le ticket."); }
   w.document.write(html);
   w.document.close();
   w.focus();
@@ -218,7 +218,7 @@ function printCloture({ date, totaux, nb, gerant, etab }) {
 </body>
 </html>`;
   const w = window.open("", "_blank", "width=700,height=900,toolbar=0,menubar=0");
-  if (!w) { alert("Autorisez les pop-ups pour imprimer la cloture."); return; }
+  if (!w) { throw new Error("Autorisez les pop-ups pour imprimer la cloture."); }
   w.document.write(html);
   w.document.close();
   w.focus();
@@ -492,7 +492,7 @@ function OngletCaisse({ onSaleComplete }) {
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button
-              onClick={() => printTicket(lastTicket)}
+              onClick={() => { try { printTicket(lastTicket); } catch (e) { toastError(e.message); } }}
               style={{ padding: "7px 16px", backgroundColor: "#16A34A", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
             >
               Imprimer le ticket
@@ -796,13 +796,7 @@ function ClotureModal({ date, journal, byMode, totalEncaisse, fondMontant, auth,
         nb_transactions:  nb,
       });
       const etab = await fetchEtabFromAuth(auth);
-      printCloture({
-        date,
-        totaux,
-        nb,
-        gerant: auth?.user?.email ?? "Gérant",
-        etab,
-      });
+      try { printCloture({ date, totaux, nb, gerant: auth?.user?.email ?? "Gérant", etab }); } catch (e) { toastError(e.message); }
       onDone();
     } catch (e) {
       setErr(e.message);
@@ -964,7 +958,7 @@ function OngletJournal({ refreshKey }) {
             </span>
           </div>
           <button
-            onClick={async () => { const etab = await fetchEtabFromAuth(auth); printCloture({ date, totaux: { especes: 0, mobile: 0, credit: 0, autres: 0, total: cloture.total_encaisse ?? 0 }, nb: cloture.nb_transactions ?? 0, gerant: cloture.gerant_email ?? "Gérant", etab }); }}
+            onClick={async () => { const etab = await fetchEtabFromAuth(auth); try { printCloture({ date, totaux: { especes: 0, mobile: 0, credit: 0, autres: 0, total: cloture.total_encaisse ?? 0 }, nb: cloture.nb_transactions ?? 0, gerant: cloture.gerant_email ?? "Gérant", etab }); } catch (e) { toastError(e.message); } }}
             style={{ padding: "6px 14px", backgroundColor: "#16A34A", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
           >
             Réimprimer

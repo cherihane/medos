@@ -103,7 +103,7 @@ async function imprimerCRO(cro, intervention, patient, auth) {
 
 // ── Modal programmer une intervention ─────────────────────────────────────────
 function ModalProgrammer({ patients, salles, etabId, auth, onClose, onSaved }) {
-  const { success } = useToast();
+  const { success, error: showError } = useToast();
   const [form, setForm] = useState({
     patient_id: "", date_prevue: new Date().toISOString().slice(0, 10), heure_prevue: "08:00",
     duree_prevue_min: 60, intitule: "", type: "programmee", specialite: SPECIALITES[0],
@@ -119,7 +119,7 @@ function ModalProgrammer({ patients, salles, etabId, auth, onClose, onSaved }) {
 
   const handleSave = async () => {
     if (!form.patient_id || !form.intitule.trim() || !form.chirurgien_principal.trim()) {
-      return alert("Patient, intitule et chirurgien principal sont obligatoires.");
+      return showError("Patient, intitule et chirurgien principal sont obligatoires.");
     }
     setSaving(true);
     try {
@@ -127,7 +127,7 @@ function ModalProgrammer({ patients, salles, etabId, auth, onClose, onSaved }) {
       await insertIntervention({ ...form, etablissement_id: etabId, numero_intervention: numero, duree_prevue_min: Number(form.duree_prevue_min), salle_id: form.salle_id || null, date_consentement: form.date_consentement || null });
       success("Intervention programmee");
       onSaved(); onClose();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
     finally { setSaving(false); }
   };
 
@@ -212,7 +212,7 @@ function ModalProgrammer({ patients, salles, etabId, auth, onClose, onSaved }) {
 
 // ── Onglet 1 — Programme du jour ──────────────────────────────────────────────
 function OngletProgramme({ etabId, patients, salles, auth }) {
-  const { success } = useToast();
+  const { success, error: showError } = useToast();
   const [date, setDate]             = useState(new Date().toISOString().slice(0, 10));
   const [interventions, setInter]   = useState([]);
   const [loading, setLoading]       = useState(true);
@@ -268,7 +268,7 @@ function OngletProgramme({ etabId, patients, salles, auth }) {
         default: break;
       }
       load();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
   };
 
   const handleAnnuler = async () => {
@@ -277,7 +277,7 @@ function OngletProgramme({ etabId, patients, salles, auth }) {
     setAnnulerModal(null); setMotifAnnul(""); load();
   };
   const handleReporter = async () => {
-    if (!reporterModal || !nvDate) return alert("Saisissez une nouvelle date.");
+    if (!reporterModal || !nvDate) return showError("Saisissez une nouvelle date.");
     await updateIntervention(reporterModal.id, { statut: "reportee", date_prevue: nvDate });
     setReporterModal(null); setNvDate(""); load();
   };
@@ -416,7 +416,7 @@ function OngletProgramme({ etabId, patients, salles, auth }) {
 
 // ── Onglet 2 — Salles ─────────────────────────────────────────────────────────
 function OngletSalles({ etabId, auth, interventionsJour }) {
-  const { success } = useToast();
+  const { success, error: showError } = useToast();
   const ri = auth?.role_interne;
   const [salles, setSalles] = useState([]);
   const [showAdd, setShowAdd] = useState(false);
@@ -447,7 +447,7 @@ function OngletSalles({ etabId, auth, interventionsJour }) {
   };
 
   const handleAddSalle = async () => {
-    if (!formSalle.nom.trim()) return alert("Nom obligatoire.");
+    if (!formSalle.nom.trim()) return showError("Nom obligatoire.");
     await upsertSalleOperation({ ...formSalle, etablissement_id: etabId, statut: "libre" });
     success("Salle ajoutee"); setShowAdd(false); setFormSalle({ nom: "", specialite: SPECIALITES[0] }); loadSalles();
   };
@@ -510,7 +510,7 @@ function OngletSalles({ etabId, auth, interventionsJour }) {
 
 // ── Onglet 3 — Checklist OMS ──────────────────────────────────────────────────
 function OngletChecklist({ etabId, interventionsJour, patients, auth }) {
-  const { success } = useToast();
+  const { success, error: showError } = useToast();
   const [interSel, setInterSel] = useState("");
   const [checklist, setChecklist] = useState(null);
   const [saving, setSaving] = useState(null);
@@ -662,7 +662,7 @@ function OngletChecklist({ etabId, interventionsJour, patients, auth }) {
 
 // ── Onglet 4 — Compte rendu opératoire ───────────────────────────────────────
 function OngletCRO({ etabId, interventionsJour, patients, auth }) {
-  const { success } = useToast();
+  const { success, error: showError } = useToast();
   const [interSel, setInterSel] = useState("");
   const [cro, setCro] = useState(null);
   const [mode, setMode] = useState("view"); // "view" | "edit"
@@ -683,14 +683,14 @@ function OngletCRO({ etabId, interventionsJour, patients, auth }) {
   const pat   = inter?.patients;
 
   const handleSave = async () => {
-    if (!form.description_acte.trim()) return alert("La description de l'acte est obligatoire.");
+    if (!form.description_acte.trim()) return showError("La description de l'acte est obligatoire.");
     setSaving(true);
     try {
       const payload = { ...form, intervention_id: interSel, patient_id: inter?.patient_id, etablissement_id: etabId, pertes_sang_ml: form.pertes_sang_ml ? Number(form.pertes_sang_ml) : null };
       const saved = cro ? await updateCRO(cro.id, payload) : await insertCRO(payload);
       setCro(saved); setMode("view");
       success("CRO enregistre");
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
     finally { setSaving(false); }
   };
 
@@ -818,7 +818,7 @@ function OngletCRO({ etabId, interventionsJour, patients, auth }) {
 
 // ── Onglet 5 — Salle de réveil ─────────────────────────────────────────────────
 function OngletReveil({ etabId, interventionsJour, patients, auth }) {
-  const { success } = useToast();
+  const { success, error: showError } = useToast();
   const [interSel, setInterSel]   = useState("");
   const [feuille, setFeuille]     = useState(null);
   const [saving, setSaving]       = useState(false);
@@ -853,7 +853,7 @@ function OngletReveil({ etabId, interventionsJour, patients, auth }) {
       setFeuille(updated);
       setNvReleve({ activite: 0, respiration: 0, circulation: 0, conscience: 0, spo2: 0 });
       success("Releve Aldrete enregistre");
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
     finally { setSaving(false); }
   };
 
@@ -880,7 +880,7 @@ function OngletReveil({ etabId, interventionsJour, patients, auth }) {
           { titre: "Sortie", html: infoGridHTML([{ label: "Destination", value: destination },{ label: "Score de sortie", value: String(dernierScore ?? "—") }]) },
         ],
       });
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
     finally { setSaving(false); }
   };
 
@@ -973,7 +973,7 @@ function OngletReveil({ etabId, interventionsJour, patients, auth }) {
 export default function BlocOperatoire() {
   const { auth }        = useAuth();
   const { toasts }      = useToast();
-  const { data: patients } = usePatients();
+  const { data: patients } = usePatients(auth?.etablissement_id);
   const [onglet, setOnglet]   = useState("programme");
   const [etabId, setEtabId]   = useState(auth?.etablissement_id ?? null);
   const [salles, setSalles]   = useState([]);

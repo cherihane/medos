@@ -213,10 +213,12 @@ export function useAlertes(limit = 20) {
 }
 
 // ─── patients ─────────────────────────────────────────────────────────────────
-export function usePatients() {
-  return useQuery(() =>
-    supabase.from("patients").select("*").order("nom", { ascending: true }).limit(500)
-  );
+export function usePatients(etablissement_id = null) {
+  return useQuery(() => {
+    let q = supabase.from("patients").select("*").order("nom", { ascending: true }).limit(500);
+    if (etablissement_id) q = q.eq("etablissement_id", etablissement_id);
+    return q;
+  }, [etablissement_id]);
 }
 
 // ─── établissements ──────────────────────────────────────────────────────────

@@ -380,7 +380,7 @@ async function imprimerRdvJour(consultations, auth) {
 export default function Consultations() {
   const { auth } = useAuth();
   const { toasts, success } = useToast();
-  const { data: patients } = usePatients();
+  const { data: patients } = usePatients(auth?.etablissement_id);
   const [consultations, setConsultations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);

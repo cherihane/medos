@@ -298,7 +298,7 @@ export default function Ordonnances() {
 
   const [statutFilter, setStatutFilter] = useState("");
   const { data: ordonnances, loading, error, total, page, setPage, totalPages, refetch } = useOrdonnancesPaginated(statutFilter);
-  const { data: patients } = usePatients();
+  const { data: patients } = usePatients(auth?.etablissement_id);
   const { data: medicaments } = useMedicaments();
   const { toasts, success, error: toastError } = useToast();
   const [selected, setSelected] = useState(null);

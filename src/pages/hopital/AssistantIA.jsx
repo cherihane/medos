@@ -192,7 +192,7 @@ function protocoleToMessage(p) {
 
 export default function AssistantIA() {
   const isMobile = useIsMobile();
-  const { data: patients } = usePatients();
+  const { data: patients } = usePatients(auth?.etablissement_id);
   const [messages, setMessages] = useState(initialMessages);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);

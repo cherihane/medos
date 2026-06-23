@@ -160,7 +160,7 @@ function AlertesPanel() {
 
 // ── Panneau patients récents ──────────────────────────────────────────────────
 function PatientsPanel() {
-  const { data, loading } = usePatients();
+  const { data, loading } = usePatients(auth?.etablissement_id);
 
   const recent = data.slice(0, 5);
 

@@ -69,7 +69,7 @@ function ModalRenouveler({ ordonnance, patient, etabId, medecinNom, medicaments,
       });
       onSaved();
       onClose();
-    } catch (e) { alert("Erreur : " + e.message); }
+    } catch (e) { showError("Erreur : " + e.message); }
     finally { setSaving(false); }
   };
 
@@ -111,7 +111,7 @@ function ModalRenouveler({ ordonnance, patient, etabId, medecinNom, medicaments,
 
 export default function Renouvellements() {
   const { auth } = useAuth();
-  const { toasts, success } = useToast();
+  const { toasts, success, error: showError } = useToast();
   const { data: medicaments } = useMedicaments();
   const [etabId, setEtabId]                 = useState(auth?.etablissement_id ?? null);
   const [ordonnances, setOrdonnances]       = useState([]);

@@ -2,6 +2,8 @@ import { colors } from "../../theme";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import * as XLSX from "xlsx";
 import Layout from "../../components/Layout";
+import Toast from "../../components/Toast";
+import { useToast } from "../../hooks/useToast";
 import { useMedicaments, useAlertes, usePatients } from "../../hooks/useSupabaseData";
 import { useAuth } from "../../context/AuthContext";
 import { openDocument, tableHTML, alertBannerHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
@@ -113,7 +115,7 @@ async function exportVentesCSV(auth) {
     .order("created_at", { ascending: false })
     .limit(5000);
 
-  if (!data || data.length === 0) { alert("Aucune vente trouvée."); return; }
+  if (!data || data.length === 0) { throw new Error("Aucune vente trouvée."); }
 
   const header = ["Date", "Médicament", "Quantité", "Prix unitaire", "Total", "Mode de paiement", "Caissier"];
   const rows = data.map((v) => [
@@ -159,7 +161,7 @@ async function exportMensuelXLSX(auth) {
     .gte("created_at", debut.toISOString())
     .order("created_at", { ascending: false });
 
-  if (!data || data.length === 0) { alert("Aucune vente ce mois-ci."); return; }
+  if (!data || data.length === 0) { throw new Error("Aucune vente ce mois-ci."); }
 
   // Feuille 1 : détail
   const detailHeader = ["Date", "Médicament", "Quantité", "Total", "Mode"];
@@ -249,9 +251,10 @@ function ExportBtn({ label, desc, color, onClick }) {
 
 export default function Rapports() {
   const { auth } = useAuth();
+  const { toasts, error: showError } = useToast();
   const { data: medicaments, loading: loadMed } = useMedicaments();
   const { data: alertes, loading: loadAlt } = useAlertes(50);
-  const { data: patients, loading: loadPat } = usePatients();
+  const { data: patients, loading: loadPat } = usePatients(auth?.etablissement_id);
 
   const loading = loadMed || loadAlt || loadPat;
 
@@ -406,7 +409,7 @@ export default function Rapports() {
             label="CSV — Journal des ventes"
             desc="Toutes les ventes (jusqu'a 5 000 lignes)"
             color="#10B981"
-            onClick={async () => { await exportVentesCSV(auth); }}
+            onClick={async () => { try { await exportVentesCSV(auth); } catch (e) { showError(e.message); } }}
           />
           <ExportBtn
             label="Excel — Inventaire complet"
@@ -418,7 +421,7 @@ export default function Rapports() {
             label="Excel — Rapport mensuel"
             desc="Ventes du mois en cours, par mode de paiement"
             color="#7C3AED"
-            onClick={async () => { await exportMensuelXLSX(auth); }}
+            onClick={async () => { try { await exportMensuelXLSX(auth); } catch (e) { showError(e.message); } }}
           />
           <ExportBtn
             label="PDF — Bilan de stock"
@@ -430,6 +433,7 @@ export default function Rapports() {
       </div>
 
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
+      <Toast toasts={toasts} />
     </Layout>
   );
 }

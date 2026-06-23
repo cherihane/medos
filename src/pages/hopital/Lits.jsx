@@ -174,7 +174,7 @@ function ModalLiberer({ hospi, onClose, onSaved }) {
       await libererLit(hospi.id, hospi.patient_id, form.date_sortie_reelle, form.notes || null);
       onSaved();
       onClose();
-    } catch (e) { alert(e.message); setSaving(false); }
+    } catch (e) { showError(e.message); setSaving(false); }
   };
 
   const inputSt = { width: "100%", padding: "9px 11px", border: "1.5px solid #E5E7EB", borderRadius: 9, fontSize: 13, outline: "none", boxSizing: "border-box", background: "white", color: "#0A1628" };
@@ -219,7 +219,7 @@ function ModalConfig({ service, capaciteActuelle, etabId, onClose, onSaved }) {
       await upsertConfigurationLit(etabId, service, Number(capacite));
       onSaved();
       onClose();
-    } catch (e) { alert(e.message); setSaving(false); }
+    } catch (e) { showError(e.message); setSaving(false); }
   };
 
   return (
@@ -246,8 +246,8 @@ function ModalConfig({ service, capaciteActuelle, etabId, onClose, onSaved }) {
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function Lits() {
   const { auth } = useAuth();
-  const { toasts, success } = useToast();
-  const { data: patients } = usePatients();
+  const { toasts, success, error: showError } = useToast();
+  const { data: patients } = usePatients(auth?.etablissement_id);
   const [lits, setLits] = useState([]);
   const [config, setConfig] = useState([]);
   const [loading, setLoading] = useState(true);

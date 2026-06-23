@@ -124,7 +124,7 @@ function ModalOrdonnance({ patient, etablissementId, medecinNom, medicaments, on
 
   const handleSave = async () => {
     const valides = lignes.filter((l) => l.medicament_id && l.posologie.trim());
-    if (!valides.length) return alert("Ajoutez au moins un medicament avec posologie.");
+    if (!valides.length) return showError("Ajoutez au moins un medicament avec posologie.");
     if (warnings.some((w) => w.niveau === "contre-indication")) {
       if (!window.confirm("Des contre-indications ont ete detectees. Confirmer quand meme ?")) return;
     }
@@ -139,7 +139,7 @@ function ModalOrdonnance({ patient, etablissementId, medecinNom, medicaments, on
       });
       onSaved();
       onClose();
-    } catch (e) { alert(e.message); setSaving(false); }
+    } catch (e) { showError(e.message); setSaving(false); }
   };
 
   return (
@@ -194,7 +194,7 @@ function ModalExamen({ patient, etablissementId, prescripteur, onClose, onSaved 
       });
       onSaved();
       onClose();
-    } catch (e) { alert(e.message); setSaving(false); }
+    } catch (e) { showError(e.message); setSaving(false); }
   };
 
   return (
@@ -233,7 +233,7 @@ function ModalExamen({ patient, etablissementId, prescripteur, onClose, onSaved 
 
 // ── Dossier rapide du patient en cours ────────────────────────────────────────
 function DossierRapide({ patient, etablissementId, medecinNom, medicaments, onUpdate }) {
-  const { toasts, success } = useToast();
+  const { toasts, success, error: showError } = useToast();
   const [showOrd, setShowOrd] = useState(false);
   const [showExamen, setShowExamen] = useState(false);
   const [showConst, setShowConst] = useState(false);
@@ -261,7 +261,7 @@ function DossierRapide({ patient, etablissementId, medecinNom, medicaments, onUp
       setShowConst(false);
       success("Constantes enregistrees");
       onUpdate();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
     finally { setSavingConst(false); }
   };
 
@@ -363,7 +363,7 @@ export default function MesConsultations() {
   const { auth } = useAuth();
   const navigate = useNavigate();
   const { toasts, success } = useToast();
-  const { data: patients } = usePatients();
+  const { data: patients } = usePatients(auth?.etablissement_id);
   const { data: medicaments } = useMedicaments();
   const [consultations, setConsultations] = useState([]);
   const [examens, setExamens] = useState([]);

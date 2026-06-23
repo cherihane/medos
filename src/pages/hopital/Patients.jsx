@@ -12,6 +12,8 @@ import Pagination from "../../components/Pagination";
 import { insertPatient, insertOrdonnance, upsertHospitalisation, fetchHospitalisation, insertConstante, fetchConstantes, updatePatientTriage, insertNoteEvolution, fetchNotesEvolution, fetchPlanSoinsPatient, fetchPerfusionsPatient, insertAdministration, insertPlanSoins, insertDeces, fetchDecesEtablissement, genererNumeroCertificat, updatePatient, fetchRegimePatient, insertImagerie, fetchImageriePatient } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../supabaseClient";
+import Toast from "../../components/Toast";
+import { useToast } from "../../hooks/useToast";
 import { openDocument, tableHTML, infoGridHTML, alertBannerHTML, signatureRowHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
 import { INTERACTIONS_MEDICAMENTEUSES, CONTRE_INDICATIONS_ANTECEDENTS } from "../../data/interactions";
 import { SERVICES_HOPITAL, SERVICE_COLORS } from "../../constants/hopital";
@@ -1140,6 +1142,7 @@ function ModalNouvelleImagerie({ patient, etablissement_id, medecinNom, onClose,
 }
 
 function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medicaments, onClose, onPatientUpdated, auth }) {
+  const { toasts: ficheToasts, error: showError } = useToast();
   const [onglet, setOnglet]           = useState("dossier");
   const [ordonnances, setOrdonnances] = useState([]);
   const [comptes, setComptes]         = useState([]);
@@ -1176,6 +1179,24 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
   // Imagerie
   const [imagerie, setImagerie]       = useState([]);
   const [showModalImagerie, setShowModalImagerie] = useState(false);
+  // Recommandation IA
+  const [recommandationRecente, setRecommandationRecente] = useState(null);
+
+  useEffect(() => {
+    if (!patient?.id) return;
+    supabase.from("alertes")
+      .select("*")
+      .eq("patient_id", patient.id)
+      .eq("type", "recommandation_ia")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data && (Date.now() - new Date(data.created_at).getTime()) < 86400000) {
+          setRecommandationRecente(data);
+        }
+      });
+  }, [patient?.id]);
 
   const charger = useCallback(async () => {
     setLoading(true);
@@ -1235,10 +1256,76 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
         if (constForm[k] !== "") payload[k] = Number(constForm[k]);
       });
       await insertConstante(payload);
+
+      // Détection critique → alerte Supabase + recommandation IA automatique
+      // alerteConstante retourne une string ou null (toutes les alertes sont critiques)
+      const alertesCritiques = Object.entries(constForm)
+        .map(([k, v]) => alerteConstante(k, v))
+        .filter(Boolean);
+
+      if (alertesCritiques.length > 0 && etablissement_id) {
+        const resumeConstantes = alertesCritiques.join(" · ");
+
+        await supabase.from("alertes").insert({
+          etablissement_id,
+          patient_id: patient.id,
+          titre: "Constante critique détectée",
+          message: `${patient.prenom} ${patient.nom} — ${resumeConstantes}`,
+          type: "constante_critique",
+          severite: "critique",
+          resolu: false,
+        }).catch(() => {});
+
+        try {
+          const ageAns = patient.date_naissance
+            ? Math.floor((Date.now() - new Date(patient.date_naissance)) / 31557600000)
+            : null;
+
+          const prompt = `Patient ${ageAns ? `${ageAns} ans` : ""}, ${patient.genre === "F" ? "femme" : "homme"}.
+Antécédents : ${(patient.antecedents ?? []).join(", ") || "aucun connu"}.
+Allergies : ${(patient.allergies ?? []).join(", ") || "aucune connue"}.
+Constantes critiques détectées à l'instant : ${resumeConstantes}.
+En tant qu'assistant clinique, donne en 3 phrases maximum : 1) le risque principal, 2) une action immédiate recommandée, 3) un signe d'alarme à surveiller. Réponds en français, de façon concise et actionnable pour une infirmière ou un médecin.`;
+
+          const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${process.env.REACT_APP_GROQ_API_KEY ?? ""}`,
+            },
+            body: JSON.stringify({
+              model: "llama3-70b-8192",
+              max_tokens: 300,
+              messages: [
+                { role: "system", content: "Tu es un assistant clinique pour personnel soignant en Afrique centrale. Réponses courtes, concrètes, jamais de diagnostic définitif." },
+                { role: "user", content: prompt },
+              ],
+            }),
+          });
+          const data = await response.json();
+          const recommandation = data.choices?.[0]?.message?.content ?? null;
+
+          if (recommandation) {
+            const { data: newRec } = await supabase.from("alertes").insert({
+              etablissement_id,
+              patient_id: patient.id,
+              titre: "Recommandation IA — constante critique",
+              message: recommandation,
+              type: "recommandation_ia",
+              severite: "critique",
+              resolu: false,
+            }).select().single().catch(() => ({ data: null }));
+            if (newRec) setRecommandationRecente(newRec);
+          }
+        } catch {
+          // Si Groq échoue, l'alerte Supabase de base a déjà été créée — ne pas bloquer le flux
+        }
+      }
+
       const fresh = await fetchConstantes(patient.id);
       setConstantes(fresh);
       setConstForm({ temperature: "", tension_systolique: "", tension_diastolique: "", pouls: "", saturation_o2: "", poids: "", taille: "", notes: "" });
-    } catch (e) { alert("Erreur : " + e.message); }
+    } catch (e) { showError("Erreur : " + e.message); }
     finally { setSavingConst(false); }
   };
 
@@ -1251,7 +1338,7 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
       setTimeout(() => setHospiSaved(false), 2000);
       charger();
       onPatientUpdated("Statut d'hospitalisation mis a jour.");
-    } catch (e) { alert("Erreur : " + e.message); }
+    } catch (e) { showError("Erreur : " + e.message); }
     finally { setSavingHospi(false); }
   };
 
@@ -1578,7 +1665,7 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
                     sortie:       { label: "Note de sortie",        badge: "Sortie",       color: "#16A34A", bg: "#DCFCE7" },
                   };
                   const handleSaveNote = async () => {
-                    if (!noteForm.contenu.trim()) return alert("Le contenu est obligatoire.");
+                    if (!noteForm.contenu.trim()) return showError("Le contenu est obligatoire.");
                     setSavingNote(true);
                     try {
                       await insertNoteEvolution({
@@ -1592,7 +1679,7 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
                       setNoteForm((f) => ({ ...f, contenu: "" }));
                       setShowNoteForm(false);
                       charger();
-                    } catch (e) { alert(e.message); }
+                    } catch (e) { showError(e.message); }
                     finally { setSavingNote(false); }
                   };
                   const handleImprimerJournal = async () => {
@@ -1690,6 +1777,13 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
             {onglet === "constantes" && (
               <div>
                 <h4 style={{ margin: "0 0 12px", fontSize: 13, fontWeight: 700, color: colors.navy }}>Saisir les constantes</h4>
+                {recommandationRecente && (
+                  <div style={{ padding: "12px 16px", marginBottom: 14, backgroundColor: "#FEF2F2", border: "1.5px solid #EF4444", borderRadius: 10, fontSize: 13 }}>
+                    <div style={{ fontWeight: 700, color: "#DC2626", marginBottom: 6 }}>Recommandation IA — constante critique</div>
+                    <div style={{ color: "#7F1D1D", lineHeight: 1.6 }}>{recommandationRecente.message}</div>
+                    <div style={{ fontSize: 11, color: "#991B1B", marginTop: 6 }}>{new Date(recommandationRecente.created_at).toLocaleString("fr-FR")}</div>
+                  </div>
+                )}
                 {constAlertes.length > 0 && (
                   <div style={{ padding: "10px 14px", backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, fontSize: 12, color: "#DC2626", marginBottom: 12 }}>
                     <div style={{ fontWeight: 700, marginBottom: 4 }}>Valeurs critiques detectees :</div>
@@ -2034,6 +2128,7 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
           </div>
         </div>
       </div>
+      <Toast toasts={ficheToasts} />
     </>
   );
 }
