@@ -69,6 +69,7 @@ const SOLUTES = ["Ringer Lactate","Glucose 5%","Serum physiologique 0.9%","Gluco
 
 // ── Modal constantes rapides ───────────────────────────────────────────────────
 function ModalConstantes({ hospi, auth, onClose, onSaved }) {
+  const { error: showError } = useToast();
   const [form, setForm] = useState({ temperature: "", tension_systolique: "", tension_diastolique: "", pouls: "", saturation_o2: "" });
   const [saving, setSaving] = useState(false);
   const alertes = Object.entries(form).map(([k, v]) => v ? alerteConstante(k, v) : null).filter(Boolean);
@@ -80,7 +81,7 @@ function ModalConstantes({ hospi, auth, onClose, onSaved }) {
       Object.entries(form).forEach(([k, v]) => { if (v !== "") payload[k] = Number(v); });
       await insertConstante(payload);
       onSaved(); onClose();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
     finally { setSaving(false); }
   };
 
@@ -126,6 +127,7 @@ function ModalConstantes({ hospi, auth, onClose, onSaved }) {
 
 // ── Modal note rapide ──────────────────────────────────────────────────────────
 function ModalNote({ hospi, auth, onClose, onSaved }) {
+  const { error: showError } = useToast();
   const [contenu, setContenu] = useState("");
   const [saving, setSaving] = useState(false);
   const nom = hospi.patients ? `${hospi.patients.prenom} ${hospi.patients.nom}` : "Patient";
@@ -143,7 +145,7 @@ function ModalNote({ hospi, auth, onClose, onSaved }) {
         type: "transmission_infirmiere",
       });
       onSaved(); onClose();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
     finally { setSaving(false); }
   };
 
@@ -169,6 +171,7 @@ function ModalNote({ hospi, auth, onClose, onSaved }) {
 
 // ── Modal poser perfusion ──────────────────────────────────────────────────────
 function ModalPerfusion({ hospi, auth, onClose, onSaved }) {
+  const { error: showError } = useToast();
   const [form, setForm] = useState({
     type_solute: "Ringer Lactate", volume_ml: "", debit_ml_h: "",
     heure_debut: new Date().toISOString().slice(0, 16),
@@ -186,7 +189,7 @@ function ModalPerfusion({ hospi, auth, onClose, onSaved }) {
   }, [form.volume_ml, form.debit_ml_h, form.heure_debut]); // eslint-disable-line
 
   const handleSave = async () => {
-    if (!form.volume_ml) return alert("Saisissez le volume.");
+    if (!form.volume_ml) return showError("Saisissez le volume.");
     setSaving(true);
     try {
       await insertPerfusion({
@@ -203,7 +206,7 @@ function ModalPerfusion({ hospi, auth, onClose, onSaved }) {
         statut: "en_cours",
       });
       onSaved(); onClose();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
     finally { setSaving(false); }
   };
 
@@ -263,6 +266,7 @@ function ModalPerfusion({ hospi, auth, onClose, onSaved }) {
 
 // ── Modal ajouter plan de soins ────────────────────────────────────────────────
 function ModalPlanSoins({ litsOccupes, auth, onClose, onSaved }) {
+  const { error: showError } = useToast();
   const [form, setForm] = useState({ patient_id: "", medicament_nom: "", dose: "", voie: "Oral", horaires: [], date_debut: new Date().toISOString().slice(0,10), date_fin: "", prescripteur: "" });
   const [saving, setSaving] = useState(false);
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
@@ -273,7 +277,7 @@ function ModalPlanSoins({ litsOccupes, auth, onClose, onSaved }) {
   }));
 
   const handleSave = async () => {
-    if (!form.patient_id || !form.medicament_nom || !form.dose || form.horaires.length === 0) return alert("Remplissez tous les champs obligatoires et selectionnez au moins un horaire.");
+    if (!form.patient_id || !form.medicament_nom || !form.dose || form.horaires.length === 0) return showError("Remplissez tous les champs obligatoires et selectionnez au moins un horaire.");
     setSaving(true);
     try {
       await insertPlanSoins({
@@ -289,7 +293,7 @@ function ModalPlanSoins({ litsOccupes, auth, onClose, onSaved }) {
         actif: true,
       });
       onSaved(); onClose();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
     finally { setSaving(false); }
   };
 
@@ -361,7 +365,7 @@ function ModalPlanSoins({ litsOccupes, auth, onClose, onSaved }) {
 
 // ── Section demande de médicament (infirmière / aide-soignant) ────────────────
 function DemanderMedicament({ auth, etabId, serviceFil }) {
-  const { success } = useToast();
+  const { success, error: showError } = useToast();
   const { data: medicaments } = useMedicaments();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ medicament_id: "", medicament_nom: "", autre: false, autreNom: "", quantite: 1, motif: "" });
@@ -381,8 +385,8 @@ function DemanderMedicament({ auth, etabId, serviceFil }) {
 
   const handleSend = async () => {
     const nom = form.autre ? form.autreNom.trim() : medicaments.find((m) => m.id === form.medicament_id)?.nom ?? "";
-    if (!nom) return alert("Selectionnez ou saisissez un medicament.");
-    if (!form.quantite || Number(form.quantite) < 1) return alert("Quantite invalide.");
+    if (!nom) return showError("Selectionnez ou saisissez un medicament.");
+    if (!form.quantite || Number(form.quantite) < 1) return showError("Quantite invalide.");
     setSaving(true);
     try {
       await insertCommandeInterne({
@@ -399,7 +403,7 @@ function DemanderMedicament({ auth, etabId, serviceFil }) {
       setForm({ medicament_id: "", medicament_nom: "", autre: false, autreNom: "", quantite: 1, motif: "" });
       setOpen(false);
       loadDemandes();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
     finally { setSaving(false); }
   };
 
@@ -465,7 +469,7 @@ function DemanderMedicament({ auth, etabId, serviceFil }) {
 
 // ── Onglet 1 — Mes patients ────────────────────────────────────────────────────
 function OngletPatients({ litsOccupes, perfusionsActives, loading, auth, onRefresh }) {
-  const { success } = useToast();
+  const { success, error: showError } = useToast();
   const [serviceFil, setServiceFil] = useState("");
   const [modalConst, setModalConst] = useState(null);
   const [modalNote, setModalNote]   = useState(null);
@@ -531,7 +535,7 @@ function OngletPatients({ litsOccupes, perfusionsActives, loading, auth, onRefre
 
 // ── Onglet 2 — Plan de soins ───────────────────────────────────────────────────
 function OngletPlanSoins({ litsOccupes, auth, etabId }) {
-  const { success } = useToast();
+  const { success, error: showError } = useToast();
   const [planJour, setPlanJour] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -573,7 +577,7 @@ function OngletPlanSoins({ litsOccupes, auth, etabId }) {
       });
       success(`${plan.medicament_nom} — ${statut}`);
       load();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
     finally { setSaving(null); }
   }
 
@@ -643,7 +647,7 @@ function OngletPlanSoins({ litsOccupes, auth, etabId }) {
 
 // ── Onglet 3 — Perfusions ──────────────────────────────────────────────────────
 function OngletPerfusions({ perfusionsActives, litsOccupes, loading, auth, etabId, onRefresh }) {
-  const { success } = useToast();
+  const { success, error: showError } = useToast();
   const [showModal, setShowModal] = useState(false);
   const [editDebit, setEditDebit] = useState(null);
   const [newDebit, setNewDebit] = useState("");
@@ -671,7 +675,7 @@ function OngletPerfusions({ perfusionsActives, litsOccupes, loading, auth, etabI
     try {
       await updatePerfusion(id, { statut: "terminee", heure_fin_reelle: new Date().toISOString() });
       success("Perfusion terminee"); onRefresh();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
   };
 
   const handleModifierDebit = async () => {
@@ -681,7 +685,7 @@ function OngletPerfusions({ perfusionsActives, litsOccupes, loading, auth, etabI
       const newFin = new Date(new Date(heure_debut).getTime() + (volume_ml / Number(newDebit)) * 3600000).toISOString();
       await updatePerfusion(editDebit.id, { debit_ml_h: Number(newDebit), heure_fin_prevue: newFin });
       success("Debit modifie"); setEditDebit(null); onRefresh();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
   };
 
   // Perfusions terminées aujourd'hui (à charger séparément)
@@ -792,7 +796,7 @@ function OngletPerfusions({ perfusionsActives, litsOccupes, loading, auth, etabI
 
 // ── Onglet 4 — Transmissions ───────────────────────────────────────────────────
 function OngletTransmissions({ litsOccupes, auth, etabId }) {
-  const { success } = useToast();
+  const { success, error: showError } = useToast();
   const [transmissions, setTransmissions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [patientId, setPatientId] = useState("");
@@ -823,7 +827,7 @@ function OngletTransmissions({ litsOccupes, auth, etabId }) {
         type: "transmission_infirmiere",
       });
       success("Transmission enregistree"); setMessage(""); setPatientId(""); load();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
     finally { setSaving(false); }
   };
 
@@ -881,7 +885,7 @@ function OngletTransmissions({ litsOccupes, auth, etabId }) {
 // ── Page principale ────────────────────────────────────────────────────────────
 export default function MonService() {
   const { auth } = useAuth();
-  const { toasts } = useToast();
+  const { toasts, error: showError } = useToast();
   const [litsOccupes, setLitsOccupes]       = useState([]);
   const [perfusionsActives, setPerfusionsActives] = useState([]);
   const [loading, setLoading]               = useState(true);

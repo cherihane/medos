@@ -110,7 +110,7 @@ function GardeModal({ garde, preset, membres, onClose, onSaved, etabId }) {
   };
 
   const handleSave = async () => {
-    if (!form.personnel_nom.trim()) return alert("Le nom est obligatoire.");
+    if (!form.personnel_nom.trim()) return showError("Le nom est obligatoire.");
     setSaving(true);
     try {
       const payload = { ...form, etablissement_id: etabId ?? null };
@@ -119,7 +119,7 @@ function GardeModal({ garde, preset, membres, onClose, onSaved, etabId }) {
       onSaved();
       onClose();
     } catch (e) {
-      alert("Erreur : " + e.message);
+      showError("Erreur : " + e.message);
     } finally { setSaving(false); }
   };
 
@@ -336,7 +336,7 @@ async function exportPlanningPDF(gardes, weekDates, auth) {
   }).filter(Boolean);
 
   if (sections.length === 0) {
-    alert("Aucune garde a exporter cette semaine.");
+    showError("Aucune garde a exporter cette semaine.");
     return;
   }
 
@@ -382,7 +382,7 @@ async function resolveEtabId(auth) {
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function Planning() {
   const { auth } = useAuth();
-  const { toasts, success } = useToast();
+  const { toasts, success, error: showError } = useToast();
   const [weekBase, setWeekBase] = useState(new Date());
   const [gardes, setGardes] = useState([]);
   const [membres, setMembres] = useState([]);

@@ -144,18 +144,19 @@ function NouveauModal({ onClose, onSaved }) {
 const VOIES_DISP = ["Oral", "IV", "IM", "SC", "Topique", "Inhalation", "Autre"];
 
 function DispensationModal({ med, patients, onClose, onSaved, auth }) {
+  const { error: showError } = useToast();
   const [form, setForm] = useState({ patient_id: "", quantite: 1, dose: "", duree_jours: 1, voie: "Oral", prescripteur: "", notes: "" });
   const [saving, setSaving] = useState(false);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const handleSave = async () => {
-    if (!form.patient_id) return alert("Selectionnez un patient.");
-    if (Number(form.quantite) < 1) return alert("Quantite invalide.");
+    if (!form.patient_id) return showError("Selectionnez un patient.");
+    if (Number(form.quantite) < 1) return showError("Quantite invalide.");
     setSaving(true);
     try {
       await insertDispensation({ patient_id: form.patient_id, medicament_id: med.id, etablissement_id: auth?.etablissement_id ?? null, quantite: Number(form.quantite), dose: form.dose || null, duree_jours: Number(form.duree_jours) || null, voie: form.voie, prescripteur: form.prescripteur || null, notes: form.notes || null });
       await decrementStock(med.id, Number(form.quantite));
       onSaved(); onClose();
-    } catch (e) { alert("Erreur : " + e.message); } finally { setSaving(false); }
+    } catch (e) { showError("Erreur : " + e.message); } finally { setSaving(false); }
   };
   return (
     <Modal title={`Dispenser — ${med.nom}`} onClose={onClose}>
@@ -180,7 +181,7 @@ function DispensationModal({ med, patients, onClose, onSaved, auth }) {
 
 // ── Modal dispensation par ordonnance ─────────────────────────────────────────
 function ModalDispensationOrdonnance({ ordonnance, medicaments, auth, onClose, onSaved }) {
-  const { success } = useToast();
+  const { success, error: showError } = useToast();
   const lignes = (() => { try { return JSON.parse(ordonnance.notes ?? "{}").lignes ?? []; } catch { return []; } })();
   const patient = ordonnance.patients;
 
@@ -196,7 +197,7 @@ function ModalDispensationOrdonnance({ ordonnance, medicaments, auth, onClose, o
 
   const handleSave = async () => {
     const coches = items.filter((i) => i.checked && i.med);
-    if (coches.length === 0) return alert("Aucun medicament a dispenser.");
+    if (coches.length === 0) return showError("Aucun medicament a dispenser.");
     setSaving(true);
     try {
       for (const item of coches) {
@@ -208,7 +209,7 @@ function ModalDispensationOrdonnance({ ordonnance, medicaments, auth, onClose, o
       success("Ordonnance dispensee");
       onSaved();
       onClose();
-    } catch (e) { alert("Erreur : " + e.message); } finally { setSaving(false); }
+    } catch (e) { showError("Erreur : " + e.message); } finally { setSaving(false); }
   };
 
   const setItem = (idx, field, value) => setItems((prev) => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
@@ -278,8 +279,8 @@ function ModalDispensationOrdonnance({ ordonnance, medicaments, auth, onClose, o
 function OngletStock({ auth }) {
   const { data: medicaments, loading, error, refetch } = useMedicaments();
   const { data: fournisseurs } = useFournisseurs();
-  const { data: patients } = usePatients();
-  const { success } = useToast();
+  const { data: patients } = usePatients(auth?.etablissement_id);
+  const { success, error: showError } = useToast();
   const [filter, setFilter] = useState("tous");
   const [editMed, setEditMed] = useState(null);
   const [commandMed, setCommandMed] = useState(null);
@@ -498,7 +499,7 @@ function OngletDispensation({ auth, etabId }) {
 function OngletPeremptions({ auth }) {
   const { data: medicaments, loading } = useMedicaments();
   const { data: fournisseurs } = useFournisseurs();
-  const { success } = useToast();
+  const { success, error: showError } = useToast();
   const [seuil, setSeuil] = useState(90);
   const [commandMed, setCommandMed] = useState(null);
 
@@ -591,7 +592,7 @@ function OngletPeremptions({ auth }) {
 
 // ── Onglet 4 — Commandes internes ─────────────────────────────────────────────
 function OngletCommandesInternes({ auth, etabId }) {
-  const { success } = useToast();
+  const { success, error: showError } = useToast();
   const [commandes, setCommandes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filtre, setFiltre] = useState("tous");
@@ -624,7 +625,7 @@ function OngletCommandesInternes({ auth, etabId }) {
     try {
       await updateCommandeInterne(modalApprouver.id, { statut: "approuvee", quantite_servie: Number(qteServie) || modalApprouver.quantite_demandee, pharmacien_email: auth?.user?.email ?? "" });
       success("Commande approuvee"); setModalApprouver(null); setQteServie(""); load();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
   };
 
   const handleServir = async (cmd) => {
@@ -633,7 +634,7 @@ function OngletCommandesInternes({ auth, etabId }) {
       await updateCommandeInterne(cmd.id, { statut: "servie" });
       if (med && cmd.quantite_servie) await decrementStock(med.id, cmd.quantite_servie);
       success("Medicament servi"); load();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
   };
 
   const handleRefuser = async () => {
@@ -641,7 +642,7 @@ function OngletCommandesInternes({ auth, etabId }) {
     try {
       await updateCommandeInterne(modalRefuser.id, { statut: "refusee", notes_pharmacien: notesRefus });
       success("Commande refusee"); setModalRefuser(null); setNotesRefus(""); load();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
   };
 
   return (
@@ -748,7 +749,7 @@ function OngletCommandesInternes({ auth, etabId }) {
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function Stock() {
   const { auth } = useAuth();
-  const { toasts } = useToast();
+  const { toasts, error: showError } = useToast();
   const [onglet, setOnglet] = useState("stock");
   const [etabId, setEtabId] = useState(auth?.etablissement_id ?? null);
 

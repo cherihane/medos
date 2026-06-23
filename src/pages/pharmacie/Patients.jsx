@@ -49,7 +49,7 @@ function PatientModal({ patient, onClose, onSaved }) {
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const handleSave = async () => {
-    if (!form.prenom.trim() || !form.nom.trim()) return alert("Prénom et nom sont obligatoires.");
+    if (!form.prenom.trim() || !form.nom.trim()) return showError("Prénom et nom sont obligatoires.");
     setSaving(true);
     try {
       const payload = {
@@ -70,7 +70,7 @@ function PatientModal({ patient, onClose, onSaved }) {
       onSaved();
       onClose();
     } catch (e) {
-      alert("Erreur : " + e.message);
+      showError("Erreur : " + e.message);
     } finally {
       setSaving(false);
     }
@@ -125,7 +125,7 @@ export default function Patients() {
   const [search, setSearch]   = useState("");
   const [filtre, setFiltre]   = useState("");
   const { data: patients, loading, error, total, page, setPage, totalPages, refetch } = usePatientsPaginated(search, 20, filtre);
-  const { toasts, success } = useToast();
+  const { toasts, success, error: showError } = useToast();
   const [selected, setSelected] = useState(null);
   const [modal, setModal] = useState(null); // null | "add" | "edit"
 

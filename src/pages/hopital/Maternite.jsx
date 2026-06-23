@@ -94,7 +94,7 @@ async function imprimerCertificatNaissance(nn, acc, mere, auth) {
 
 // ── Modal ouverture grossesse ─────────────────────────────────────────────────
 function ModalOuvrirGrossesse({ patients, etabId, auth, onClose, onSaved }) {
-  const { success } = useToast();
+  const { success, error: showError } = useToast();
   const [form, setForm] = useState({ patient_id: "", date_dernieres_regles: "", gestite: 1, parite: 0, groupe_sanguin_confirme: "", rhesus: "+", grossesse_a_risque: false, facteurs_risque: [], sage_femme_referente: auth?.user?.email ?? "", notes: "" });
   const [saving, setSaving] = useState(false);
   const [filtre, setFiltre] = useState("");
@@ -104,14 +104,14 @@ function ModalOuvrirGrossesse({ patients, etabId, auth, onClose, onSaved }) {
   const patsFiltres = patients.filter((p) => !filtre || `${p.prenom} ${p.nom}`.toLowerCase().includes(filtre.toLowerCase())).slice(0, 60);
 
   const handleSave = async () => {
-    if (!form.patient_id) return alert("Selectionnez une patiente.");
+    if (!form.patient_id) return showError("Selectionnez une patiente.");
     setSaving(true);
     try {
       const numero = await genererNumeroMaternite(etabId, "grossesse");
       await insertGrossesse({ ...form, etablissement_id: etabId, numero_grossesse: numero, date_accouchement_prevue: dap_calc || null, gestite: Number(form.gestite), parite: Number(form.parite) });
       success("Dossier de grossesse ouvert");
       onSaved(); onClose();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
     finally { setSaving(false); }
   };
 
@@ -198,7 +198,7 @@ function ModalOuvrirGrossesse({ patients, etabId, auth, onClose, onSaved }) {
 
 // ── Modal CPN ─────────────────────────────────────────────────────────────────
 function ModalCPN({ grossesse, patient, etabId, auth, onClose, onSaved }) {
-  const { success } = useToast();
+  const { success, error: showError } = useToast();
   const [form, setForm] = useState({
     date_cpn: new Date().toISOString().slice(0, 10),
     age_gestationnel_sa: grossesse.date_dernieres_regles ? ageSA(grossesse.date_dernieres_regles) : "",
@@ -224,7 +224,7 @@ function ModalCPN({ grossesse, patient, etabId, auth, onClose, onSaved }) {
       await insertCPN({ ...form, grossesse_id: grossesse.id, patient_id: grossesse.patient_id, etablissement_id: etabId, numero_cpn: cpns.length + 1, poids_kg: form.poids_kg || null, tension_systolique: form.tension_systolique || null, tension_diastolique: form.tension_diastolique || null, hemoglobine: form.hemoglobine || null, bruit_coeur_foetal: form.bruit_coeur_foetal || null, age_gestationnel_sa: form.age_gestationnel_sa || null });
       success(`CPN ${cpns.length + 1} enregistree`);
       onSaved(); onClose();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
     finally { setSaving(false); }
   };
 
@@ -358,19 +358,19 @@ function DetailGrossesse({ grossesse, patients, etabId, auth, onClose, onRefresh
 
 // ── Modal admission salle ─────────────────────────────────────────────────────
 function ModalAdmissionSalle({ grossessesActives, patients, etabId, auth, onClose, onSaved }) {
-  const { success } = useToast();
+  const { success, error: showError } = useToast();
   const [form, setForm] = useState({ grossesse_id: "", patient_id: "", heure_debut_travail: new Date().toISOString().slice(0, 16), type_rupture_membranes: "intactes" });
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
-    if (!form.grossesse_id) return alert("Selectionnez une grossesse.");
+    if (!form.grossesse_id) return showError("Selectionnez une grossesse.");
     setSaving(true);
     try {
       const g = grossessesActives.find((x) => x.id === form.grossesse_id);
       await insertPartogramme({ ...form, patient_id: g?.patient_id, etablissement_id: etabId, heure_debut_travail: new Date(form.heure_debut_travail).toISOString(), releves: [] });
       success("Patiente admise en salle d'accouchement");
       onSaved(); onClose();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
     finally { setSaving(false); }
   };
 
@@ -414,7 +414,7 @@ function ModalAdmissionSalle({ grossessesActives, patients, etabId, auth, onClos
 
 // ── Vue partogramme ───────────────────────────────────────────────────────────
 function VuePartogramme({ partogramme, patients, grossessesActives, etabId, auth, onClose, onRefresh }) {
-  const { success } = useToast();
+  const { success, error: showError } = useToast();
   const [releve, setReleve] = useState({ heure: new Date().toISOString().slice(0, 16), dilatation_cm: "", descente_station: "", contractions_nb: "", contractions_duree: "", bcf: "", tension_sys: "", tension_dia: "", pouls_mere: "", liquide_amniotique: "clair", notes: "" });
   const [showAccouchement, setShowAccouchement] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -431,7 +431,7 @@ function VuePartogramme({ partogramme, patients, grossessesActives, etabId, auth
   }));
 
   const handleAjouterReleve = async () => {
-    if (!releve.dilatation_cm) return alert("La dilatation est obligatoire.");
+    if (!releve.dilatation_cm) return showError("La dilatation est obligatoire.");
     setSaving(true);
     try {
       const nvReleves = [...releves, { ...releve, heure: new Date(releve.heure).toISOString(), dilatation_cm: Number(releve.dilatation_cm), bcf: releve.bcf ? Number(releve.bcf) : null, tension_sys: releve.tension_sys ? Number(releve.tension_sys) : null, tension_dia: releve.tension_dia ? Number(releve.tension_dia) : null, pouls_mere: releve.pouls_mere ? Number(releve.pouls_mere) : null, contractions_nb: releve.contractions_nb ? Number(releve.contractions_nb) : null }];
@@ -439,7 +439,7 @@ function VuePartogramme({ partogramme, patients, grossessesActives, etabId, auth
       success("Releve ajoute");
       setReleve((prev) => ({ ...prev, heure: new Date().toISOString().slice(0, 16) }));
       onRefresh();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
     finally { setSaving(false); }
   };
 
@@ -520,6 +520,7 @@ function VuePartogramme({ partogramme, patients, grossessesActives, etabId, auth
 
 // ── Modal accouchement ────────────────────────────────────────────────────────
 function ModalAccouchement({ partogramme, grossesse, patients, etabId, auth, onClose, onSaved }) {
+  const { error: showError } = useToast();
   const [form, setForm] = useState({ date_heure_accouchement: new Date().toISOString().slice(0, 16), type_accouchement: "eutocique", indication_cesarienne: "", sage_femme: auth?.user?.email ?? "", medecin: "", perinee: "intact", delivrance: "naturelle", pertes_sang_ml: "", complications_mere: "", notes: "" });
   const [showNN, setShowNN] = useState(false);
   const [accData, setAccData] = useState(null);
@@ -528,7 +529,7 @@ function ModalAccouchement({ partogramme, grossesse, patients, etabId, auth, onC
   const duree = partogramme ? Math.round((new Date(form.date_heure_accouchement) - new Date(partogramme.heure_debut_travail)) / 3600000 * 10) / 10 : null;
 
   const handleSave = async () => {
-    if (!form.sage_femme.trim()) return alert("La sage-femme est obligatoire.");
+    if (!form.sage_femme.trim()) return showError("La sage-femme est obligatoire.");
     try {
       const numero = await genererNumeroMaternite(etabId, "accouchement");
       const acc = await insertAccouchement({ ...form, grossesse_id: grossesse?.id ?? null, patient_id: partogramme?.patient_id ?? null, partogramme_id: partogramme?.id ?? null, etablissement_id: etabId, numero_accouchement: numero, date_heure_accouchement: new Date(form.date_heure_accouchement).toISOString(), duree_travail_heures: duree, pertes_sang_ml: form.pertes_sang_ml ? Number(form.pertes_sang_ml) : null });
@@ -536,7 +537,7 @@ function ModalAccouchement({ partogramme, grossesse, patients, etabId, auth, onC
       if (partogramme) await updatePartogramme(partogramme.id, { statut: "termine" });
       setAccData(acc);
       setShowNN(true);
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
   };
 
   const patient = patients.find((p) => p.id === partogramme?.patient_id);
@@ -594,7 +595,7 @@ function ModalAccouchement({ partogramme, grossesse, patients, etabId, auth, onC
 
 // ── Modal nouveau-né ──────────────────────────────────────────────────────────
 function ModalNouveauNe({ accouchement, patient, etabId, auth, onClose, onSaved }) {
-  const { success } = useToast();
+  const { success, error: showError } = useToast();
   const [form, setForm] = useState({ prenom: "", nom: patient?.nom ?? "", sexe: "M", poids_naissance_g: "", taille_naissance_cm: "", perimetre_cranien_cm: "", etat_naissance: "vivant", cri_naissance: true, reanimation_necessaire: false, vitamine_k: true, collyre: true, bcg_vaccine: false, vhb_vaccine: false, allaitement_maternel: true });
   const [apgar, setApgar] = useState({ a1: [0,0,0,0,0], a5: [0,0,0,0,0], a10: [0,0,0,0,0] });
   const [saving, setSaving] = useState(false);
@@ -615,7 +616,7 @@ function ModalNouveauNe({ accouchement, patient, etabId, auth, onClose, onSaved 
   });
 
   const handleSave = async () => {
-    if (!form.poids_naissance_g) return alert("Le poids est obligatoire.");
+    if (!form.poids_naissance_g) return showError("Le poids est obligatoire.");
     setSaving(true);
     try {
       const numCert = await genererNumeroMaternite(etabId, "naissance");
@@ -623,7 +624,7 @@ function ModalNouveauNe({ accouchement, patient, etabId, auth, onClose, onSaved 
       await imprimerCertificatNaissance(nn, accouchement, patient, auth);
       success("Nouveau-ne enregistre — certificat imprime");
       onSaved();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
     finally { setSaving(false); }
   };
 
@@ -808,7 +809,7 @@ function OngletDashboard({ etabId, auth, grossessesActives, partogrammesActifs, 
 
 // ── Onglet 2 : Grossesses ─────────────────────────────────────────────────────
 function OngletGrossesses({ etabId, patients, auth, onRefresh }) {
-  const { success } = useToast();
+  const { success, error: showError } = useToast();
   const [grossesses, setGrossesses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filtre, setFiltre] = useState("toutes");
@@ -885,7 +886,7 @@ function OngletGrossesses({ etabId, patients, auth, onRefresh }) {
 
 // ── Onglet 3 : Salle d'accouchement ──────────────────────────────────────────
 function OngletSalle({ etabId, patients, grossessesActives, auth, onRefresh }) {
-  const { success } = useToast();
+  const { success, error: showError } = useToast();
   const [partogrammes, setPartogrammes] = useState([]);
   const [showAdmission, setShowAdmission] = useState(false);
   const [partogrammeOuvert, setPartogrammeOuvert] = useState(null);
@@ -1137,8 +1138,8 @@ function OngletRegistre({ etabId, patients, auth }) {
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function Maternite() {
   const { auth } = useAuth();
-  const { toasts } = useToast();
-  const { data: patients } = usePatients();
+  const { toasts, error: showError } = useToast();
+  const { data: patients } = usePatients(auth?.etablissement_id);
   const [onglet, setOnglet] = useState("dashboard");
   const [etabId, setEtabId] = useState(auth?.etablissement_id ?? null);
   const [grossessesActives, setGrossessesActives] = useState([]);

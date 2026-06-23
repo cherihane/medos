@@ -212,7 +212,7 @@ function PanelRdv({ rdv, patient, etabId, auth, onClose, onUpdated }) {
       await updateConsultation(rdv.id, { statut: "en_attente", heure_arrivee: new Date().toISOString() });
       onUpdated();
       onClose();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
     finally { setSaving(false); }
   };
 
@@ -223,7 +223,7 @@ function PanelRdv({ rdv, patient, etabId, auth, onClose, onUpdated }) {
       await updateConsultation(rdv.id, { statut: "annule" });
       onUpdated();
       onClose();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
     finally { setSaving(false); }
   };
 
@@ -285,8 +285,8 @@ function PanelRdv({ rdv, patient, etabId, auth, onClose, onUpdated }) {
 // ── Page principale ────────────────────────────────────────────────────────────
 export default function Agenda() {
   const { auth } = useAuth();
-  const { toasts, success } = useToast();
-  const { data: patients } = usePatients();
+  const { toasts, success, error: showError } = useToast();
+  const { data: patients } = usePatients(auth?.etablissement_id);
   const [weekBase, setWeekBase]       = useState(new Date());
   const [rdvs, setRdvs]               = useState([]);
   const [loading, setLoading]         = useState(true);

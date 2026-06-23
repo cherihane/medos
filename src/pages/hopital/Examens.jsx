@@ -179,7 +179,7 @@ function ModalResultat({ examen, patient, etabId, onClose, onSaved }) {
       }
       onSaved();
       onClose();
-    } catch (e) { alert(e.message); setSaving(false); }
+    } catch (e) { showError(e.message); setSaving(false); }
   };
 
   const inputSt = { width: "100%", padding: "9px 11px", border: "1.5px solid #E5E7EB", borderRadius: 9, fontSize: 13, outline: "none", boxSizing: "border-box", background: "white", color: "#0A1628" };
@@ -357,8 +357,8 @@ function PanelResultat({ examen, patient, auth, onClose }) {
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function Examens() {
   const { auth } = useAuth();
-  const { toasts, success } = useToast();
-  const { data: patients } = usePatients();
+  const { toasts, success, error: showError } = useToast();
+  const { data: patients } = usePatients(auth?.etablissement_id);
   const [examens, setExamens] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showPrescrire, setShowPrescrire] = useState(false);

@@ -72,7 +72,7 @@ function PanelTarifs({ etabId, onClose }) {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ libelle: "", categorie: "consultation", prix_defaut: 0 });
   const [saving, setSaving] = useState(false);
-  const { toasts, success } = useToast();
+  const { toasts, success, error: showError } = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -84,7 +84,7 @@ function PanelTarifs({ etabId, onClose }) {
   useEffect(() => { load(); }, [load]);
 
   const handleSave = async () => {
-    if (!form.libelle.trim()) return alert("Le libelle est obligatoire.");
+    if (!form.libelle.trim()) return showError("Le libelle est obligatoire.");
     setSaving(true);
     try {
       if (editing) {
@@ -97,7 +97,7 @@ function PanelTarifs({ etabId, onClose }) {
       setForm({ libelle: "", categorie: "consultation", prix_defaut: 0 });
       load();
       success(editing ? "Tarif mis a jour" : "Tarif ajoute");
-    } catch (e) { alert(e.message); }
+    } catch (e) { showError(e.message); }
     finally { setSaving(false); }
   };
 
@@ -284,11 +284,11 @@ function FactureModal({ patients, etabId, config, onClose, onSaved }) {
   };
 
   const handleSave = async () => {
-    if (!patient_id) return alert("Selectionnez un patient.");
+    if (!patient_id) return showError("Selectionnez un patient.");
     const lignesActes  = Object.values(actesCoches).map((a) => ({ libelle: a.libelle, quantite: 1, prix_unitaire: Number(a.prix_unitaire) || 0 }));
     const lignesValides = lignes.filter((l) => l.libelle.trim());
     const toutesLignes  = [...lignesActes, ...lignesValides];
-    if (toutesLignes.length === 0) return alert("Ajoutez au moins une ligne ou cochez un acte.");
+    if (toutesLignes.length === 0) return showError("Ajoutez au moins une ligne ou cochez un acte.");
     setSaving(true);
     try {
       await insertFacture({
@@ -302,7 +302,7 @@ function FactureModal({ patients, etabId, config, onClose, onSaved }) {
         date_facture: new Date().toISOString().slice(0, 10),
       });
       onSaved(); onClose();
-    } catch (e) { alert("Erreur : " + e.message); }
+    } catch (e) { showError("Erreur : " + e.message); }
     finally { setSaving(false); }
   };
 
@@ -476,7 +476,7 @@ async function imprimerFacture(facture, patients, auth) {
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function Facturation() {
   const { auth } = useAuth();
-  const { data: patients } = usePatients();
+  const { data: patients } = usePatients(auth?.etablissement_id);
   const { toasts, success } = useToast();
   const [factures, setFactures] = useState([]);
   const [loading, setLoading] = useState(true);
