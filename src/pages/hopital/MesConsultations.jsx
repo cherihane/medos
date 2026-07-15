@@ -97,6 +97,7 @@ function CarteFile({ c, onAppeler, onTerminer, actif }) {
 
 // ── Modal nouvelle ordonnance simplifiee ──────────────────────────────────────
 function ModalOrdonnance({ patient, etablissementId, medecinNom, medicaments, onClose, onSaved }) {
+  const { error: showError } = useToast();
   const LIGNE = () => ({ id: Date.now() + Math.random(), medicament_id: "", nom: "", posologie: "", duree: "" });
   const [lignes, setLignes] = useState([LIGNE()]);
   const [saving, setSaving] = useState(false);
@@ -179,6 +180,7 @@ function ModalOrdonnance({ patient, etablissementId, medecinNom, medicaments, on
 
 // ── Modal prescrire examen simplifie ──────────────────────────────────────────
 function ModalExamen({ patient, etablissementId, prescripteur, onClose, onSaved }) {
+  const { error: showError } = useToast();
   const [form, setForm] = useState({ type_examen: TYPES_EXAMENS[0], libelle: "", urgence: false });
   const [saving, setSaving] = useState(false);
 

@@ -301,7 +301,7 @@ function OngletCaisse({ onSaleComplete }) {
   const isMobile = useIsMobile();
   const { auth } = useAuth();
   const { data: medicaments, loading } = useMedicaments();
-  const { toasts, success, error: toastError } = useToast();
+  const { toasts, success, error: showError } = useToast();
   const [cart, setCart] = useState([]);
   const [search, setSearch] = useState("");
   const [paiement, setPaiement] = useState("especes");
@@ -344,13 +344,13 @@ function OngletCaisse({ onSaleComplete }) {
       (m.nom ?? "").toLowerCase().includes(text.toLowerCase())
     );
     if (found) addToCart(found);
-    else toastError("Médicament non trouvé, vérifiez l'inventaire.");
+    else showError("Médicament non trouvé, vérifiez l'inventaire.");
   };
 
   // Bloque les médicaments sans prix : force à saisir un prix avant de vendre
   const addToCart = (med) => {
-    if ((med.stock_actuel ?? 0) === 0) return toastError(`${med.nom} est en rupture de stock`);
-    if ((med.prix_unitaire ?? 0) === 0) return toastError(`${med.nom} — prix unitaire non défini (0 FCFA). Mettez à jour l'inventaire.`);
+    if ((med.stock_actuel ?? 0) === 0) return showError(`${med.nom} est en rupture de stock`);
+    if ((med.prix_unitaire ?? 0) === 0) return showError(`${med.nom} — prix unitaire non défini (0 FCFA). Mettez à jour l'inventaire.`);
     setCart((prev) => {
       const ex = prev.find((i) => i.id === med.id);
       if (ex) {
@@ -375,11 +375,11 @@ function OngletCaisse({ onSaleComplete }) {
 
   const handleEncaisser = async () => {
     if (cart.length === 0) return;
-    if (recuInsuffisant) return toastError("Montant reçu insuffisant");
-    if (mixteInsuffisant) return toastError("La somme espèces + mobile est insuffisante");
+    if (recuInsuffisant) return showError("Montant reçu insuffisant");
+    if (mixteInsuffisant) return showError("La somme espèces + mobile est insuffisante");
     // Vérification prix avant validation
     const sansPrice = cart.filter((i) => (i.prix_unitaire ?? 0) === 0);
-    if (sansPrice.length > 0) return toastError(`Prix manquant : ${sansPrice.map((i) => i.nom).join(", ")}`);
+    if (sansPrice.length > 0) return showError(`Prix manquant : ${sansPrice.map((i) => i.nom).join(", ")}`);
     setSaving(true);
     try {
       const now = new Date();
@@ -452,7 +452,7 @@ function OngletCaisse({ onSaleComplete }) {
       setMontantMobile("");
       onSaleComplete?.();
     } catch (e) {
-      toastError("Erreur : " + e.message);
+      showError("Erreur : " + e.message);
     } finally {
       setSaving(false);
     }
@@ -492,7 +492,7 @@ function OngletCaisse({ onSaleComplete }) {
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button
-              onClick={() => { try { printTicket(lastTicket); } catch (e) { toastError(e.message); } }}
+              onClick={() => { try { printTicket(lastTicket); } catch (e) { showError(e.message); } }}
               style={{ padding: "7px 16px", backgroundColor: "#16A34A", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
             >
               Imprimer le ticket
@@ -796,7 +796,7 @@ function ClotureModal({ date, journal, byMode, totalEncaisse, fondMontant, auth,
         nb_transactions:  nb,
       });
       const etab = await fetchEtabFromAuth(auth);
-      try { printCloture({ date, totaux, nb, gerant: auth?.user?.email ?? "Gérant", etab }); } catch (e) { toastError(e.message); }
+      try { printCloture({ date, totaux, nb, gerant: auth?.user?.email ?? "Gérant", etab }); } catch (e) { showError(e.message); }
       onDone();
     } catch (e) {
       setErr(e.message);
@@ -958,7 +958,7 @@ function OngletJournal({ refreshKey }) {
             </span>
           </div>
           <button
-            onClick={async () => { const etab = await fetchEtabFromAuth(auth); try { printCloture({ date, totaux: { especes: 0, mobile: 0, credit: 0, autres: 0, total: cloture.total_encaisse ?? 0 }, nb: cloture.nb_transactions ?? 0, gerant: cloture.gerant_email ?? "Gérant", etab }); } catch (e) { toastError(e.message); } }}
+            onClick={async () => { const etab = await fetchEtabFromAuth(auth); try { printCloture({ date, totaux: { especes: 0, mobile: 0, credit: 0, autres: 0, total: cloture.total_encaisse ?? 0 }, nb: cloture.nb_transactions ?? 0, gerant: cloture.gerant_email ?? "Gérant", etab }); } catch (e) { showError(e.message); } }}
             style={{ padding: "6px 14px", backgroundColor: "#16A34A", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
           >
             Réimprimer

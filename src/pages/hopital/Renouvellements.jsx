@@ -43,6 +43,7 @@ function envoyerSMSRenouvellement(patient, ordonnance) {
 
 // Modal renouvellement légère (utilise insertOrdonnance directement)
 function ModalRenouveler({ ordonnance, patient, etabId, medecinNom, medicaments, onClose, onSaved }) {
+  const { error: showError } = useToast();
   const [saving, setSaving] = useState(false);
   const [dateExp, setDateExp] = useState(() => {
     const d = new Date(); d.setMonth(d.getMonth() + 1);

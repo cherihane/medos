@@ -79,6 +79,7 @@ function detectConflits(gardes) {
 
 // ── Modal ajout / edition ────────────────────────────────────────────────────
 function GardeModal({ garde, preset, membres, onClose, onSaved, etabId }) {
+  const { error: showError } = useToast();
   const isEdit = !!garde;
   const [form, setForm] = useState({
     personnel_nom:  garde?.personnel_nom  ?? "",
@@ -247,6 +248,7 @@ function GardeCard({ garde, onEdit, onDelete, conflit, overlay }) {
 
 // ── Cellule droppable ────────────────────────────────────────────────────────
 function DroppableCell({ id, gardes, onAdd, onEdit, onDelete, conflits, alerteVide }) {
+  const { error: showError } = useToast();
   const { setNodeRef, isOver } = useDroppable({ id });
 
   return (
