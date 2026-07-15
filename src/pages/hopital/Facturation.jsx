@@ -229,6 +229,7 @@ async function chargerActesNonFactures(patient_id) {
 
 // ── Modal creation facture ────────────────────────────────────────────────────
 function FactureModal({ patients, etabId, config, onClose, onSaved }) {
+  const { error: showError } = useToast();
   const [patient_id, setPatientId] = useState("");
   const [filtrePatient, setFiltrePatient] = useState("");
   const [tarifs, setTarifs] = useState([]);

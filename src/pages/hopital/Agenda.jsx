@@ -202,6 +202,7 @@ function ModalNouveauRdv({ patients, etabId, auth, onClose, onSaved }) {
 
 // ── Panel détail RDV ───────────────────────────────────────────────────────────
 function PanelRdv({ rdv, patient, etabId, auth, onClose, onUpdated }) {
+  const { error: showError } = useToast();
   const [saving, setSaving] = useState(false);
   const s = STATUT_CONFIG[rdv.statut] ?? STATUT_CONFIG.en_attente;
   const t = TRIAGE_CONFIG[rdv.triage] ?? TRIAGE_CONFIG.non_urgent;
