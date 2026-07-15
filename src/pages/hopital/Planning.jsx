@@ -301,7 +301,7 @@ function DroppableCell({ id, gardes, onAdd, onEdit, onDelete, conflits, alerteVi
 }
 
 // ── Export PDF ────────────────────────────────────────────────────────────────
-async function exportPlanningPDF(gardes, weekDates, auth) {
+async function exportPlanningPDF(gardes, weekDates, auth, showError) {
   const etab = await fetchEtabFromAuth(auth);
   const debut = fmtMonth(weekDates[0]);
   const fin   = fmtMonth(weekDates[6]);
@@ -542,7 +542,7 @@ export default function Planning() {
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button
-            onClick={() => exportPlanningPDF(gardes, weekDates, auth ?? {})}
+            onClick={() => exportPlanningPDF(gardes, weekDates, auth ?? {}, showError)}
             style={{ padding: "7px 16px", backgroundColor: colors.bgCard, color: "#7C3AED", border: `1px solid #7C3AED`, borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" }}
           >Exporter PDF</button>
           <button
