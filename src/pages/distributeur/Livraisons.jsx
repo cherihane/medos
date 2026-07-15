@@ -6,7 +6,7 @@ import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useLivraisonsPaginated, useEtablissements } from "../../hooks/useSupabaseData";
 import Pagination from "../../components/Pagination";
-import { insertLivraison, updateLivraison, receiveLivraison } from "../../hooks/useMutations";
+import { insertLivraison, updateLivraison, receiveLivraison, insertMouvementStock } from "../../hooks/useMutations";
 
 const statusStyle = {
   planifiee:   { bg: "#F3F4F6",  color: colors.textSecondary,  label: "Planifiée" },
@@ -86,6 +86,7 @@ function StatutModal({ livraison, onClose, onSaved }) {
   const [lignesLivraison, setLignesLivraison] = useState([{ nom: "", quantite: "" }]);
   const [stockWarn, setStockWarn] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [results, setResults] = useState(null);
 
   function addLigneL() { setLignesLivraison((prev) => [...prev, { nom: "", quantite: "" }]); }
   function updateLigneL(i, key, val) { setLignesLivraison((prev) => prev.map((l, idx) => idx === i ? { ...l, [key]: val } : l)); }
@@ -99,35 +100,80 @@ function StatutModal({ livraison, onClose, onSaved }) {
       if (statut === "livree") {
         update.date_arrivee_reelle = new Date().toISOString();
         const lignesValides = lignesLivraison.filter((l) => l.nom.trim() && parseInt(l.quantite) > 0);
-        const avertissements = [];
+        const lignesResults = [];
 
         for (const ligne of lignesValides) {
           const res = await receiveLivraison(ligne.nom.trim(), parseInt(ligne.quantite), livraison.etablissement_id);
-          if (res === "medicament_introuvable") {
-            avertissements.push(`"${ligne.nom}" introuvable dans l'inventaire du destinataire`);
+          const status = res === "ok" ? "ok" : "introuvable";
+          lignesResults.push({ nom: ligne.nom.trim(), quantite: parseInt(ligne.quantite), status });
+
+          if (status === "ok") {
+            try {
+              await insertMouvementStock({
+                etablissement_id: livraison.etablissement_id,
+                medicament_nom: ligne.nom.trim(),
+                type: "entree",
+                quantite: parseInt(ligne.quantite),
+                motif: "Livraison recue — N° " + livraison.numero_suivi,
+                created_at: new Date().toISOString(),
+              });
+            } catch (_) {}
           }
         }
 
         update.lignes_livrees = JSON.stringify(lignesValides);
         update.quantite_livree = lignesValides.reduce((s, l) => s + (parseInt(l.quantite) || 0), 0);
-
-        if (avertissements.length > 0) {
-          await updateLivraison(livraison.id, update);
-          setStockWarn(`Stock non incremente pour : ${avertissements.join(", ")}`);
-          setSaving(false);
-          onSaved(statut);
-          return;
-        }
+        await updateLivraison(livraison.id, update);
+        onSaved(statut);
+        setResults(lignesResults);
+      } else {
+        await updateLivraison(livraison.id, update);
+        onSaved(statut);
+        onClose();
       }
-      await updateLivraison(livraison.id, update);
-      onSaved(statut);
-      onClose();
     } catch (e) {
       setStockWarn("Erreur : " + e.message);
     } finally {
       setSaving(false);
     }
   };
+
+  if (results !== null) {
+    return (
+      <Modal title="Recapitulatif de la livraison" onClose={onClose} width={480}>
+        <div style={{ marginBottom: 16 }}>
+          {results.map((r, i) => (
+            <div key={i} style={{
+              padding: "10px 14px", marginBottom: 8, borderRadius: 8,
+              backgroundColor: r.status === "ok" ? "#F0FDF4" : "#FFFBEB",
+              border: `1px solid ${r.status === "ok" ? "#BBF7D0" : "#FDE68A"}`,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+                <span style={{ fontWeight: 800, color: r.status === "ok" ? "#16A34A" : "#D97706", fontSize: 15 }}>
+                  {r.status === "ok" ? "✓" : "⚠"}
+                </span>
+                <span style={{ fontWeight: 600, color: r.status === "ok" ? "#15803D" : "#92400E" }}>
+                  {r.nom} × {r.quantite}
+                </span>
+              </div>
+              {r.status === "introuvable" && (
+                <div style={{ marginTop: 4, fontSize: 12, color: "#92400E", paddingLeft: 23 }}>
+                  Ce medicament n'existe pas encore dans l'inventaire du destinataire — ajoutez-le manuellement
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <button
+            onClick={onClose}
+            style={{ padding: "8px 20px", backgroundColor: colors.bgSurface, border: `1px solid ${colors.border}`, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+            Fermer
+          </button>
+        </div>
+      </Modal>
+    );
+  }
 
   return (
     <Modal title="Modifier le statut" onClose={onClose} width={480}>
@@ -173,7 +219,7 @@ function StatutModal({ livraison, onClose, onSaved }) {
             + Ajouter un medicament
           </button>
           {stockWarn && (
-            <div style={{ marginTop: 10, padding: "8px 12px", backgroundColor: "#FFFBEB", border: "1px solid #F59E0B", borderRadius: 8, fontSize: 12, color: "#92400E" }}>
+            <div style={{ marginTop: 10, padding: "8px 12px", backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, fontSize: 12, color: "#DC2626" }}>
               {stockWarn}
             </div>
           )}
@@ -185,6 +231,43 @@ function StatutModal({ livraison, onClose, onSaved }) {
   );
 }
 
+// ── Modal Détail livraison livrée ─────────────────────────────────────────────
+function DetailModal({ livraison, onClose }) {
+  const lignes = (() => {
+    try { return JSON.parse(livraison.lignes_livrees); } catch { return []; }
+  })();
+  return (
+    <Modal title={`Detail — ${livraison.numero_suivi}`} onClose={onClose} width={480}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14, fontSize: 13 }}>
+        <span style={{ color: colors.textSecondary }}>Date d'arrivee reelle</span>
+        <span style={{ fontWeight: 600, color: colors.navy }}>{fmt(livraison.date_arrivee_reelle)}</span>
+      </div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: colors.textSecondary, textTransform: "uppercase", marginBottom: 8 }}>
+        Medicaments livres
+      </div>
+      {lignes.length === 0 && (
+        <div style={{ fontSize: 13, color: colors.textMuted, padding: "12px 0" }}>Aucun detail disponible.</div>
+      )}
+      {lignes.map((l, i) => (
+        <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid var(--border-light)", fontSize: 13 }}>
+          <span style={{ fontWeight: 600, color: colors.navy }}>{l.nom}</span>
+          <span style={{ color: colors.textSecondary }}>x {l.quantite}</span>
+        </div>
+      ))}
+      <div style={{ marginTop: 12, fontSize: 13, color: colors.textSecondary }}>
+        Quantite totale : <strong style={{ color: colors.navy }}>{livraison.quantite_livree ?? 0}</strong>
+      </div>
+      <div style={{ marginTop: 20, display: "flex", justifyContent: "flex-end" }}>
+        <button
+          onClick={onClose}
+          style={{ padding: "8px 20px", backgroundColor: colors.bgSurface, border: `1px solid ${colors.border}`, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+          Fermer
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
 export default function Livraisons() {
   const [filter, setFilter] = useState("tous");
   const { data: livraisons, loading, error, total, page, setPage, totalPages, refetch } = useLivraisonsPaginated(filter);
@@ -192,6 +275,7 @@ export default function Livraisons() {
   const { toasts, success, error: toastError } = useToast();
   const [showNouvelle, setShowNouvelle] = useState(false);
   const [statutModal, setStatutModal] = useState(null);
+  const [detailModal, setDetailModal] = useState(null);
 
   const filtered = livraisons;
 
@@ -216,6 +300,9 @@ export default function Livraisons() {
             success(`Livraison mise à jour : ${statusStyle[newStatut]?.label ?? newStatut}`);
           }}
         />
+      )}
+      {detailModal && (
+        <DetailModal livraison={detailModal} onClose={() => setDetailModal(null)} />
       )}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -294,12 +381,19 @@ export default function Livraisons() {
                   <td style={{ padding: "14px 16px" }}>
                     <span style={{ padding: "3px 10px", backgroundColor: s.bg, color: s.color, borderRadius: 10, fontSize: 11, fontWeight: 700 }}>{s.label}</span>
                   </td>
-                  <td style={{ padding: "14px 16px" }}>
+                  <td style={{ padding: "14px 16px", display: "flex", gap: 6, alignItems: "center" }}>
                     {l.statut !== "livree" && l.statut !== "incident" && (
                       <button
                         onClick={() => setStatutModal(l)}
                         style={{ padding: "4px 12px", backgroundColor: "#EFF6FF", color: "#2563EB", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>
                         Mettre à jour
+                      </button>
+                    )}
+                    {l.statut === "livree" && (
+                      <button
+                        onClick={() => setDetailModal(l)}
+                        style={{ padding: "4px 12px", backgroundColor: "#DCFCE7", color: "#16A34A", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>
+                        Voir detail
                       </button>
                     )}
                   </td>
