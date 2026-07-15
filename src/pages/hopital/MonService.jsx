@@ -13,7 +13,7 @@ import {
   fetchPlanSoinsJour, insertPlanSoins, insertAdministration,
   fetchMembresPersonnel, insertCommandeInterne, fetchCommandesInternes,
 } from "../../hooks/useMutations";
-import { useMedicaments } from "../../hooks/useSupabaseData";
+import { useMedicaments, usePatients } from "../../hooks/useSupabaseData";
 
 const ACCENT = "#10B981";
 
@@ -367,8 +367,9 @@ function ModalPlanSoins({ litsOccupes, auth, onClose, onSaved }) {
 function DemanderMedicament({ auth, etabId, serviceFil }) {
   const { success, error: showError } = useToast();
   const { data: medicaments } = useMedicaments();
+  const { data: patients } = usePatients(etabId);
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ medicament_id: "", medicament_nom: "", autre: false, autreNom: "", quantite: 1, motif: "" });
+  const [form, setForm] = useState({ medicament_id: "", medicament_nom: "", autre: false, autreNom: "", quantite: 1, motif: "", patient_id: "" });
   const [saving, setSaving] = useState(false);
   const [mesDemandes, setMesDemandes] = useState([]);
 
@@ -397,10 +398,11 @@ function DemanderMedicament({ auth, etabId, serviceFil }) {
         medicament_nom: nom,
         quantite_demandee: Number(form.quantite),
         motif: form.motif || null,
+        patient_id: form.patient_id || null,
         statut: "en_attente",
       });
       success("Demande envoyee au pharmacien");
-      setForm({ medicament_id: "", medicament_nom: "", autre: false, autreNom: "", quantite: 1, motif: "" });
+      setForm({ medicament_id: "", medicament_nom: "", autre: false, autreNom: "", quantite: 1, motif: "", patient_id: "" });
       setOpen(false);
       loadDemandes();
     } catch (e) { showError(e.message); }
@@ -439,6 +441,13 @@ function DemanderMedicament({ auth, etabId, serviceFil }) {
           <div>
             <label style={labelSt}>Motif</label>
             <input style={inputSt} value={form.motif} onChange={(e) => setForm((f) => ({ ...f, motif: e.target.value }))} placeholder="Optionnel..." />
+          </div>
+          <div style={{ gridColumn: "1/-1" }}>
+            <label style={labelSt}>Patient concerne (optionnel)</label>
+            <select style={inputSt} value={form.patient_id} onChange={(e) => setForm((f) => ({ ...f, patient_id: e.target.value }))}>
+              <option value="">-- Aucun --</option>
+              {(patients ?? []).map((p) => <option key={p.id} value={p.id}>{p.prenom} {p.nom}</option>)}
+            </select>
           </div>
           <div style={{ gridColumn: "1/-1", display: "flex", justifyContent: "flex-end", gap: 8 }}>
             <button onClick={() => setOpen(false)} style={{ padding: "7px 14px", background: colors.bgSurface, border: `1px solid ${colors.border}`, borderRadius: 8, fontSize: 12, cursor: "pointer" }}>Annuler</button>
@@ -494,7 +503,9 @@ function OngletPatients({ litsOccupes, perfusionsActives, loading, auth, onRefre
       {loading && [1,2,3].map((i) => <div key={i} style={{ height: 80, backgroundColor: colors.bgSurface, borderRadius: 10, marginBottom: 10, animation: "pulse 1.5s ease-in-out infinite" }} />)}
       {!loading && filtres.length === 0 && <div style={{ textAlign: "center", color: colors.textMuted, padding: 32, fontSize: 13 }}>Aucun patient hospitalise.</div>}
 
-      <DemanderMedicament auth={auth} etabId={auth?.etablissement_id} serviceFil={serviceFil} />
+      {!["Caissier", "Laborantin", "Aide-soignant"].includes(auth?.role_interne) && (
+        <DemanderMedicament auth={auth} etabId={auth?.etablissement_id} serviceFil={serviceFil} />
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 12 }}>
         {!loading && filtres.map((h) => {
