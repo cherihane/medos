@@ -292,6 +292,15 @@ function ModalPlanSoins({ litsOccupes, auth, onClose, onSaved }) {
         prescripteur: form.prescripteur || null,
         actif: true,
       });
+      supabase.from("alertes").insert({
+        etablissement_id: auth?.etablissement_id ?? null,
+        patient_id: form.patient_id ?? null,
+        titre: "Nouveau medicament au plan de soins",
+        message: `${form.medicament_nom} — ${form.horaires?.join(", ") || ""}`,
+        type: "soins",
+        statut: "non_lu",
+        resolu: false,
+      }).catch(() => {});
       onSaved(); onClose();
     } catch (e) { showError(e.message); }
     finally { setSaving(false); }

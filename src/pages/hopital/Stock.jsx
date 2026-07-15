@@ -657,6 +657,15 @@ function OngletCommandesInternes({ auth, etabId }) {
       } catch (e) { showError("Erreur dispensation : " + e.message); }
     }
 
+    supabase.from("alertes").insert({
+      etablissement_id: etabId,
+      patient_id: cmd.patient_id ?? null,
+      titre: "Medicament servi",
+      message: `${cmd.medicament_nom} x ${cmd.quantite_servie ?? cmd.quantite_demandee} — demande de ${cmd.demandeur_service || cmd.demandeur_email}`,
+      type: "dispensation",
+      statut: "non_lu",
+      resolu: false,
+    }).catch(() => {});
     success("Medicament servi et dispensation enregistree");
     load();
   };

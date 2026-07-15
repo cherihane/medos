@@ -2,15 +2,26 @@ import { useState } from "react";
 import Sidebar from "./Sidebar";
 import { useIsMobile } from "../hooks/useWindowSize";
 import { colors, sidebar, spacing } from "../theme";
+import { useNotifications } from "../context/NotificationsContext";
+import { useAuth } from "../context/AuthContext";
 
 const SIDEBAR_WIDTH = sidebar.width;
 
 export default function Layout({ children, title, subtitle }) {
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { auth } = useAuth();
+  const { lastNotif, dismissLast } = useNotifications();
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", backgroundColor: colors.bg }}>
+      {auth?.role === "hopital" && lastNotif && (
+        <div style={{ position: "fixed", top: 20, right: 24, zIndex: 9999, backgroundColor: "white", borderRadius: 12, boxShadow: "0 8px 32px rgba(0,0,0,0.15)", padding: "14px 18px", maxWidth: 340, borderLeft: "4px solid #3B82F6" }}>
+          <button onClick={dismissLast} style={{ position: "absolute", top: 8, right: 10, background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "#9CA3AF" }}>×</button>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#0A1628" }}>{lastNotif.title}</div>
+          <div style={{ fontSize: 12, color: "#6B7280", marginTop: 4 }}>{lastNotif.message}</div>
+        </div>
+      )}
       <Sidebar
         mobileOpen={sidebarOpen}
         onMobileClose={() => setSidebarOpen(false)}

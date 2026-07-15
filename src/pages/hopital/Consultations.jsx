@@ -5,6 +5,7 @@ import Layout from "../../components/Layout";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useAuth } from "../../context/AuthContext";
+import { supabase } from "../../supabaseClient";
 import { usePatients } from "../../hooks/useSupabaseData";
 import {
   insertConsultation,
@@ -445,6 +446,17 @@ export default function Consultations() {
     await updateConsultation(c.id, updated);
     setConsultations((prev) => prev.map((x) => x.id === c.id ? { ...x, ...updated } : x));
     success("Consultation terminee");
+    if (etabId) {
+      supabase.from("alertes").insert({
+        etablissement_id: etabId,
+        patient_id: c.patient_id ?? null,
+        titre: "Consultation terminee",
+        message: `${c.medecin_nom || "Medecin"} — ${c.service || ""}${c.patient_id ? " — patient a reconduire" : ""}`,
+        type: "consultation",
+        statut: "non_lu",
+        resolu: false,
+      }).catch(() => {});
+    }
   };
 
   const handleImprimer = async () => {
