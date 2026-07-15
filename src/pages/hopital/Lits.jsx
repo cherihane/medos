@@ -161,6 +161,7 @@ function ModalAdmettre({ patients, serviceInitial, etabId, onClose, onSaved }) {
 
 // ── Modal liberer ─────────────────────────────────────────────────────────────
 function ModalLiberer({ hospi, onClose, onSaved }) {
+  const { error: showError } = useToast();
   const nom = hospi.patients ? `${hospi.patients.prenom} ${hospi.patients.nom}` : "ce patient";
   const [form, setForm] = useState({
     date_sortie_reelle: new Date().toISOString().slice(0, 16),
@@ -210,6 +211,7 @@ function ModalLiberer({ hospi, onClose, onSaved }) {
 
 // ── Modal config capacite ─────────────────────────────────────────────────────
 function ModalConfig({ service, capaciteActuelle, etabId, onClose, onSaved }) {
+  const { error: showError } = useToast();
   const [capacite, setCapacite] = useState(capaciteActuelle ?? 10);
   const [saving, setSaving] = useState(false);
 

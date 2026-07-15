@@ -34,6 +34,7 @@ function Skeleton() {
 
 // ── Modal Ajouter / Éditer patient ────────────────────────────────────────────
 function PatientModal({ patient, onClose, onSaved }) {
+  const { error: showError } = useToast();
   const isEdit = !!patient;
   const [form, setForm] = useState({
     prenom:        patient?.prenom        ?? "",
