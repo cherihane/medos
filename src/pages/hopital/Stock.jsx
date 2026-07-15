@@ -609,7 +609,11 @@ function OngletCommandesInternes({ auth, etabId }) {
     setLoading(false);
   }, [etabId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+    const interval = setInterval(load, 30000);
+    return () => clearInterval(interval);
+  }, [load]);
 
   const filtrees = filtre === "tous" ? commandes : commandes.filter((c) => c.statut === filtre);
 
@@ -629,12 +633,32 @@ function OngletCommandesInternes({ auth, etabId }) {
   };
 
   const handleServir = async (cmd) => {
-    try {
-      const med = medicaments.find((m) => m.id === cmd.medicament_id);
-      await updateCommandeInterne(cmd.id, { statut: "servie" });
-      if (med && cmd.quantite_servie) await decrementStock(med.id, cmd.quantite_servie);
-      success("Medicament servi"); load();
-    } catch (e) { showError(e.message); }
+    const qte = cmd.quantite_servie ?? cmd.quantite_demandee;
+    try { await updateCommandeInterne(cmd.id, { statut: "servie" }); }
+    catch (e) { showError("Erreur mise a jour statut : " + e.message); return; }
+
+    if (cmd.medicament_id && qte) {
+      try { await decrementStock(cmd.medicament_id, qte); }
+      catch (e) { showError("Erreur decrement stock : " + e.message); }
+    }
+
+    if (cmd.patient_id) {
+      try {
+        await insertDispensation({
+          patient_id: cmd.patient_id,
+          medicament_id: cmd.medicament_id ?? null,
+          etablissement_id: etabId,
+          quantite: qte,
+          dose: null,
+          voie: "Interne",
+          prescripteur: cmd.demandeur_email ?? null,
+          notes: cmd.motif ?? null,
+        });
+      } catch (e) { showError("Erreur dispensation : " + e.message); }
+    }
+
+    success("Medicament servi et dispensation enregistree");
+    load();
   };
 
   const handleRefuser = async () => {
