@@ -757,6 +757,7 @@ function OngletCaisse({ onSaleComplete }) {
 
 // ─── Modal clôture de caisse ─────────────────────────────────────────────────
 function ClotureModal({ date, journal, byMode, totalEncaisse, fondMontant, auth, onClose, onDone }) {
+  const { error: showError } = useToast();
   const [password, setPassword] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(null);
@@ -881,6 +882,7 @@ function ClotureModal({ date, journal, byMode, totalEncaisse, fondMontant, auth,
 
 // ─── Onglet Journal du gérant ─────────────────────────────────────────────────
 function OngletJournal({ refreshKey }) {
+  const { error: showError } = useToast();
   const { auth } = useAuth();
   const [date, setDate] = useState(todayISO());
   const [journal, setJournal] = useState([]);

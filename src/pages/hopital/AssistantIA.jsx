@@ -4,6 +4,7 @@ import Layout from "../../components/Layout";
 import { useIsMobile } from "../../hooks/useWindowSize";
 import { usePatients } from "../../hooks/useSupabaseData";
 import { supabase } from "../../supabaseClient";
+import { useAuth } from "../../context/AuthContext";
 
 const PROTOCOLES = [
   {
@@ -191,6 +192,7 @@ function protocoleToMessage(p) {
 }
 
 export default function AssistantIA() {
+  const { auth } = useAuth();
   const isMobile = useIsMobile();
   const { data: patients } = usePatients(auth?.etablissement_id);
   const [messages, setMessages] = useState(initialMessages);

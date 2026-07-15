@@ -239,6 +239,7 @@ function ModalEncaissement({ facture, patient, session, etabId, auth, config, on
 
 // ── Modal fermeture caisse ─────────────────────────────────────────────────────
 function ModalFermetureCaisse({ session, paiements, etabId, auth, onClose, onSaved }) {
+  const { error: showError } = useToast();
   const totalEspeces     = paiements.filter((p) => p.mode_paiement === "especes").reduce((s, p) => s + p.montant, 0);
   const totalMobile      = paiements.filter((p) => ["mtn_momo","airtel_money","orange_money"].includes(p.mode_paiement)).reduce((s, p) => s + p.montant, 0);
   const totalCheque      = paiements.filter((p) => p.mode_paiement === "cheque").reduce((s, p) => s + p.montant, 0);
@@ -553,6 +554,7 @@ async function imprimerFacture(facture, patients, auth) {
 }
 
 function FactureModal({ patients, etabId, config, onClose, onSaved }) {
+  const { error: showError } = useToast();
   const [patient_id, setPatientId]           = useState("");
   const [filtrePatient, setFiltrePatient]     = useState("");
   const [tarifs, setTarifs]                  = useState([]);
@@ -734,6 +736,7 @@ function ModalVoirPaiements({ facture, patient, onClose }) {
 }
 
 function PanelTarifs({ etabId, onClose }) {
+  const { error: showError } = useToast();
   const [tarifs, setTarifs]     = useState([]);
   const [loading, setLoading]   = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -1061,6 +1064,7 @@ function OngletHistorique({ etabId, auth }) {
 
 // ── Onglet 4 — Configuration ───────────────────────────────────────────────────
 function OngletConfiguration({ etabId, config, onConfigSaved }) {
+  const { error: showError } = useToast();
   const [form, setForm] = useState({
     tva_active: config?.tva_active ?? false,
     tva_taux: config?.tva_taux ?? 0,

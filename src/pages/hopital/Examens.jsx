@@ -142,6 +142,7 @@ function ModalPrescrire({ patients, etabId, onClose, onSaved }) {
 
 // ── Modal saisir résultat ──────────────────────────────────────────────────────
 function ModalResultat({ examen, patient, etabId, onClose, onSaved }) {
+  const { error: showError } = useToast();
   const refsDisponibles = VALEURS_REFERENCE[examen.type_examen] ?? [];
   const [form, setForm] = useState({
     resultat_texte: examen.resultat_texte ?? "",
