@@ -8,6 +8,7 @@ import { usePatientsPaginated } from "../../hooks/useSupabaseData";
 import Pagination from "../../components/Pagination";
 import { insertPatient, updatePatient } from "../../hooks/useMutations";
 import { useIsMobile } from "../../hooks/useWindowSize";
+import { useAuth } from "../../context/AuthContext";
 
 function calcAge(dateNaissance) {
   if (!dateNaissance) return "—";
@@ -35,6 +36,7 @@ function Skeleton() {
 // ── Modal Ajouter / Éditer patient ────────────────────────────────────────────
 function PatientModal({ patient, onClose, onSaved }) {
   const { error: showError } = useToast();
+  const { auth } = useAuth();
   const isEdit = !!patient;
   const [form, setForm] = useState({
     prenom:        patient?.prenom        ?? "",
@@ -54,14 +56,15 @@ function PatientModal({ patient, onClose, onSaved }) {
     setSaving(true);
     try {
       const payload = {
-        prenom:         form.prenom,
-        nom:            form.nom,
-        date_naissance: form.date_naissance || null,
-        genre:          form.genre,
-        telephone:      form.telephone || null,
-        email:          form.email || null,
-        groupe_sanguin: form.groupe_sanguin || null,
-        adresse:        form.adresse || null,
+        prenom:           form.prenom,
+        nom:              form.nom,
+        date_naissance:   form.date_naissance || null,
+        genre:            form.genre,
+        telephone:        form.telephone || null,
+        email:            form.email || null,
+        groupe_sanguin:   form.groupe_sanguin || null,
+        adresse:          form.adresse || null,
+        etablissement_id: auth?.etablissement_id ?? null,
       };
       if (isEdit) {
         await updatePatient(patient.id, payload);

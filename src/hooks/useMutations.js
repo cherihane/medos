@@ -6,7 +6,18 @@ import { supabase } from "../supabaseClient";
 
 async function run(promise) {
   const { data, error } = await promise;
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (error.message?.includes("row-level security") || error.code === "42501") {
+      throw new Error("Acces refuse. Verifiez que vous etes bien connecte a votre etablissement.");
+    }
+    if (error.message?.includes("duplicate key") || error.code === "23505") {
+      throw new Error("Cet element existe deja.");
+    }
+    if (error.message?.includes("foreign key") || error.code === "23503") {
+      throw new Error("Reference invalide. L'element lie n'existe pas.");
+    }
+    throw new Error(error.message ?? "Une erreur inattendue est survenue.");
+  }
   return data;
 }
 

@@ -116,6 +116,7 @@ const EMPTY_FORM = {
 };
 
 function FournisseurModal({ initial, onClose, onSaved }) {
+  const { auth } = useAuth();
   const [form, setForm] = useState(initial
     ? {
         nom:                  initial.nom               || "",
@@ -141,7 +142,7 @@ function FournisseurModal({ initial, onClose, onSaved }) {
       if (isEdit) {
         await updateFournisseur(initial.id, form);
       } else {
-        await insertFournisseur({ ...form, actif: true });
+        await insertFournisseur({ ...form, actif: true, etablissement_id: auth?.etablissement_id ?? null });
       }
       onSaved();
       onClose();
