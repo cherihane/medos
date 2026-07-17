@@ -7,6 +7,7 @@ import Tooltip from "../../components/Tooltip";
 import { useToast } from "../../hooks/useToast";
 import { useVerificationLot } from "../../hooks/useVerificationLot";
 import { useIsMobile } from "../../hooks/useWindowSize";
+import { useAuth } from "../../context/AuthContext";
 
 // ── Styles statuts ────────────────────────────────────────────────────────────
 const STATUTS = {
@@ -24,6 +25,11 @@ const STATUTS = {
     label: "Lot suspect — Non identifié",
     sublabel: "Introuvable dans MedOS et dans la BDPM. Alerte créée, email envoyé aux autorités.",
     bg: "#FEF2F2", color: "#DC2626", border: "#FCA5A5",
+  },
+  inventaire_local: {
+    label: "Medicament en inventaire",
+    sublabel: "Reference dans l'inventaire de votre pharmacie",
+    bg: "#F0FDF4", color: "#16A34A", border: "#86EFAC",
   },
 };
 
@@ -48,7 +54,7 @@ function HistoriqueItem({ item, onRescan }) {
         </div>
       </div>
       <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 8, backgroundColor: s.bg, color: s.color, fontWeight: 700, flexShrink: 0 }}>
-        {item.result.statut === "certifie" ? "MedOS" : item.result.statut === "bdpm" ? "BDPM" : "Suspect"}
+        {item.result.statut === "certifie" ? "MedOS" : item.result.statut === "bdpm" ? "BDPM" : item.result.statut === "inventaire_local" ? "Local" : "Suspect"}
       </span>
     </div>
   );
@@ -82,7 +88,7 @@ function ResultPanel({ result }) {
       {/* Source badge */}
       <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end" }}>
         <span style={{ fontSize: 10, color: colors.textMuted, padding: "3px 10px", backgroundColor: colors.borderLight, borderRadius: 8 }}>
-          Source : {result.source === "supabase" ? "Base MedOS (Supabase)" : result.source === "bdpm" ? "BDPM — Médicaments France" : "Aucune base"}
+          Source : {result.source === "supabase" ? "Base MedOS (Supabase)" : result.source === "bdpm" ? "BDPM — Medicaments France" : result.source === "inventaire_local" ? "Inventaire pharmacie" : "Aucune base"}
         </span>
       </div>
     </div>
@@ -92,6 +98,7 @@ function ResultPanel({ result }) {
 // ── Composant principal ───────────────────────────────────────────────────────
 export default function Scanner({ profile = "pharmacie" }) {
   const isMobile = useIsMobile();
+  const { auth } = useAuth();
 
   const { loading, result, error, verifier, reset } = useVerificationLot();
   const { toasts, success, error: toastError } = useToast();
@@ -123,6 +130,7 @@ export default function Scanner({ profile = "pharmacie" }) {
       nomMedicament: nomMedicament.trim(),
       numerolot: numerolot.trim(),
       scannePar: `Scanner MedOS — ${profile}`,
+      etablissement_id: auth?.etablissement_id ?? null,
     });
   }, [nomMedicament, numerolot, verifier, profile, toastError]);
 
@@ -140,7 +148,7 @@ export default function Scanner({ profile = "pharmacie" }) {
     if (result.statut === "suspect") {
       toastError("Lot suspect — alerte envoyée aux autorités");
     } else {
-      success(result.statut === "certifie" ? "Certifié MedOS" : "Référencé BDPM France");
+      success(result.statut === "certifie" ? "Certifie MedOS" : result.statut === "inventaire_local" ? "Reference dans l'inventaire local" : "Reference BDPM France");
     }
   }, [result, toastError, success]);
 

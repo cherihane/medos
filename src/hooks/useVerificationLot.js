@@ -173,7 +173,7 @@ export function useVerificationLot() {
     error: null,
   });
 
-  const verifier = useCallback(async ({ numerolot, nomMedicament, scannePar = "Scanner MedOS" }) => {
+  const verifier = useCallback(async ({ numerolot, nomMedicament, scannePar = "Scanner MedOS", etablissement_id = null }) => {
     if (!numerolot && !nomMedicament) return;
 
     // Réinitialise avant chaque vérification
@@ -228,7 +228,39 @@ export function useVerificationLot() {
         return;
       }
 
-      // ── Etape 3 : Suspect — alerte unique ─────────────────────────────────
+      // ── Etape 3 : Inventaire local ────────────────────────────────────────
+      if (etablissement_id && (nomMedicament || numerolot)) {
+        let q = supabase
+          .from("medicaments")
+          .select("id, nom, fabricant, code")
+          .eq("etablissement_id", etablissement_id);
+
+        if (nomMedicament) {
+          q = q.ilike("nom", `%${principalActif(nomMedicament)}%`);
+        } else if (numerolot) {
+          q = q.eq("code", numerolot);
+        }
+
+        const { data: medLocal } = await q.maybeSingle();
+        if (medLocal) {
+          setState({
+            loading: false, error: null,
+            result: {
+              statut: "inventaire_local",
+              source: "inventaire_local",
+              details: {
+                "Medicament": medLocal.nom,
+                "Fabricant":  medLocal.fabricant ?? "—",
+                "Code":       medLocal.code ?? "—",
+                "Source":     "Inventaire pharmacie",
+              },
+            },
+          });
+          return;
+        }
+      }
+
+      // ── Etape 4 : Suspect — alerte unique ─────────────────────────────────
       // Ces deux appels sont attendus ; ils n'ont lieu qu'une seule fois ici.
       await creerAlerteSuspecte({ nomMedicament, numerolot, scannePar });
       await sendAlertEmail({

@@ -10,6 +10,7 @@ import Pagination from "../../components/Pagination";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import { useAuth } from "../../context/AuthContext";
+import QrScanner from "../../components/QrScanner";
 
 const FORMES_GALENIQUES = ["Comprimé", "Gélule", "Sirop", "Injectable", "Crème", "Suppositoire", "Patch"];
 
@@ -179,6 +180,8 @@ function CommanderModal({ med, fournisseurs, onClose, onSaved }) {
 
 // ── Modal Nouveau produit ──────────────────────────────────────────────────────
 function NouveauModal({ onClose, onSaved }) {
+  const { auth } = useAuth();
+  const { success, error: showError } = useToast();
   const [form, setForm] = useState({
     nom: "", code: "", categorie: "", forme: "",
     stock_actuel: 0, stock_minimum: 0,
@@ -187,6 +190,7 @@ function NouveauModal({ onClose, onSaved }) {
   });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
+  const [showInlineScanner, setShowInlineScanner] = useState(false);
   const set = (k) => (e) => { setFormError(null); setForm((f) => ({ ...f, [k]: e.target.value })); };
 
   const handleSave = async () => {
@@ -195,16 +199,17 @@ function NouveauModal({ onClose, onSaved }) {
     setSaving(true);
     try {
       await insertMedicament({
-        nom:           form.nom.trim(),
-        code:          form.code || null,
-        categorie:     form.categorie || null,
-        forme:         form.forme || null,
-        stock_actuel:  Number(form.stock_actuel),
-        stock_minimum: Number(form.stock_minimum),
-        prix_achat:    Number(form.prix_achat),
-        prix_unitaire: Number(form.prix_unitaire),
-        fabricant:     form.fabricant || null,
-        dci:           form.dci || null,
+        nom:              form.nom.trim(),
+        code:             form.code || null,
+        categorie:        form.categorie || null,
+        forme:            form.forme || null,
+        stock_actuel:     Number(form.stock_actuel),
+        stock_minimum:    Number(form.stock_minimum),
+        prix_achat:       Number(form.prix_achat),
+        prix_unitaire:    Number(form.prix_unitaire),
+        fabricant:        form.fabricant || null,
+        dci:              form.dci || null,
+        etablissement_id: auth?.etablissement_id ?? null,
       });
       onSaved();
       onClose();
@@ -221,8 +226,28 @@ function NouveauModal({ onClose, onSaved }) {
         <Field label="Nom *">
           <input style={inputStyle} value={form.nom} onChange={set("nom")} placeholder="Ex: Amoxicilline 500mg" />
         </Field>
-        <Field label="Code">
-          <input style={inputStyle} value={form.code} onChange={set("code")} placeholder="Ex: AMX-500" />
+        <Field label="Code-barres / QR Code">
+          <div style={{ display: "flex", gap: 8 }}>
+            <input style={{ ...inputStyle, flex: 1 }} value={form.code} onChange={set("code")} placeholder="Ex: 3400935959691" />
+            <button type="button" onClick={() => setShowInlineScanner(true)} style={{ padding: "8px 14px", borderRadius: 8, border: `1.5px solid ${colors.border}`, backgroundColor: colors.bgSurface, cursor: "pointer", fontSize: 12, fontWeight: 600, color: colors.navy, whiteSpace: "nowrap" }}>
+              Scanner
+            </button>
+          </div>
+          {showInlineScanner && (
+            <div style={{ marginTop: 8 }}>
+              <QrScanner
+                onScan={(text) => {
+                  setForm((f) => ({ ...f, code: text ?? "" }));
+                  setShowInlineScanner(false);
+                  success("Code scanne : " + text);
+                }}
+                onClose={() => setShowInlineScanner(false)}
+              />
+              <button type="button" onClick={() => setShowInlineScanner(false)} style={{ marginTop: 6, fontSize: 12, color: colors.textMuted, background: "none", border: "none", cursor: "pointer" }}>
+                Annuler le scan
+              </button>
+            </div>
+          )}
         </Field>
       </Row>
       <Row>
