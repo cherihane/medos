@@ -103,14 +103,12 @@ function ReceptionModal({ medicaments, fournisseurs, auth, onClose, onSaved }) {
           {formError}
         </div>
       )}
-      <ModalFooter>
-        <button onClick={onClose} style={{ padding: "9px 20px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", backgroundColor: colors.bgCard, color: colors.text }}>
-          Annuler
-        </button>
-        <button onClick={handleSave} disabled={saving} style={{ padding: "9px 20px", backgroundColor: saving ? "#E5E7EB" : "#10B981", color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer" }}>
-          {saving ? "Enregistrement…" : "Enregistrer la reception"}
-        </button>
-      </ModalFooter>
+      <ModalFooter
+        onCancel={onClose}
+        onSubmit={handleSave}
+        submitLabel="Enregistrer la reception"
+        saving={saving}
+      />
     </Modal>
   );
 }

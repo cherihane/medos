@@ -30,8 +30,8 @@ Si un bug semble venir de là, le documenter ici et demander confirmation avant 
 | 6 | Impression du ticket de caisse | ✅ | Popup s'ouvre, ticket bien formaté (pharmacie, date, articles, total, mode paiement, monnaie rendue). |
 | 7 | Création et dispensation d'une ordonnance | ✅ | Corrigé (5 bugs, voir journal) — création + validation + dispensation validées en production. |
 | 8 | Décrément de stock après vente/dispensation | ✅ | Vérifié à chaque vente/dispensation testée (Paracétamol 100→99→96, Amoxicilline 3→2→1→0), stock correct après reload à chaque fois. |
-| 9 | Ajout d'un médicament à l'inventaire | 🟡 | Corrigé (voir journal), à revalider en prod après déploiement. Édition CSV import restent à tester. |
-| 9b | Import CSV inventaire | ⬜ | (si le temps le permet) |
+| 9 | Ajout d'un médicament à l'inventaire | ✅ | Ajout, édition (avec date de péremption) validés en prod. |
+| 9b | Import CSV inventaire | ✅ | Corrigé (bouton "mort", voir journal) — import de 2 produits validé en local, à revalider en prod après déploiement. |
 | 10 | Alertes stock bas / péremption | ⬜ | |
 | 11 | Fournisseurs et mouvements de stock | ⬜ | |
 | 12 | Gestion des patients (création, historique, fidélité) | ⬜ | |
@@ -110,6 +110,24 @@ ajout d'un bloc `EXCEPTION WHEN OTHERS` autour de l'appel HTTP pour qu'un échec
 ne puisse plus jamais faire échouer l'opération métier (vente, stock) qui l'a déclenché. Revalidé en
 production : ajout de "Amoxicilline 500mg" (stock 3, seuil 20, péremption +20j) réussi, visible après
 reload.
+
+**2026-07-19 — Bug critique #5 : `ModalFooter` ignore ses `children` — 2 boutons "morts" dans toute
+l'app.** En testant l'import CSV, le clic sur le bouton visible ne déclenchait AUCUNE requête réseau
+(vérifié en loggant tout le trafic). Cause : le composant partagé
+[Modal.jsx](src/components/Modal.jsx) `ModalFooter({ onCancel, onSubmit, submitLabel, saving,
+danger })` ne rend jamais `props.children` — il a une API strictement basée sur des props. Or
+`Inventaire.jsx` (import CSV) et `Mouvements.jsx` (nouvelle réception de stock) appelaient
+`<ModalFooter><button onClick={...}>...</button>...</ModalFooter>` en lui passant des boutons
+personnalisés en *children* : React les ignore silencieusement, et `ModalFooter` affiche à la place
+son propre bouton par défaut ("Enregistrer") dont le `onClick` (`onSubmit`, jamais fourni) est
+`undefined` — **le clic ne fait absolument rien, sans la moindre erreur visible.** Conséquence :
+l'import CSV/Excel de l'inventaire et l'enregistrement d'une nouvelle réception de stock étaient
+tous les deux complètement non-fonctionnels depuis toujours, sans qu'aucun message d'erreur ne le
+laisse deviner. Recherché sur tout le repo (`grep -rln "<ModalFooter>" src/pages/ src/components/`) :
+seules ces 2 occurrences existaient, aucune autre page (hôpital, distributeur, autorité) n'est
+touchée. Corrigé en remplaçant les deux par l'API à props (`onCancel`, `onSubmit`, `submitLabel`,
+`saving`). Revalidé en local : import de 2 lignes CSV (Ibuprofène 400mg stock 50, Vitamine C 500mg
+stock 200, avec dates de péremption) confirmé en base après reload.
 
 **2026-07-19 — Ordonnances : 5 bugs trouvés et corrigés pour rendre création + dispensation
 fonctionnelles de bout en bout.**
