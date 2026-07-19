@@ -32,7 +32,7 @@ Si un bug semble venir de là, le documenter ici et demander confirmation avant 
 | 8 | Décrément de stock après vente/dispensation | ✅ | Vérifié à chaque vente/dispensation testée (Paracétamol 100→99→96, Amoxicilline 3→2→1→0), stock correct après reload à chaque fois. |
 | 9 | Ajout d'un médicament à l'inventaire | ✅ | Ajout, édition (avec date de péremption) validés en prod. |
 | 9b | Import CSV inventaire | ✅ | Corrigé (bouton "mort", voir journal) — import validé en local puis en production après déploiement. |
-| 10 | Alertes stock bas / péremption | ⬜ | |
+| 10 | Alertes stock bas / péremption | 🟡 | Alertes **visibles dans l'app** (Dashboard, filtre Critique Inventaire, page Péremptions) ✅ validées. Notification **email + table `alertes`** (webhook serveur) 🔴 cassée — nécessite une clé sensible, voir journal. |
 | 11 | Fournisseurs et mouvements de stock | ⬜ | |
 | 12 | Gestion des patients (création, historique, fidélité) | ⬜ | |
 | 13 | Rapports du jour | ⬜ | |
@@ -128,6 +128,25 @@ seules ces 2 occurrences existaient, aucune autre page (hôpital, distributeur, 
 touchée. Corrigé en remplaçant les deux par l'API à props (`onCancel`, `onSubmit`, `submitLabel`,
 `saving`). Revalidé en local : import de 2 lignes CSV (Ibuprofène 400mg stock 50, Vitamine C 500mg
 stock 200, avec dates de péremption) confirmé en base après reload.
+
+**2026-07-19 — Alertes stock/péremption : visibles dans l'app, mais notification email cassée
+(nécessite une action utilisateur).** Testé le point 10 : le Dashboard ("Stock Critique"), le filtre
+"critique" d'Inventaire, et la page Péremptions (filtres 30/60/90/Tous) affichent tous correctement
+les bons produits — ces alertes sont calculées **côté client** directement depuis `medicaments`, donc
+indépendantes du problème ci-dessous. En revanche, le webhook serveur censé créer une ligne dans
+`alertes` et envoyer un email (via l'Edge Function `check-stock-alert`, déclenchée par le trigger
+`notify_stock_alert` corrigé plus haut) échoue systématiquement en **401 Unauthorized** — vérifié via
+`SELECT * FROM net._http_response` (tous les appels récents renvoient 401). Cause : le trigger envoie
+`Authorization: Bearer <current_setting('app.service_role_key')>`, mais ce paramètre Postgres n'a
+jamais été configuré (vide), donc la passerelle Supabase rejette la requête avant même d'exécuter le
+code de la fonction. **Correctif nécessaire mais hors de ma portée sans ton implication** : soit (a)
+configurer `ALTER DATABASE postgres SET app.service_role_key = '<ta clé service_role>'` avec la vraie
+clé (je ne l'ai pas et ne dois pas la manipuler sans que tu me la fournisses explicitement pour cet
+usage précis), soit (b) redéployer la fonction avec une autre méthode d'authentification (ex :
+`--no-verify-jwt` + vérification du header `x-webhook-secret` déjà prévu dans le trigger mais jamais
+vérifié côté fonction — à ajouter). Je n'ai pas touché aux secrets Supabase. **Pas bloquant pour le
+pharmacien au quotidien** (il voit ses alertes dans l'app), mais aucune alerte n'atterrit dans la
+table `alertes` ni par email tant que ce n'est pas réglé.
 
 **2026-07-19 — Ordonnances : 5 bugs trouvés et corrigés pour rendre création + dispensation
 fonctionnelles de bout en bout.**
