@@ -33,7 +33,7 @@ Si un bug semble venir de là, le documenter ici et demander confirmation avant 
 | 9 | Ajout d'un médicament à l'inventaire | ✅ | Ajout, édition (avec date de péremption) validés en prod. |
 | 9b | Import CSV inventaire | ✅ | Corrigé (bouton "mort", voir journal) — import validé en local puis en production après déploiement. |
 | 10 | Alertes stock bas / péremption | 🟡 | Alertes **visibles dans l'app** (Dashboard, filtre Critique Inventaire, page Péremptions) ✅ validées. Notification **email + table `alertes`** (webhook serveur) 🔴 cassée — nécessite une clé sensible, voir journal. |
-| 11 | Fournisseurs et mouvements de stock | ⬜ | |
+| 11 | Fournisseurs et mouvements de stock | ✅ | Ajout fournisseur, commande, et réception de stock (corrigée, voir bug ModalFooter) tous validés — mouvement enregistré ET stock incrémenté (+25 confirmé en base). |
 | 12 | Gestion des patients (création, historique, fidélité) | ⬜ | |
 | 13 | Rapports du jour | ⬜ | |
 | 14 | Clôture de caisse (journal anti-fraude) | ⬜ | |
