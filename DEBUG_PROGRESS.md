@@ -27,7 +27,7 @@ Si un bug semble venir de là, le documenter ici et demander confirmation avant 
 | 3b | Ajout médicament au panier (scanner QR) | 🟡 | UI scanner (ouverture caméra, viseur, fermeture) validée avec caméra simulée (Chromium fake device) — aucune erreur JS. Le décodage réel d'un QR (`handleScan`→`addToCart`) n'est PAS testable en headless sans caméra physique/QR réel ; limite documentée, pas un bug. |
 | 4 | Vente paiement simple (espèces) | ✅ | Ticket TKT-2026-J7RQU généré, stock Paracétamol 100→99 vérifié après reload de page. |
 | 5 | Vente paiement mixte (espèces + assurance/CNSS) | ✅ | Corrigé (voir journal) — Assurance, Mixte (espèces+mobile) et CNSS tous validés en prod avec ticket généré. |
-| 6 | Impression du ticket de caisse | ⬜ | |
+| 6 | Impression du ticket de caisse | ✅ | Popup s'ouvre, ticket bien formaté (pharmacie, date, articles, total, mode paiement, monnaie rendue). |
 | 7 | Création et dispensation d'une ordonnance | ⬜ | |
 | 8 | Décrément de stock après vente/dispensation | ⬜ | |
 | 9 | Ajout d'un médicament à l'inventaire | 🟡 | Corrigé (voir journal), à revalider en prod après déploiement. Édition CSV import restent à tester. |
@@ -110,6 +110,11 @@ ajout d'un bloc `EXCEPTION WHEN OTHERS` autour de l'appel HTTP pour qu'un échec
 ne puisse plus jamais faire échouer l'opération métier (vente, stock) qui l'a déclenché. Revalidé en
 production : ajout de "Amoxicilline 500mg" (stock 3, seuil 20, péremption +20j) réussi, visible après
 reload.
+
+**2026-07-19 — Bug #4 trouvé et corrigé : colonne `patients.adresse` manquante.** Même symptôme que
+pour medicaments : le formulaire "Nouveau patient" envoie un champ `adresse` qui n'existait pas en
+base → "Ajouter un patient" cassé en prod (PGRST204). Corrigé dans `20260719_patients_adresse.sql`.
+Revalidé : patient "Jean Dupont" créé et visible après reload.
 
 **2026-07-19 — Bug critique #3 trouvé et corrigé : modes de paiement "Mixte" et "CNSS" rejetés par la
 base.** Caisse.jsx propose 6 modes de paiement (`especes`, `mobile_money`, `especes_mobile`="Mixte",
