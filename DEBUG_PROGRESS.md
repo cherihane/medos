@@ -244,8 +244,34 @@ transmise à l'utilisateur, ajoutée manuellement dans GitHub (Settings → Depl
 (fast-forward réussi, dernier commit récupéré). Vérifié `.git/config` : plus aucune trace du token en
 clair.
 
-**Restant à traiter (point 3 de cette session)** : champ UI pour saisir allergies/mutuelle patient ;
-"Dernière visite" toujours vide dans le Registre patients.
+**2026-07-19 (session 2) — Point 3 : allergies/mutuelle + "Dernière visite" — ✅ tous les deux clos.**
+
+**3a — Champs allergies/mutuelle.** Ajoutés au formulaire création/édition patient
+([Patients.jsx](src/pages/pharmacie/Patients.jsx)) : Allergies en texte libre séparé par virgules
+(converti en tableau à l'enregistrement, affiché en tags rouges en fiche patient — même pattern déjà
+utilisé pour `antecedents`, et cohérent avec le module Hôpital qui gère `allergies` de la même façon),
+Mutuelle en texte libre (aucune liste de mutuelles existante trouvée ailleurs dans le code pour
+justifier un menu déroulant). Les deux colonnes existaient déjà en base depuis la session précédente,
+seule l'UI manquait.
+
+**3b — "Dernière visite" toujours vide.** `patients.derniere_visite` n'existait pas du tout — et le
+code du module Hôpital ([hopital/Patients.jsx](src/pages/hopital/Patients.jsx)) l'utilise déjà à la
+création d'un patient, donc son insert échouait aussi pour la même raison (colonne absente). Colonne
+ajoutée (sans toucher au code hôpital). Le seul endroit où une vente pharmacie est rattachée à un
+patient est la dispensation d'ordonnance (la caisse directe n'associe pas de patient) — étendu le
+trigger `increment_patient_visites` (posé sur `ventes` lors de la session précédente pour
+`nb_visites`) pour y mettre aussi à jour `derniere_visite`.
+
+Revalidé en local puis en production : patiente "Awa Nkoulou" créée avec allergies (Pénicilline,
+Aspirine) et mutuelle (CNSS) → visibles en fiche patient et dans les filtres "Avec allergies"/"Avec
+mutuelle" → ordonnance créée, validée, dispensée pour elle → "Dernière visite" passée de "—" à
+19/07/2026, confirmé après rechargement de page et en production.
+
+**Non corrigé, hors scope de cette session** : le webhook email d'alerte stock reste bloqué par un
+problème de plateforme Edge Functions plus large que prévu (voir Point 1 ci-dessus) ; pas de liste de
+mutuelles standardisée (texte libre pour l'instant, à réévaluer si le besoin se précise) ; le module
+Hôpital utilise aussi `medecin_referent`, colonne toujours absente — repéré en creusant le point 3b
+mais hors scope (pas un point demandé, pas touché).
 
 ---
 
