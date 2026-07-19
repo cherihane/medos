@@ -12,7 +12,13 @@ import { updateOrdonnance, insertOrdonnance, insertVentes, decrementStock, inser
 import { useAuth } from "../../context/AuthContext";
 import { useIsMobile } from "../../hooks/useWindowSize";
 
-const MODES_PAIEMENT = ["Especes", "Mobile Money", "Carte", "Cheque", "Assurance"];
+const MODES_PAIEMENT = [
+  { key: "especes",      label: "Especes" },
+  { key: "mobile_money", label: "Mobile Money" },
+  { key: "carte",        label: "Carte" },
+  { key: "cheque",       label: "Cheque" },
+  { key: "assurance",    label: "Assurance" },
+];
 
 // ── Modal Dispensation pharmacie externe ──────────────────────────────────────
 function ModalDispensationPharmacie({ ordonnance, medicaments, auth, etabId, onClose, onSaved }) {
@@ -28,7 +34,7 @@ function ModalDispensationPharmacie({ ordonnance, medicaments, auth, etabId, onC
       ? lignesSource.map((l) => ({ nom: l.medicament_nom ?? l.nom ?? "", med_id: "", quantite: 1, prix_unitaire: 0 }))
       : [{ nom: "", med_id: "", quantite: 1, prix_unitaire: 0 }]
   );
-  const [modePaiement, setModePaiement] = useState("Especes");
+  const [modePaiement, setModePaiement] = useState("especes");
   const [saving, setSaving] = useState(false);
 
   const setItem = (idx, k, v) => setItems((prev) => prev.map((it, i) => i === idx ? { ...it, [k]: v } : it));
@@ -105,7 +111,7 @@ function ModalDispensationPharmacie({ ordonnance, medicaments, auth, etabId, onC
           <div>
             <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>Mode de paiement</div>
             <select style={inpSt} value={modePaiement} onChange={(e) => setModePaiement(e.target.value)}>
-              {MODES_PAIEMENT.map((m) => <option key={m} value={m}>{m}</option>)}
+              {MODES_PAIEMENT.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
             </select>
           </div>
           <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
@@ -152,6 +158,7 @@ function SkeletonRow() {
 
 // ── Modal Nouvelle ordonnance ──────────────────────────────────────────────────
 function NouvelleModal({ patients, onClose, onSaved }) {
+  const { auth } = useAuth();
   const [form, setForm] = useState({
     patient_id: "",
     medecin_nom: "",
@@ -191,6 +198,7 @@ function NouvelleModal({ patients, onClose, onSaved }) {
         statut: form.statut,
         reference: ref,
         lignes: lignes.filter((l) => l.medicament_nom.trim() !== ""),
+        etablissement_id: auth?.etablissement_id ?? null,
       });
       onSaved();
       onClose();

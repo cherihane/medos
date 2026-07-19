@@ -111,6 +111,36 @@ ne puisse plus jamais faire échouer l'opération métier (vente, stock) qui l'a
 production : ajout de "Amoxicilline 500mg" (stock 3, seuil 20, péremption +20j) réussi, visible après
 reload.
 
+**2026-07-19 — Ordonnances : 5 bugs trouvés et corrigés pour rendre création + dispensation
+fonctionnelles de bout en bout.**
+1. `insertOrdonnance` (dans `NouvelleModal` de [Ordonnances.jsx](src/pages/pharmacie/Ordonnances.jsx))
+   n'envoyait jamais `etablissement_id` → la policy RLS `ordo_insert` rejetait systématiquement la
+   création (`42501`). Corrigé : ajout de `useAuth()` + `etablissement_id: auth?.etablissement_id`
+   dans le payload.
+2. `ordonnances.lignes` (jsonb, détail des médicaments prescrits) n'existait pas en base → colonne
+   ajoutée (`20260719_ordonnances_lignes.sql`).
+3. `ventes.medicament_nom` et `ventes.type_vente`, utilisés par la dispensation, n'existaient pas →
+   colonnes ajoutées (`20260719_ventes_medicament_nom_type_vente.sql`), utiles pour les rapports
+   (nom du médicament dénormalisé, distinction vente directe/ordonnance).
+4. Le select "Mode de paiement" de la dispensation envoyait des libellés capitalisés
+   (`"Especes"`, `"Cheque"`...) non alignés avec les clés minuscules attendues par
+   `ventes_mode_paiement_check` et utilisées par Caisse.jsx (`"especes"`...) → uniformisé sur le
+   même format `{key, label}` que Caisse.jsx, et ajouté `cheque` à la contrainte (mode légitime,
+   absent jusque-là).
+5. **Le plus grave** : `ordonnances_statut_check` n'autorisait pas la valeur `"dispensee"` que le
+   code assigne après une dispensation réussie. Comme la vente et le décrément de stock s'exécutent
+   AVANT cette mise à jour de statut dans `handleSave`, l'échec de l'update laissait l'ordonnance
+   bloquée à `"validee"` **alors que la vente et le décrément de stock avaient déjà eu lieu** — un
+   pharmacien la croyant toujours en attente aurait pu la dispenser une seconde fois (double vente,
+   double décrément). Reproduit exactement ce scénario pendant le test (Amoxicilline décrémentée à
+   tort une fois avant le fix), corrigé la donnée orpheline manuellement, puis ajouté `dispensee` à
+   la contrainte (`20260719_ordonnances_statut_dispensee.sql`).
+
+**Revalidé en local (même Supabase que la prod)** : création d'ordonnance (ORD-83256315, patient
+Jean Dupont, Dr. Marie Kongo) → validation → dispensation (1x Amoxicilline, 1500 FCFA, mode Espèces)
+→ statut final `dispensee` confirmé en base, stock Amoxicilline 1→0 confirmé. **À redéployer et
+revalider en prod.**
+
 **2026-07-19 — Bug #4 trouvé et corrigé : colonne `patients.adresse` manquante.** Même symptôme que
 pour medicaments : le formulaire "Nouveau patient" envoie un champ `adresse` qui n'existait pas en
 base → "Ajouter un patient" cassé en prod (PGRST204). Corrigé dans `20260719_patients_adresse.sql`.
