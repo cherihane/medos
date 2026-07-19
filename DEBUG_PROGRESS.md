@@ -23,10 +23,10 @@ Si un bug semble venir de là, le documenter ici et demander confirmation avant 
 |---|---|---|---|
 | 1 | Connexion avec le compte réel | ✅ | Login OK, redirection /pharmacie/dashboard, aucune erreur console/réseau. Compte "Pharmacie Mimi" (Brazzaville) — inventaire et patients vides au départ. |
 | 2 | Ouverture de session de caisse (fond de caisse) | ✅ | Modal s'affiche, confirmation persiste en base (survit au reload), bannière "Fond de caisse : X FCFA" correcte. |
-| 3 | Recherche + ajout médicament au panier (texte) | ⬜ | |
-| 3b | Ajout médicament au panier (scanner QR) | ⬜ | |
-| 4 | Vente paiement simple (espèces) | ⬜ | |
-| 5 | Vente paiement mixte (espèces + assurance/CNSS) | ⬜ | |
+| 3 | Recherche + ajout médicament au panier (texte) | ✅ | Recherche "Amox" → résultat correct, ajout au panier, +/- quantité et sous-total/total recalculés correctement. |
+| 3b | Ajout médicament au panier (scanner QR) | 🟡 | UI scanner (ouverture caméra, viseur, fermeture) validée avec caméra simulée (Chromium fake device) — aucune erreur JS. Le décodage réel d'un QR (`handleScan`→`addToCart`) n'est PAS testable en headless sans caméra physique/QR réel ; limite documentée, pas un bug. |
+| 4 | Vente paiement simple (espèces) | ✅ | Ticket TKT-2026-J7RQU généré, stock Paracétamol 100→99 vérifié après reload de page. |
+| 5 | Vente paiement mixte (espèces + assurance/CNSS) | ✅ | Corrigé (voir journal) — Assurance, Mixte (espèces+mobile) et CNSS tous validés en prod avec ticket généré. |
 | 6 | Impression du ticket de caisse | ⬜ | |
 | 7 | Création et dispensation d'une ordonnance | ⬜ | |
 | 8 | Décrément de stock après vente/dispensation | ⬜ | |
@@ -110,6 +110,17 @@ ajout d'un bloc `EXCEPTION WHEN OTHERS` autour de l'appel HTTP pour qu'un échec
 ne puisse plus jamais faire échouer l'opération métier (vente, stock) qui l'a déclenché. Revalidé en
 production : ajout de "Amoxicilline 500mg" (stock 3, seuil 20, péremption +20j) réussi, visible après
 reload.
+
+**2026-07-19 — Bug critique #3 trouvé et corrigé : modes de paiement "Mixte" et "CNSS" rejetés par la
+base.** Caisse.jsx propose 6 modes de paiement (`especes`, `mobile_money`, `especes_mobile`="Mixte",
+`credit`, `assurance`, `cnss`), mais la contrainte `ventes_mode_paiement_check` n'autorisait que
+`especes, carte, mobile_money, credit, assurance` — **toute vente en mode Mixte ou CNSS était
+rejetée** (`23514 check constraint violation`). Le mode "Assurance" fonctionnait déjà. Corrigé dans
+`20260719_ventes_mode_paiement_mixte_cnss.sql` (élargissement de la contrainte). Vérifié : la vente
+Mixte ratée n'avait pas décrémenté le stock avant d'échouer (pas d'incohérence créée). Revalidé en
+production : Assurance (80% CNSS/mutuelle), Mixte (300 espèces + 200 mobile money), et CNSS (80%)
+tous confirmés avec ticket généré et stock décrémenté (Amoxicilline 3→2, Paracétamol 99→97 après
+les 2 ventes).
 
 **⚠️ État des migrations — à savoir pour toute session future** : `supabase migration list --linked`
 montre que l'historique de migrations distant est désynchronisé de la réalité de la base (des
