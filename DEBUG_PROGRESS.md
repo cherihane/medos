@@ -233,9 +233,19 @@ dépendance au GUC inaccessible) reste une amélioration réelle et committée �
 Edge Functions refonctionnera côté plateforme, l'alerte stock fonctionnera sans changement de code
 supplémentaire. **Non bloquant au quotidien** (alertes toujours visibles dans l'app).
 
-**Non corrigé, hors scope** : pas de champ UI pour saisir allergies/mutuelle patient ; "Dernière
-visite" toujours vide dans le Registre patients ; token GitHub en clair dans le remote git du
-serveur (sécurité, signalé en tout début de session).
+**2026-07-19 (session 2) — Point 2 : token GitHub en clair remplacé par une clé SSH deploy en
+lecture seule. ✅**
+Générée `~/.ssh/medos_deploy_key` (ed25519) directement sur le VPS via `ssh-keygen`. Clé publique
+transmise à l'utilisateur, ajoutée manuellement dans GitHub (Settings → Deploy keys, sans accès en
+écriture — seule action que je ne pouvais pas faire moi-même). Une fois confirmée par l'utilisateur :
+`git config core.sshCommand 'ssh -i ~/.ssh/medos_deploy_key -o IdentitiesOnly=yes'` puis
+`git remote set-url origin git@github.com:cherihane/medos.git` sur le VPS. Authentification testée
+(`ssh -T git@github.com` → "Hi cherihane/medos!"), et `git pull origin master` confirmé fonctionnel
+(fast-forward réussi, dernier commit récupéré). Vérifié `.git/config` : plus aucune trace du token en
+clair.
+
+**Restant à traiter (point 3 de cette session)** : champ UI pour saisir allergies/mutuelle patient ;
+"Dernière visite" toujours vide dans le Registre patients.
 
 ---
 
