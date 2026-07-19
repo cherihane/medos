@@ -16,7 +16,6 @@ const inputStyle = {
   color: colors.navy, backgroundColor: colors.bgCard,
 };
 
-const RESEND_KEY = process.env.REACT_APP_RESEND_KEY ?? "";
 
 async function sendCommandeEmail({ emailFabricant, fabricant, medicament, quantite, dateLivraison, notes, distributeur }) {
   const dateStr = dateLivraison
@@ -84,15 +83,12 @@ async function sendCommandeEmail({ emailFabricant, fabricant, medicament, quanti
   </div>
 </div>`;
 
-  await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { "Authorization": `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      from:    "MedOS Distribution <onboarding@resend.dev>",
-      to:      [emailFabricant],
+  await supabase.functions.invoke("send-app-email", {
+    body: {
+      to:      emailFabricant,
       subject: `Commande MedOS — ${medicament} (${quantite} unités)`,
       html,
-    }),
+    },
   });
 }
 

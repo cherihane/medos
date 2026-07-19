@@ -9,9 +9,7 @@
 import { useState, useCallback } from "react";
 import { supabase } from "../supabaseClient";
 
-const BDPM_BASE  = "https://base-donnees-publique.medicaments.gouv.fr/api/rpc";
-const RESEND_KEY  = "re_iUaDVQFG_LAX2mHCRxm6rf216167mGdJY";
-const ADMIN_EMAIL = "cherihaneadam123@gmail.com";
+const BDPM_BASE = "https://base-donnees-publique.medicaments.gouv.fr/api/rpc";
 
 // ── Utilitaires ───────────────────────────────────────────────────────────────
 function normalise(str) {
@@ -30,17 +28,7 @@ function principalActif(str) {
 // ── Email Resend ───────────────────────────────────────────────────────────────
 async function sendAlertEmail({ nomMedicament, numerolot, scannePar }) {
   try {
-    await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${RESEND_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: "MedOS <onboarding@resend.dev>",
-        to: [ADMIN_EMAIL],
-        subject: `MedOS — Lot suspect detecte : ${nomMedicament || numerolot || "Inconnu"}`,
-        html: `
+    const html = `
 <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;background:#fff;border-radius:10px;overflow:hidden;border:1px solid #e5e7eb">
   <div style="background:#EF4444;padding:24px 28px">
     <h1 style="color:white;margin:0;font-size:20px">Lot suspect detecte</h1>
@@ -67,8 +55,13 @@ async function sendAlertEmail({ nomMedicament, numerolot, scannePar }) {
   <div style="padding:16px 28px;background:#f8fafc;font-size:11px;color:#9ca3af;text-align:center">
     Alerte generee automatiquement par MedOS
   </div>
-</div>`,
-      }),
+</div>`;
+    await supabase.functions.invoke("send-app-email", {
+      body: {
+        to: "admin_alert",
+        subject: `MedOS — Lot suspect detecte : ${nomMedicament || numerolot || "Inconnu"}`,
+        html,
+      },
     });
   } catch {
     // Echec envoi alerte email — silencieux, l'alerte Supabase est déjà créée

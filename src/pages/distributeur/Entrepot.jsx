@@ -14,6 +14,7 @@ import { useToast } from "../../hooks/useToast";
 import { useMedicaments } from "../../hooks/useSupabaseData";
 import { insertLot, incrementStock, insertCommande } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
+import { supabase } from "../../supabaseClient";
 import { openDocument, tableHTML, infoGridHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
 
 function printBonCommandeFabricant({ header, lignes, etab }) {
@@ -45,8 +46,7 @@ function printBonCommandeFabricant({ header, lignes, etab }) {
   });
 }
 
-// ── Resend ────────────────────────────────────────────────────────────────────
-const RESEND_KEY = process.env.REACT_APP_RESEND_KEY ?? "";
+// ── Email (via Edge Function sécurisée) ───────────────────────────────────────
 
 // lignes = [{ medicamentNom, quantite }]
 async function sendCommandeEmail({ emailFabricant, fabricant, lignes, dateLivraison, notes, distributeur }) {
@@ -114,15 +114,12 @@ async function sendCommandeEmail({ emailFabricant, fabricant, lignes, dateLivrai
   </div>
 </div>`;
 
-  await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { "Authorization": `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      from:    "MedOS Distribution <onboarding@resend.dev>",
-      to:      [emailFabricant],
+  await supabase.functions.invoke("send-app-email", {
+    body: {
+      to:      emailFabricant,
       subject: `Bon de commande MedOS — ${lignes.length} médicament${lignes.length > 1 ? "s" : ""} (${totalQty.toLocaleString("fr-FR")} unités)`,
       html,
-    }),
+    },
   });
 }
 
