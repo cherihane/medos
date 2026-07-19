@@ -47,6 +47,8 @@ function PatientModal({ patient, onClose, onSaved }) {
     email:         patient?.email         ?? "",
     groupe_sanguin: patient?.groupe_sanguin ?? "",
     adresse:       patient?.adresse       ?? "",
+    allergies:     patient?.allergies?.join(", ")  ?? "",
+    mutuelle:      patient?.mutuelle      ?? "",
   });
   const [saving, setSaving] = useState(false);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -64,6 +66,8 @@ function PatientModal({ patient, onClose, onSaved }) {
         email:            form.email || null,
         groupe_sanguin:   form.groupe_sanguin || null,
         adresse:          form.adresse || null,
+        allergies:        form.allergies ? form.allergies.split(",").map((s) => s.trim()).filter(Boolean) : [],
+        mutuelle:         form.mutuelle || null,
         etablissement_id: auth?.etablissement_id ?? null,
       };
       if (isEdit) {
@@ -118,6 +122,14 @@ function PatientModal({ patient, onClose, onSaved }) {
       <Field label="Adresse">
         <input style={inputStyle} value={form.adresse} onChange={set("adresse")} />
       </Field>
+      <Row>
+        <Field label="Allergies">
+          <input style={inputStyle} value={form.allergies} onChange={set("allergies")} placeholder="Ex : Pénicilline, Aspirine" />
+        </Field>
+        <Field label="Mutuelle">
+          <input style={inputStyle} value={form.mutuelle} onChange={set("mutuelle")} placeholder="Ex : CNSS, Mutuelle X" />
+        </Field>
+      </Row>
       <ModalFooter onCancel={onClose} onSubmit={handleSave} submitLabel={isEdit ? "Sauvegarder" : "Ajouter le patient"} saving={saving} />
     </Modal>
   );
@@ -272,6 +284,8 @@ export default function Patients() {
                 { label: "Groupe sanguin", value: selected.groupe_sanguin || "—" },
                 { label: "Téléphone",      value: selected.telephone || "—" },
                 { label: "Email",          value: selected.email || "—" },
+                { label: "Mutuelle",       value: selected.mutuelle || "—" },
+                { label: "Dernière visite", value: formatDate(selected.derniere_visite) },
                 { label: "Enregistré le",  value: formatDate(selected.created_at) },
               ].map((item) => (
                 <div key={item.label} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid var(--border-light)" }}>
@@ -279,6 +293,17 @@ export default function Patients() {
                   <span style={{ fontSize: 13, fontWeight: 600, color: colors.navy }}>{item.value}</span>
                 </div>
               ))}
+
+              {selected.allergies?.length > 0 && (
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: colors.text, marginBottom: 8 }}>Allergies</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {selected.allergies.map((a) => (
+                      <span key={a} style={{ padding: "4px 12px", backgroundColor: "#FEF2F2", color: "#DC2626", borderRadius: 10, fontSize: 12, fontWeight: 700 }}>{a}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {selected.antecedents?.length > 0 && (
                 <div style={{ marginTop: 14 }}>
