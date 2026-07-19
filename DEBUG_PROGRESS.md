@@ -34,7 +34,7 @@ Si un bug semble venir de là, le documenter ici et demander confirmation avant 
 | 9b | Import CSV inventaire | ✅ | Corrigé (bouton "mort", voir journal) — import validé en local puis en production après déploiement. |
 | 10 | Alertes stock bas / péremption | 🟡 | Alertes **visibles dans l'app** (Dashboard, filtre Critique Inventaire, page Péremptions) ✅ validées. Notification **email + table `alertes`** (webhook serveur) 🔴 cassée — nécessite une clé sensible, voir journal. |
 | 11 | Fournisseurs et mouvements de stock | ✅ | Ajout fournisseur, commande, et réception de stock (corrigée, voir bug ModalFooter) tous validés — mouvement enregistré ET stock incrémenté (+25 confirmé en base). |
-| 12 | Gestion des patients (création, historique, fidélité) | ⬜ | |
+| 12 | Gestion des patients (création, historique, fidélité) | ✅ | Corrigé (3 bugs, voir journal) — création, édition, filtres de fidélité tous validés en production. |
 | 13 | Rapports du jour | ⬜ | |
 | 14 | Clôture de caisse (journal anti-fraude) | ⬜ | |
 
@@ -147,6 +147,27 @@ usage précis), soit (b) redéployer la fonction avec une autre méthode d'authe
 vérifié côté fonction — à ajouter). Je n'ai pas touché aux secrets Supabase. **Pas bloquant pour le
 pharmacien au quotidien** (il voit ses alertes dans l'app), mais aucune alerte n'atterrit dans la
 table `alertes` ni par email tant que ce n'est pas réglé.
+
+**2026-07-19 — Patients : 3 bugs trouvés et corrigés (fidélité + historique de dispensation).**
+1. Filtres de fidélité (`nb_visites`, `allergies`, `mutuelle`) : colonnes absentes de `patients`,
+   chaque filtre échouait (`42703`). Ajoutées, plus un trigger qui incrémente `nb_visites` à chaque
+   vente rattachée à un patient (`20260719_patients_fidelite_colonnes.sql`). Limite connue : aucun
+   champ UI n'existe pour saisir `allergies`/`mutuelle` — ces deux filtres ne remonteront jamais rien
+   tant que cette saisie n'est pas ajoutée (hors scope de ce diagnostic, documenté pour plus tard).
+2. `useOrdonnancesPaginated` ne sélectionnait ni `patient_id` ni `lignes` → la dispensation ne
+   pouvait jamais pré-remplir les médicaments réellement prescrits (le pharmacien repartait de zéro
+   à chaque fois), et `ventes.patient_id` restait toujours `null`, cassant tout suivi de fidélité lié
+   aux ordonnances. Corrigé dans [useSupabaseData.js](src/hooks/useSupabaseData.js).
+3. **Bug de course (race condition) dans `usePaginated`**, le hook de pagination partagé par
+   Patients/Inventaire/Ordonnances/Fournisseurs/etc. : deux `useEffect` séparés (un pour re-fetch, un
+   pour remettre la page à 0 au changement de filtre) pouvaient se déclencher dans le mauvais ordre,
+   demandant un `offset` hors bornes → **"Une erreur s'est produite" visible à l'écran** dès qu'on
+   cliquait un filtre de fidélité. Fusionné en un seul effet. Revalidé sans régression sur Inventaire,
+   Ordonnances et Fournisseurs après le fix.
+
+Revalidé en production : ordonnance créée avec une ligne prescrite ("Vitamine C 500mg") → dispensation
+pré-remplit bien cette ligne → `ventes.patient_id` correctement renseigné → `nb_visites` de Jean
+Dupont passé à 1 → visible sans erreur dans le filtre "Occasionnel (1 visite)".
 
 **2026-07-19 — Ordonnances : 5 bugs trouvés et corrigés pour rendre création + dispensation
 fonctionnelles de bout en bout.**
