@@ -49,6 +49,7 @@ function EditModal({ med, onClose, onSaved }) {
     prix_unitaire: med.prix_unitaire ?? 0,
     categorie:     med.categorie     ?? "",
     forme:         med.forme         ?? "",
+    date_peremption: med.date_peremption ?? "",
   });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
@@ -66,6 +67,7 @@ function EditModal({ med, onClose, onSaved }) {
         prix_unitaire: Number(form.prix_unitaire),
         categorie:     form.categorie,
         forme:         form.forme,
+        date_peremption: form.date_peremption || null,
       });
       onSaved();
       onClose();
@@ -97,14 +99,19 @@ function EditModal({ med, onClose, onSaved }) {
           <input style={inputStyle} value={form.categorie} onChange={set("categorie")} placeholder="Ex: Antibiotiques" />
         </Field>
       </Row>
-      <Field label="Forme galénique">
-        <select style={selectStyle} value={form.forme} onChange={set("forme")}>
-          <option value="">— Sélectionner —</option>
-          {FORMES_GALENIQUES.map((f) => (
-            <option key={f} value={f}>{f}</option>
-          ))}
-        </select>
-      </Field>
+      <Row>
+        <Field label="Forme galénique">
+          <select style={selectStyle} value={form.forme} onChange={set("forme")}>
+            <option value="">— Sélectionner —</option>
+            {FORMES_GALENIQUES.map((f) => (
+              <option key={f} value={f}>{f}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Date de péremption">
+          <input style={inputStyle} type="date" value={form.date_peremption ?? ""} onChange={set("date_peremption")} />
+        </Field>
+      </Row>
       {formError && (
         <div style={{ padding: "10px 14px", backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, fontSize: 13, color: "#DC2626" }}>
           {formError}
@@ -186,7 +193,7 @@ function NouveauModal({ onClose, onSaved }) {
     nom: "", code: "", categorie: "", forme: "",
     stock_actuel: 0, stock_minimum: 0,
     prix_achat: 0, prix_unitaire: 0,
-    fabricant: "", dci: "",
+    fabricant: "", dci: "", date_peremption: "",
   });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
@@ -209,6 +216,7 @@ function NouveauModal({ onClose, onSaved }) {
         prix_unitaire:    Number(form.prix_unitaire),
         fabricant:        form.fabricant || null,
         dci:              form.dci || null,
+        date_peremption:  form.date_peremption || null,
         etablissement_id: auth?.etablissement_id ?? null,
       });
       onSaved();
@@ -287,6 +295,9 @@ function NouveauModal({ onClose, onSaved }) {
           <input style={inputStyle} type="number" min="0" value={form.prix_unitaire} onChange={set("prix_unitaire")} />
         </Field>
       </Row>
+      <Field label="Date de péremption">
+        <input style={inputStyle} type="date" value={form.date_peremption} onChange={set("date_peremption")} />
+      </Field>
       {formError && (
         <div style={{ padding: "10px 14px", backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, fontSize: 13, color: "#DC2626" }}>
           {formError}
