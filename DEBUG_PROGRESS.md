@@ -28,8 +28,8 @@ Si un bug semble venir de là, le documenter ici et demander confirmation avant 
 | 4 | Vente paiement simple (espèces) | ✅ | Ticket TKT-2026-J7RQU généré, stock Paracétamol 100→99 vérifié après reload de page. |
 | 5 | Vente paiement mixte (espèces + assurance/CNSS) | ✅ | Corrigé (voir journal) — Assurance, Mixte (espèces+mobile) et CNSS tous validés en prod avec ticket généré. |
 | 6 | Impression du ticket de caisse | ✅ | Popup s'ouvre, ticket bien formaté (pharmacie, date, articles, total, mode paiement, monnaie rendue). |
-| 7 | Création et dispensation d'une ordonnance | ⬜ | |
-| 8 | Décrément de stock après vente/dispensation | ⬜ | |
+| 7 | Création et dispensation d'une ordonnance | ✅ | Corrigé (5 bugs, voir journal) — création + validation + dispensation validées en production. |
+| 8 | Décrément de stock après vente/dispensation | ✅ | Vérifié à chaque vente/dispensation testée (Paracétamol 100→99→96, Amoxicilline 3→2→1→0), stock correct après reload à chaque fois. |
 | 9 | Ajout d'un médicament à l'inventaire | 🟡 | Corrigé (voir journal), à revalider en prod après déploiement. Édition CSV import restent à tester. |
 | 9b | Import CSV inventaire | ⬜ | (si le temps le permet) |
 | 10 | Alertes stock bas / péremption | ⬜ | |
@@ -136,10 +136,10 @@ fonctionnelles de bout en bout.**
    tort une fois avant le fix), corrigé la donnée orpheline manuellement, puis ajouté `dispensee` à
    la contrainte (`20260719_ordonnances_statut_dispensee.sql`).
 
-**Revalidé en local (même Supabase que la prod)** : création d'ordonnance (ORD-83256315, patient
-Jean Dupont, Dr. Marie Kongo) → validation → dispensation (1x Amoxicilline, 1500 FCFA, mode Espèces)
-→ statut final `dispensee` confirmé en base, stock Amoxicilline 1→0 confirmé. **À redéployer et
-revalider en prod.**
+**Revalidé de bout en bout, d'abord en local puis directement en production après déploiement** :
+création d'ordonnance → validation → dispensation → statut final `dispensee` confirmé en base à
+chaque fois. Dernière revalidation prod : ORD-83493730 (Dr. Prod Final), statut `dispensee` confirmé
+par requête SQL directe après le flux Playwright complet sur medos.kelagroup.org.
 
 **2026-07-19 — Bug #4 trouvé et corrigé : colonne `patients.adresse` manquante.** Même symptôme que
 pour medicaments : le formulaire "Nouveau patient" envoie un champ `adresse` qui n'existait pas en
