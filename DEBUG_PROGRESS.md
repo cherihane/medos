@@ -91,8 +91,25 @@ note "État des migrations" ci-dessous) :
 dans `NouveauModal` et `EditModal`.
 
 **Revalidé** : ajout de "Paracétamol 500mg" (stock 100, prix 500 FCFA, péremption +45j) via le
-formulaire, confirmé visible après reload de page, en local (serveur dev pointant sur le même
-Supabase que la prod). **À revalider en prod après déploiement SSH.**
+formulaire, confirmé visible après reload de page, en local puis **redéployé et revalidé en
+production** (medos.kelagroup.org) après build + `systemctl restart nginx`.
+
+**2026-07-19 — Bug critique #2 trouvé et corrigé : trigger d'alerte stock cassait tout insert/update
+sous le seuil.** En testant l'ajout d'un 2e produit avec un stock initial sous son seuil (pour
+préparer le test des alertes, point 10), l'insert échouait en 404 :
+`function net.http_post(url => unknown, body => text, headers => jsonb) does not exist`.
+Cause : [20240102000000_stock_alert_trigger.sql](supabase/migrations/20240102000000_stock_alert_trigger.sql)
+— la fonction `notify_stock_alert()` (trigger `AFTER INSERT OR UPDATE OF stock_actuel` sur
+`medicaments`) appelait `net.http_post(..., body := payload::text, ...)`, mais la fonction pg_net
+réellement installée attend `body jsonb` (pas `text`). Le cast en trop faisait échouer la résolution
+de surcharge Postgres, et comme le trigger est `AFTER` et non enveloppé dans un `EXCEPTION`, **toute
+la transaction (insert OU update de stock) était annulée** — pas seulement l'alerte. Ça aurait aussi
+cassé toute vente en caisse faisant passer un article sous son seuil minimum (point 4/8 du test).
+Corrigé dans `20260719_fix_stock_alert_trigger_signature.sql` : retrait du cast `::text` en trop, et
+ajout d'un bloc `EXCEPTION WHEN OTHERS` autour de l'appel HTTP pour qu'un échec de webhook/notification
+ne puisse plus jamais faire échouer l'opération métier (vente, stock) qui l'a déclenché. Revalidé en
+production : ajout de "Amoxicilline 500mg" (stock 3, seuil 20, péremption +20j) réussi, visible après
+reload.
 
 **⚠️ État des migrations — à savoir pour toute session future** : `supabase migration list --linked`
 montre que l'historique de migrations distant est désynchronisé de la réalité de la base (des
