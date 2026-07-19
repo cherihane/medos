@@ -31,7 +31,7 @@ Si un bug semble venir de là, le documenter ici et demander confirmation avant 
 | 7 | Création et dispensation d'une ordonnance | ✅ | Corrigé (5 bugs, voir journal) — création + validation + dispensation validées en production. |
 | 8 | Décrément de stock après vente/dispensation | ✅ | Vérifié à chaque vente/dispensation testée (Paracétamol 100→99→96, Amoxicilline 3→2→1→0), stock correct après reload à chaque fois. |
 | 9 | Ajout d'un médicament à l'inventaire | ✅ | Ajout, édition (avec date de péremption) validés en prod. |
-| 9b | Import CSV inventaire | ✅ | Corrigé (bouton "mort", voir journal) — import de 2 produits validé en local, à revalider en prod après déploiement. |
+| 9b | Import CSV inventaire | ✅ | Corrigé (bouton "mort", voir journal) — import validé en local puis en production après déploiement. |
 | 10 | Alertes stock bas / péremption | ⬜ | |
 | 11 | Fournisseurs et mouvements de stock | ⬜ | |
 | 12 | Gestion des patients (création, historique, fidélité) | ⬜ | |
