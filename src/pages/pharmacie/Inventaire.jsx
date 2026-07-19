@@ -421,12 +421,12 @@ function ImportModal({ auth, onClose, onImported }) {
           </div>
         </div>
       )}
-      <ModalFooter>
-        <button onClick={onClose} style={{ padding: "9px 20px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", backgroundColor: colors.bgCard, color: colors.text }}>Annuler</button>
-        <button onClick={handleImport} disabled={rows.length === 0 || saving} style={{ padding: "9px 20px", backgroundColor: rows.length === 0 || saving ? "#E5E7EB" : "#3B82F6", color: rows.length === 0 || saving ? "#9CA3AF" : "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: rows.length === 0 || saving ? "not-allowed" : "pointer" }}>
-          {saving ? "Import en cours…" : `Importer ${rows.length > 0 ? rows.length + " produits" : ""}`}
-        </button>
-      </ModalFooter>
+      <ModalFooter
+        onCancel={onClose}
+        onSubmit={handleImport}
+        submitLabel={`Importer${rows.length > 0 ? " " + rows.length + " produits" : ""}`}
+        saving={saving}
+      />
     </Modal>
   );
 }
