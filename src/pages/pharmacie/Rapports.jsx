@@ -109,23 +109,22 @@ function downloadXLSX(filename, sheets) {
 async function exportVentesCSV(auth) {
   const etablissement_id = auth?.etablissement_id;
   const { data } = await supabase
-    .from("journal_caisse")
-    .select("created_at, medicament_nom, quantite, prix_unitaire, total, mode_paiement, caissier_email")
+    .from("ventes")
+    .select("created_at, medicament_nom, quantite, prix_unitaire, montant_total, mode_paiement")
     .eq("etablissement_id", etablissement_id)
     .order("created_at", { ascending: false })
     .limit(5000);
 
   if (!data || data.length === 0) { throw new Error("Aucune vente trouvée."); }
 
-  const header = ["Date", "Médicament", "Quantité", "Prix unitaire", "Total", "Mode de paiement", "Caissier"];
+  const header = ["Date", "Médicament", "Quantité", "Prix unitaire", "Total", "Mode de paiement"];
   const rows = data.map((v) => [
     v.created_at ? new Date(v.created_at).toLocaleDateString("fr-FR") : "—",
     v.medicament_nom ?? "—",
     v.quantite ?? 0,
     v.prix_unitaire ?? 0,
-    v.total ?? 0,
+    v.montant_total ?? 0,
     v.mode_paiement ?? "—",
-    v.caissier_email ?? "—",
   ]);
   downloadCSV(`journal_ventes_${new Date().toISOString().slice(0,10)}.csv`, [header, ...rows]);
 }
@@ -139,7 +138,7 @@ function exportInventaireXLSX(medicaments) {
       m.categorie ?? "—",
       m.stock_actuel ?? 0,
       m.stock_minimum ?? 0,
-      m.prix_vente ?? 0,
+      m.prix_unitaire ?? 0,
       m.date_peremption ? new Date(m.date_peremption).toLocaleDateString("fr-FR") : "—",
       rupture ? "RUPTURE" : "OK",
     ];
@@ -155,8 +154,8 @@ async function exportMensuelXLSX(auth) {
   debut.setDate(1); debut.setHours(0,0,0,0);
 
   const { data } = await supabase
-    .from("journal_caisse")
-    .select("created_at, medicament_nom, quantite, total, mode_paiement")
+    .from("ventes")
+    .select("created_at, medicament_nom, quantite, montant_total, mode_paiement")
     .eq("etablissement_id", etablissement_id)
     .gte("created_at", debut.toISOString())
     .order("created_at", { ascending: false });
@@ -169,19 +168,19 @@ async function exportMensuelXLSX(auth) {
     v.created_at ? new Date(v.created_at).toLocaleDateString("fr-FR") : "—",
     v.medicament_nom ?? "—",
     v.quantite ?? 0,
-    v.total ?? 0,
+    v.montant_total ?? 0,
     v.mode_paiement ?? "—",
   ]);
 
   // Feuille 2 : résumé par mode de paiement
   const byMode = data.reduce((acc, v) => {
     const mode = v.mode_paiement ?? "inconnu";
-    acc[mode] = (acc[mode] ?? 0) + (v.total ?? 0);
+    acc[mode] = (acc[mode] ?? 0) + (v.montant_total ?? 0);
     return acc;
   }, {});
   const resumeHeader = ["Mode de paiement", "Total (FCFA)"];
   const resumeRows = Object.entries(byMode).map(([k, v]) => [k, v]);
-  const totalGlobal = data.reduce((s, v) => s + (v.total ?? 0), 0);
+  const totalGlobal = data.reduce((s, v) => s + (v.montant_total ?? 0), 0);
 
   const mois = debut.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
   downloadXLSX(`rapport_mensuel_${mois.replace(" ", "_")}.xlsx`, [
@@ -194,7 +193,7 @@ function exportBilanPDF(medicaments, etab) {
   const dateFr = new Date().toLocaleDateString("fr-FR");
   const ruptures = medicaments.filter((m) => (m.stock_actuel ?? 0) < (m.stock_minimum ?? 0));
   const ok = medicaments.length - ruptures.length;
-  const valeurStock = medicaments.reduce((s, m) => s + (m.stock_actuel ?? 0) * (m.prix_vente ?? 0), 0);
+  const valeurStock = medicaments.reduce((s, m) => s + (m.stock_actuel ?? 0) * (m.prix_unitaire ?? 0), 0);
 
   const statsHTML = `
     <div style="display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap">
@@ -216,7 +215,7 @@ function exportBilanPDF(medicaments, etab) {
     const badge = rupture
       ? `<span style="padding:2px 7px;background:#FEF2F2;color:#DC2626;border-radius:4px;font-weight:700;font-size:10px">RUPTURE</span>`
       : `<span style="padding:2px 7px;background:#DCFCE7;color:#16A34A;border-radius:4px;font-size:10px">OK</span>`;
-    return [m.nom ?? "—", m.categorie ?? "—", String(m.stock_actuel ?? 0), String(m.stock_minimum ?? 0), String(m.prix_vente ?? 0), badge];
+    return [m.nom ?? "—", m.categorie ?? "—", String(m.stock_actuel ?? 0), String(m.stock_minimum ?? 0), String(m.prix_unitaire ?? 0), badge];
   });
 
   openDocument({
