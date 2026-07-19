@@ -182,8 +182,56 @@ pendant ce diagnostic (16 au total, tous corrigés et redéployés) :
 15. Race condition dans `usePaginated` (hook partagé) — erreur visible au clic sur un filtre
 16. Rapports (CSV/Excel ventes) sur la mauvaise table + `prix_vente` inexistant (0 FCFA silencieux)
 
-**Non corrigé, nécessite ton implication** : le webhook d'alerte stock par email (401, clé
-`service_role` jamais configurée — voir section Alertes ci-dessus). Non bloquant au quotidien.
+**2026-07-19 (session 2) — Point 1 : webhook alerte stock — cause racine trouvée, mais 401 persiste
+au niveau plateforme, hors de portée du code.**
+
+Cause du 401 original confirmée : `notify_stock_alert()` lisait `current_setting('app.service_role_key')`,
+un paramètre Postgres personnalisé **jamais configuré** car `ALTER DATABASE ... SET app.xxx`
+nécessite un privilège superuser que Supabase hébergé n'accorde pas aux projets (confirmé :
+`ERROR 42501: permission denied to set parameter`). Ça explique aussi pourquoi `app.webhook_secret`
+n'a jamais fonctionné depuis le début. **Corrigé** dans
+[20260719_fix_stock_alert_webhook_auth.sql](supabase/migrations/20260719_fix_stock_alert_webhook_auth.sql) :
+le trigger embarque désormais directement la clé `anon` du projet (récupérée via
+`supabase projects api-keys`, aucune saisie manuelle nécessaire — c'est une clé publique par
+conception, déjà présente en clair dans le bundle JS frontend, donc aucune exposition nouvelle) au
+lieu de dépendre d'un GUC inaccessible.
+
+**Mais le 401 persiste malgré ce correctif**, et l'investigation a révélé quelque chose de plus grave
+et plus large que prévu : **l'invocation d'Edge Functions est cassée pour TOUT le projet**, pas
+seulement pour `check-stock-alert`. Preuves rassemblées avant d'arrêter les hypothèses à l'aveugle :
+- `check-stock-alert` redéployée avec `--no-verify-jwt` (confirmé `verify_jwt: false` via
+  `supabase functions list -o json`) → 401 persiste, même sans AUCUN header d'autorisation.
+- Testé avec la clé anon legacy (JWT), la clé `publishable` actuelle utilisée par le frontend
+  ([supabaseClient.js](src/supabaseClient.js)), et sans aucune clé → 401 dans tous les cas.
+- Testé via le client officiel `@supabase/supabase-js` (exactement l'appel que fait l'app réelle) →
+  **401 identique**, avec headers `x-served-by: supabase-edge-runtime`, `sb-gateway-version: 1`
+  confirmant que la requête atteint bien l'infrastructure Supabase mais est rejetée avant le code de
+  la fonction.
+- `send-inscription-email` et `send-activation-email` ont aussi `verify_jwt: false` et échouent avec
+  le même 401 — **donc pas spécifique à check-stock-alert : possiblement les emails d'inscription/
+  activation de compte sont aussi impactés**, à vérifier séparément (hors scope initial de ce point,
+  signalé pour visibilité).
+- Confirmé via `net._http_response` que ce 401 existait déjà AVANT toute intervention de cette
+  session (entrées datant d'avant mes changements) — ce n'est donc pas une régression que j'ai
+  introduite.
+- Projet vérifié `ACTIVE_HEALTHY` (pas de pause/quota dépassé) via `supabase projects list`.
+
+**Hypothèse la plus probable** : ce projet a été migré vers le nouveau système de clés API Supabase
+(clés `sb_publishable_...`/`sb_secret_...` remplaçant les JWT anon/service_role legacy — visible
+dans `supabase projects api-keys`, qui liste les deux types). Il est possible que la passerelle
+Edge Functions de ce projet n'ait pas encore basculé pour accepter le nouveau format de clé, ou
+qu'un réglage lié à la rotation des clés de signature JWT (Project Settings → Data API → JWT Keys
+dans le Dashboard, pas accessible via ce CLI) soit en cause. **Ceci dépasse ce que je peux
+diagnostiquer/corriger avec les outils CLI à ma disposition** — je n'ai pas trouvé de commande CLI
+équivalente pour inspecter ou faire pivoter les clés de signature JWT du projet.
+
+**Recommandation** : vérifier dans le Dashboard Supabase → Project Settings → Data API/JWT Keys s'il
+y a un message d'avertissement sur les clés, ou contacter le support Supabase avec ces éléments
+(project ref `yehqmvwmosskumbegzty`, 401 sur `/functions/v1/*` malgré `verify_jwt=false` et clé
+valide, requête confirmée atteindre `supabase-edge-runtime`). Le correctif du trigger (retrait de la
+dépendance au GUC inaccessible) reste une amélioration réelle et committée — dès que l'invocation
+Edge Functions refonctionnera côté plateforme, l'alerte stock fonctionnera sans changement de code
+supplémentaire. **Non bloquant au quotidien** (alertes toujours visibles dans l'app).
 
 **Non corrigé, hors scope** : pas de champ UI pour saisir allergies/mutuelle patient ; "Dernière
 visite" toujours vide dans le Registre patients ; token GitHub en clair dans le remote git du
