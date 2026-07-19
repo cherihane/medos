@@ -88,6 +88,7 @@ export function useOrdonnancesPaginated(statut = "", pageSize = 20) {
   return usePaginated(() => {
     let q = supabase.from("ordonnances").select(`
       id, reference, statut, date_emission, date_expiration, medecin_nom, notes,
+      patient_id, lignes,
       patients ( prenom, nom )
     `, { count: "exact" }).order("date_emission", { ascending: false });
     if (statut) q = q.eq("statut", statut);
