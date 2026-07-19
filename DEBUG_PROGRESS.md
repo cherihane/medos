@@ -35,7 +35,7 @@ Si un bug semble venir de là, le documenter ici et demander confirmation avant 
 | 10 | Alertes stock bas / péremption | 🟡 | Alertes **visibles dans l'app** (Dashboard, filtre Critique Inventaire, page Péremptions) ✅ validées. Notification **email + table `alertes`** (webhook serveur) 🔴 cassée — nécessite une clé sensible, voir journal. |
 | 11 | Fournisseurs et mouvements de stock | ✅ | Ajout fournisseur, commande, et réception de stock (corrigée, voir bug ModalFooter) tous validés — mouvement enregistré ET stock incrémenté (+25 confirmé en base). |
 | 12 | Gestion des patients (création, historique, fidélité) | ✅ | Corrigé (3 bugs, voir journal) — création, édition, filtres de fidélité tous validés en production. |
-| 13 | Rapports du jour | ⬜ | |
+| 13 | Rapports du jour | ✅ | Corrigé (2 bugs, voir journal) — KPI, graphiques, 4 rapports imprimables et 4 exports (CSV/Excel/PDF) tous validés en production. |
 | 14 | Clôture de caisse (journal anti-fraude) | ⬜ | |
 
 ### Journal détaillé
@@ -147,6 +147,24 @@ usage précis), soit (b) redéployer la fonction avec une autre méthode d'authe
 vérifié côté fonction — à ajouter). Je n'ai pas touché aux secrets Supabase. **Pas bloquant pour le
 pharmacien au quotidien** (il voit ses alertes dans l'app), mais aucune alerte n'atterrit dans la
 table `alertes` ni par email tant que ce n'est pas réglé.
+
+**2026-07-19 — Rapports : 2 bugs trouvés et corrigés (export CSV/Excel des ventes cassé + prix à
+0 FCFA partout).**
+1. `exportVentesCSV` et `exportMensuelXLSX` interrogeaient `journal_caisse` avec des colonnes
+   par-article (`medicament_nom, quantite, prix_unitaire, total`) qui n'existent que sur `ventes` —
+   `journal_caisse` est agrégé par transaction (un gros total), pas par article. Échec systématique
+   (`42703`) déjà anticipé lors de l'exploration initiale du code, confirmé en testant. Basculé les
+   deux exports sur `ventes`.
+2. `medicaments.prix_vente` n'a jamais existé (la vraie colonne est `prix_unitaire`) — "Excel —
+   Inventaire complet" et "PDF — Bilan de stock" affichaient silencieusement **0 FCFA partout** (pas
+   d'erreur, juste des données fausses). Corrigé dans les 3 occurrences.
+
+Revalidé en local puis en production : CSV journal des ventes (contenu vérifié — vrais noms de
+médicaments, quantités, prix, totaux), Excel rapport mensuel, Excel inventaire complet, et les 4
+rapports imprimables (Inventaire, Stocks critiques, Registre patients, Alertes) tous fonctionnels.
+**Limite connue non corrigée** : "Registre patients" affiche toujours "—" pour la colonne "Dernière
+visite" (`patients.derniere_visite` n'existe pas et aucune requête n'agrège la date de dernière
+vente/ordonnance par patient) — cosmétique, ne bloque pas l'export, hors scope de ce diagnostic.
 
 **2026-07-19 — Patients : 3 bugs trouvés et corrigés (fidélité + historique de dispensation).**
 1. Filtres de fidélité (`nb_visites`, `allergies`, `mutuelle`) : colonnes absentes de `patients`,
