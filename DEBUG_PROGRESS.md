@@ -36,7 +36,7 @@ Si un bug semble venir de là, le documenter ici et demander confirmation avant 
 | 11 | Fournisseurs et mouvements de stock | ✅ | Ajout fournisseur, commande, et réception de stock (corrigée, voir bug ModalFooter) tous validés — mouvement enregistré ET stock incrémenté (+25 confirmé en base). |
 | 12 | Gestion des patients (création, historique, fidélité) | ✅ | Corrigé (3 bugs, voir journal) — création, édition, filtres de fidélité tous validés en production. |
 | 13 | Rapports du jour | ✅ | Corrigé (2 bugs, voir journal) — KPI, graphiques, 4 rapports imprimables et 4 exports (CSV/Excel/PDF) tous validés en production. |
-| 14 | Clôture de caisse (journal anti-fraude) | ⬜ | |
+| 14 | Clôture de caisse (journal anti-fraude) | ✅ | Aucun bug — déjà solide. Ré-authentification par mot de passe, totaux/répartition par mode corrects, badge IMMUABLE après clôture, "Réimprimer" disponible. Validé en production. |
 
 ### Journal détaillé
 
@@ -147,6 +147,49 @@ usage précis), soit (b) redéployer la fonction avec une autre méthode d'authe
 vérifié côté fonction — à ajouter). Je n'ai pas touché aux secrets Supabase. **Pas bloquant pour le
 pharmacien au quotidien** (il voit ses alertes dans l'app), mais aucune alerte n'atterrit dans la
 table `alertes` ni par email tant que ce n'est pas réglé.
+
+**2026-07-19 — Clôture de caisse (journal anti-fraude) : ✅ validée sans aucun bug.** Ré-authentification
+par mot de passe fonctionne, `clotures_caisse` reçoit les bons totaux (vérifié en base : 7 600 FCFA,
+9 transactions, 5 100 FCFA espèces — identique à l'affichage), badge "IMMUABLE — aucune modification
+possible" affiché après clôture, bouton "Réimprimer" disponible. C'est la seule des 14 fonctionnalités
+testées qui n'a révélé aucun bug.
+
+---
+
+## MODULE PHARMACIE — 14/14 FONCTIONNALITÉS VALIDÉES EN PRODUCTION
+
+Tous les points du plan de test sont maintenant ✅. Récapitulatif des bugs trouvés et corrigés
+pendant ce diagnostic (16 au total, tous corrigés et redéployés) :
+
+1. `medicaments.date_peremption` manquante + champ absent des formulaires ajout/édition
+2. `medicaments.etablissement_id/fabricant/prix_achat` manquantes + catalogue partagé au lieu
+   d'isolé par pharmacie
+3. Faille de sécurité critique : policies RLS permissives obsolètes sur 10 tables, laissant
+   n'importe quel utilisateur lire/modifier les données de n'importe quel établissement
+4. Trigger d'alerte stock cassant toute vente/insert faisant passer un produit sous son seuil
+5. Modes de paiement "Mixte" et "CNSS" rejetés par une contrainte DB obsolète
+6. `patients.adresse` manquante
+7. `ordonnances.lignes` manquante + `insertOrdonnance` sans `etablissement_id` (RLS bloquait tout)
+8. `ventes.medicament_nom`/`type_vente` manquantes
+9. Modes de paiement de la dispensation non alignés avec la contrainte DB (+ "cheque" ajouté)
+10. `ordonnances_statut_check` sans le statut "dispensee" — risque de double dispensation
+11. `ModalFooter` ignorant ses `children` — import CSV et réception de stock totalement non
+    fonctionnels (bouton sans effet, aucune erreur visible)
+12. Contrainte unique manquante sur `medicaments` bloquant l'upsert de l'import CSV
+13. Colonnes de fidélité patients (`nb_visites`, `allergies`, `mutuelle`) manquantes
+14. `useOrdonnancesPaginated` sans `patient_id`/`lignes` — dispensation sans pré-remplissage ni
+    suivi de fidélité
+15. Race condition dans `usePaginated` (hook partagé) — erreur visible au clic sur un filtre
+16. Rapports (CSV/Excel ventes) sur la mauvaise table + `prix_vente` inexistant (0 FCFA silencieux)
+
+**Non corrigé, nécessite ton implication** : le webhook d'alerte stock par email (401, clé
+`service_role` jamais configurée — voir section Alertes ci-dessus). Non bloquant au quotidien.
+
+**Non corrigé, hors scope** : pas de champ UI pour saisir allergies/mutuelle patient ; "Dernière
+visite" toujours vide dans le Registre patients ; token GitHub en clair dans le remote git du
+serveur (sécurité, signalé en tout début de session).
+
+---
 
 **2026-07-19 — Rapports : 2 bugs trouvés et corrigés (export CSV/Excel des ventes cassé + prix à
 0 FCFA partout).**
