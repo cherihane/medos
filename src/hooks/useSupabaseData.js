@@ -16,8 +16,20 @@ export function usePaginated(buildQuery, deps = [], pageSize = 20) {
   const buildRef = useRef(buildQuery);
   useEffect(() => { buildRef.current = buildQuery; });
 
+  // Detecte un changement de filtre (deps) survenu depuis le dernier rendu.
+  // Sans ca, un clic sur un filtre relancait le fetch avec l'ancienne page
+  // (ex: page=1) ET les nouveaux filtres avant que le reset de page ne
+  // prenne effet, demandant un offset hors bornes -> erreur 416 visible.
+  const depsRef = useRef(deps);
+  const depsChanged = deps.length !== depsRef.current.length || deps.some((d, i) => d !== depsRef.current[i]);
+
   useEffect(() => {
-    const from = page * pageSize;
+    if (depsChanged) {
+      depsRef.current = deps;
+      if (page !== 0) { setPage(0); return; }
+    }
+    const effectivePage = depsChanged ? 0 : page;
+    const from = effectivePage * pageSize;
     const to   = from + pageSize - 1;
     setState((s) => ({ ...s, loading: true }));
     buildRef.current()
@@ -27,10 +39,6 @@ export function usePaginated(buildQuery, deps = [], pageSize = 20) {
       );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, pageSize, tick, ...deps]);
-
-  // Réinitialise la page quand les filtres changent
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { setPage(0); }, deps);
 
   const totalPages = Math.max(1, Math.ceil(state.total / pageSize));
   return { ...state, page, setPage, totalPages, refetch };
