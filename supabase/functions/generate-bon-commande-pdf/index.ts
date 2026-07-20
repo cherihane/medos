@@ -49,6 +49,7 @@ interface BonCommandePayload {
   fournisseur?:       { nom?: string; telephone?: string; email?: string; pays?: string };
   medicamentNom?:     string;
   quantite?:          number | string;
+  lignes?:            { nom?: string; quantite?: number | string }[];
   dateLivraison?:     string | null;
   montantTotal?:      number;
   notes?:             string | null;
@@ -85,9 +86,15 @@ Deno.serve(async (req: Request) => {
 
   const {
     reference = "", etablissementNom = "MedOS", fournisseur = {},
-    medicamentNom = "—", quantite = "—", dateLivraison = null,
-    montantTotal = 0, notes = "",
+    medicamentNom = "—", quantite = "—", lignes,
+    dateLivraison = null, montantTotal = 0, notes = "",
   } = payload;
+
+  // Rétrocompatible : les appelants historiques envoient un seul médicament
+  // (medicamentNom/quantite) ; les commandes multi-produits envoient `lignes`.
+  const lignesAffichees = (lignes && lignes.length > 0)
+    ? lignes
+    : [{ nom: medicamentNom, quantite }];
 
   try {
     const pdfDoc = await PDFDocument.create();
@@ -145,9 +152,12 @@ Deno.serve(async (req: Request) => {
     page.drawText("Médicament", { x: left + 10, y: y + 1, size: 10, font: bold, color: white });
     page.drawText("Quantité", { x: right - 90, y: y + 1, size: 10, font: bold, color: white });
     y -= 30;
-    page.drawText(pdfSafe(String(medicamentNom)), { x: left + 10, y, size: 11, font, color: black });
-    page.drawText(pdfSafe(String(quantite)), { x: right - 90, y, size: 11, font, color: black });
-    y -= 10;
+    for (const l of lignesAffichees) {
+      page.drawText(pdfSafe(String(l.nom ?? "—")), { x: left + 10, y, size: 11, font, color: black });
+      page.drawText(pdfSafe(String(l.quantite ?? "—")), { x: right - 90, y, size: 11, font, color: black });
+      y -= 20;
+    }
+    y += 10;
     page.drawLine({ start: { x: left, y }, end: { x: right, y }, thickness: 0.5, color: gray });
 
     page.drawText("MedOS — Intelligence Médicale Africaine", { x: left, y: 50, size: 9, font, color: gray });

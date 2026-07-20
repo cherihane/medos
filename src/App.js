@@ -33,6 +33,7 @@ const PhRapports = lazy(() => import("./pages/pharmacie/Rapports"));
 const PhScanner = lazy(() => import("./pages/pharmacie/Scanner"));
 const PhMouvements = lazy(() => import("./pages/pharmacie/Mouvements"));
 const PhPeremptions = lazy(() => import("./pages/pharmacie/Peremptions"));
+const PhAlertes = lazy(() => import("./pages/pharmacie/Alertes"));
 
 // Hôpital
 const HoDashboard = lazy(() => import("./pages/hopital/Dashboard"));
@@ -245,6 +246,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute requiredRole="pharmacie">
               <PhPeremptions />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/pharmacie/alertes"
+          element={
+            <ProtectedRoute requiredRole="pharmacie">
+              <PhAlertes />
             </ProtectedRoute>
           }
         />

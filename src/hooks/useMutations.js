@@ -92,6 +92,13 @@ export async function deleteCommande(id) {
   return run(supabase.from("commandes").delete().eq("id", id).select().single());
 }
 
+// Lignes d'une commande multi-produits (voir commande_lignes) — insertion en
+// lot, une ligne par médicament de la commande.
+export async function insertCommandeLignes(lignes) {
+  if (!lignes || lignes.length === 0) return [];
+  return run(supabase.from("commande_lignes").insert(lignes).select());
+}
+
 // ─── Patients ─────────────────────────────────────────────────────────────────
 export async function insertPatient(fields) {
   return run(supabase.from("patients").insert(fields).select().single());
