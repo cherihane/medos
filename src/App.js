@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { NotificationsProvider } from "./context/NotificationsContext";
 import { DarkModeProvider } from "./context/DarkModeContext";
+import InactivityGuard from "./components/InactivityGuard";
 
 // ── Chargement différé de toutes les pages ────────────────────────────────────
 
@@ -130,7 +131,9 @@ function AppRoutes() {
   const { auth } = useAuth();
 
   return (
-    <Suspense fallback={<PageLoader />}>
+    <>
+      <InactivityGuard />
+      <Suspense fallback={<PageLoader />}>
       <Routes>
         <Route
           path="/"
@@ -601,7 +604,8 @@ function AppRoutes() {
           }
         />
       </Routes>
-    </Suspense>
+      </Suspense>
+    </>
   );
 }
 
