@@ -18,6 +18,16 @@ function fmt(iso) {
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
 
+// Destruction est un type de mouvement à part entière (mise au rebut réglementaire,
+// voir Peremptions.jsx) — distinct d'une simple sortie manuelle, jamais confondu
+// avec une vente (qui ne passe pas par mouvements_stock).
+const TYPE_STYLE = {
+  entree:      { label: "Entrée",      bg: "#DCFCE7", color: "#16A34A", sign: "+" },
+  sortie:      { label: "Sortie",      bg: "#FEF2F2", color: "#DC2626", sign: "–" },
+  destruction: { label: "Destruction", bg: "#FFE4E6", color: "#9F1239", sign: "–" },
+};
+function typeStyle(type) { return TYPE_STYLE[type] ?? TYPE_STYLE.sortie; }
+
 function Skeleton() {
   return [1, 2, 3, 4, 5].map((i) => (
     <tr key={i} style={{ borderBottom: "1px solid var(--border-light)", animation: "pulse 1.5s ease-in-out infinite" }}>
@@ -277,7 +287,7 @@ export default function Mouvements() {
       fmt(m.created_at),
       m.medicaments?.nom ?? "—",
       m.medicaments?.categorie ?? "—",
-      m.type === "entree" ? "Entrée" : "Sortie",
+      typeStyle(m.type).label,
       m.quantite,
       m.numero_bl ?? "",
       m.fournisseur ?? "",
@@ -293,8 +303,9 @@ export default function Mouvements() {
     URL.revokeObjectURL(url);
   }
 
-  const totalEntrees = mouvements.filter((m) => m.type === "entree").reduce((s, m) => s + (m.quantite ?? 0), 0);
-  const totalSorties = mouvements.filter((m) => m.type === "sortie").reduce((s, m) => s + (m.quantite ?? 0), 0);
+  const totalEntrees     = mouvements.filter((m) => m.type === "entree").reduce((s, m) => s + (m.quantite ?? 0), 0);
+  const totalSorties     = mouvements.filter((m) => m.type === "sortie").reduce((s, m) => s + (m.quantite ?? 0), 0);
+  const totalDestructions = mouvements.filter((m) => m.type === "destruction").reduce((s, m) => s + (m.quantite ?? 0), 0);
 
   return (
     <Layout title="Mouvements de stock" subtitle="Historique entrées et sorties">
@@ -317,6 +328,7 @@ export default function Mouvements() {
           { label: "Mouvements sur la période", value: mouvements.length, color: "#3B82F6" },
           { label: "Total entrees (unités)", value: totalEntrees.toLocaleString(), color: "#10B981" },
           { label: "Total sorties (unités)", value: totalSorties.toLocaleString(), color: "#EF4444" },
+          { label: "Total détruit (unités)", value: totalDestructions.toLocaleString(), color: "#9F1239" },
         ].map((k) => (
           <div key={k.label} style={{ flex: 1, backgroundColor: t.bgCard, borderRadius: 14, padding: "18px 22px", boxShadow: t.shadow, borderLeft: `4px solid ${k.color}` }}>
             <div style={{ fontSize: 24, fontWeight: 800, color: k.color }}>{k.value}</div>
@@ -334,6 +346,7 @@ export default function Mouvements() {
               <option value="">Tous</option>
               <option value="entree">Entrées</option>
               <option value="sortie">Sorties</option>
+              <option value="destruction">Destructions</option>
             </select>
           </div>
           <div>
@@ -388,15 +401,15 @@ export default function Mouvements() {
                   <td style={{ padding: "12px 16px", fontSize: 13, fontWeight: 600, color: t.textHeavy }}>{m.medicaments?.nom ?? "—"}</td>
                   <td style={{ padding: "12px 16px", fontSize: 12, color: t.textLight }}>{m.medicaments?.categorie ?? "—"}</td>
                   <td style={{ padding: "12px 16px" }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, backgroundColor: m.type === "entree" ? "#DCFCE7" : "#FEF2F2", color: m.type === "entree" ? "#16A34A" : "#DC2626" }}>
-                      {m.type === "entree" ? "Entrée" : "Sortie"}
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, backgroundColor: typeStyle(m.type).bg, color: typeStyle(m.type).color }}>
+                      {typeStyle(m.type).label}
                     </span>
                   </td>
-                  <td style={{ padding: "12px 16px", fontSize: 14, fontWeight: 800, color: m.type === "entree" ? "#16A34A" : "#DC2626" }}>
-                    {m.type === "entree" ? "+" : "–"}{m.quantite}
+                  <td style={{ padding: "12px 16px", fontSize: 14, fontWeight: 800, color: typeStyle(m.type).color }}>
+                    {typeStyle(m.type).sign}{m.quantite}
                   </td>
                   <td style={{ padding: "12px 16px", fontSize: 12, color: t.textLight, fontFamily: "monospace" }}>{m.numero_bl ?? "—"}</td>
-                  <td style={{ padding: "12px 16px", fontSize: 12, color: t.textLight }}>{m.fournisseur ?? "—"}</td>
+                  <td style={{ padding: "12px 16px", fontSize: 12, color: t.textLight }}>{m.fournisseur ?? (m.type === "destruction" ? (m.created_by_email ?? "—") : "—")}</td>
                   <td style={{ padding: "12px 16px", fontSize: 12, color: t.textLight }}>{m.motif ?? "—"}</td>
                 </tr>
               ))}

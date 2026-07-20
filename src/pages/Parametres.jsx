@@ -213,7 +213,7 @@ function PermissionsCheckboxes({ role, selected, onChange }) {
 }
 
 // ─── Section Informations établissement ──────────────────────────────────────
-function SectionEtablissement({ etablissement_id }) {
+function SectionEtablissement({ etablissement_id, role }) {
   const { toasts, success, error: toastError } = useToast();
   const [etab, setEtab] = useState(null);
   const [form, setForm] = useState(null);
@@ -224,7 +224,7 @@ function SectionEtablissement({ etablissement_id }) {
     if (!etablissement_id) return;
     supabase
       .from("etablissements")
-      .select("id, nom, type, ville, pays, adresse, email, licence_numero, notes_inscription, largeur_ticket_mm")
+      .select("id, nom, type, ville, pays, adresse, email, licence_numero, notes_inscription, largeur_ticket_mm, taux_tva, licence_pharmacien_responsable, mentions_legales")
       .eq("id", etablissement_id)
       .single()
       .then(({ data }) => {
@@ -236,6 +236,8 @@ function SectionEtablissement({ etablissement_id }) {
 
   const handleSave = async () => {
     if (!form.nom?.trim()) return toastError("Le nom est obligatoire.");
+    const taux = form.taux_tva === "" || form.taux_tva == null ? 0 : Number(form.taux_tva);
+    if (Number.isNaN(taux) || taux < 0 || taux > 100) return toastError("Le taux de TVA doit être compris entre 0 et 100.");
     setSaving(true);
     try {
       const { error } = await supabase
@@ -246,10 +248,15 @@ function SectionEtablissement({ etablissement_id }) {
           ville: form.ville?.trim() || null,
           pays: form.pays?.trim() || null,
           licence_numero: form.licence_numero?.trim() || null,
+          ...(role === "pharmacie" ? {
+            taux_tva: taux,
+            licence_pharmacien_responsable: form.licence_pharmacien_responsable?.trim() || null,
+            mentions_legales: form.mentions_legales?.trim() || null,
+          } : {}),
         })
         .eq("id", etablissement_id);
       if (error) throw error;
-      setEtab(form);
+      setEtab({ ...form, taux_tva: taux });
       setEditing(false);
       success("Informations mises à jour.");
     } catch (e) {
@@ -309,6 +316,22 @@ function SectionEtablissement({ etablissement_id }) {
             <input style={s} value={form.licence_numero || ""} onChange={set("licence_numero")} readOnly={!editing} placeholder="Ex: MSP-LIC-2024-00123" />
           </Field>
         </Row>
+
+        {role === "pharmacie" && (
+          <>
+            <Row>
+              <Field label="Taux de TVA (%)">
+                <input style={s} type="number" min="0" max="100" step="0.5" value={form.taux_tva ?? 0} onChange={set("taux_tva")} readOnly={!editing} placeholder="0" />
+              </Field>
+              <Field label="Licence du pharmacien responsable">
+                <input style={s} value={form.licence_pharmacien_responsable || ""} onChange={set("licence_pharmacien_responsable")} readOnly={!editing} placeholder="Ex : MSP-PHR-2024-00123" />
+              </Field>
+            </Row>
+            <Field label="Mentions légales (affichées sur les documents imprimés)">
+              <input style={s} value={form.mentions_legales || ""} onChange={set("mentions_legales")} readOnly={!editing} placeholder="Ex : Pharmacie agréée — RC 12345, N° contribuable 67890…" />
+            </Field>
+          </>
+        )}
 
         {editing && (
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
@@ -778,7 +801,7 @@ export default function Parametres() {
         </div>
       )}
       <SectionApparence />
-      <SectionEtablissement etablissement_id={etablissement_id} />
+      <SectionEtablissement etablissement_id={etablissement_id} role={role} />
       {role === "pharmacie" && <SectionTicketCaisse etablissement_id={etablissement_id} />}
       <SectionPersonnel etablissement_id={etablissement_id} role={role} />
     </Layout>

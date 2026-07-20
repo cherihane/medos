@@ -1,10 +1,15 @@
 import { colors } from "../../theme";
 import { useState, useEffect, useCallback, useRef } from "react";
 import Layout from "../../components/Layout";
+import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useMedicaments } from "../../hooks/useSupabaseData";
-import { insertVentes, decrementStock, insertJournalCaisse, fetchJournalJour, insertClotureCaisse, fetchClotureCaisse, insertFondCaisse, fetchFondJour } from "../../hooks/useMutations";
+import {
+  insertVentes, decrementStock, incrementStock, insertJournalCaisse, fetchJournalJour,
+  insertClotureCaisse, fetchClotureCaisse, insertFondCaisse, fetchFondJour,
+  insertMouvementStock, insertRetour, insertRetourLignes, fetchRetoursParJournalCaisseId,
+} from "../../hooks/useMutations";
 import { supabase } from "../../supabaseClient";
 import { useAuth } from "../../context/AuthContext";
 import { openDocument, tableHTML, kpiHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
@@ -127,6 +132,10 @@ function printTicket({ ref, date, items, paiement, total, montantRecu, monnaie, 
   const dateStr = date.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
   const heureStr = date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
   const modeLabel = MODE_LABELS[paiement] ?? paiement;
+  const tauxTva = Number(etab?.taux_tva) || 0;
+  const montantHT = tauxTva > 0 ? total / (1 + tauxTva / 100) : total;
+  const montantTvaCalc = total - montantHT;
+  const fmtFCFA = (n) => n.toLocaleString("fr-FR", { maximumFractionDigits: 0 });
 
   const bodyCSS80 = `
     body { font-family:'Courier New',Courier,monospace; width:80mm; padding:4mm 3mm; font-size:12px; color:#000; }
@@ -143,16 +152,24 @@ function printTicket({ ref, date, items, paiement, total, montantRecu, monnaie, 
     @media print { @page { size:58mm auto; margin:0; } body { width:58mm; } }
   `;
 
+  const recapTvaHTML80 = tauxTva > 0 ? `
+    <tr><td colspan="3" style="font-size:10px">Total HT</td><td style="text-align:right;font-size:10px">${fmtFCFA(montantHT)}</td></tr>
+    <tr><td colspan="3" style="font-size:10px">TVA (${tauxTva}%)</td><td style="text-align:right;font-size:10px">${fmtFCFA(montantTvaCalc)}</td></tr>` : "";
+  const recapTvaHTML58 = tauxTva > 0 ? `
+    <div style="display:flex;justify-content:space-between;font-size:9px"><span>Total HT</span><span>${fmtFCFA(montantHT)} FCFA</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:9px;margin-bottom:2px"><span>TVA (${tauxTva}%)</span><span>${fmtFCFA(montantTvaCalc)} FCFA</span></div>` : "";
+
   const itemsHTML = largeurMm === 80
     ? `<table>
         <thead><tr><th style="text-align:left">Article</th><th>Qte</th><th>P.U.</th><th>Total</th></tr></thead>
         <tbody>${lignesTable80(items)}</tbody>
       </table>
       <div class="sep-dashed"></div>
-      <table><tfoot><tr class="row-total"><td colspan="3">TOTAL TTC</td><td style="text-align:right;white-space:nowrap">${total.toLocaleString("fr-FR")} FCFA</td></tr></tfoot></table>`
+      <table>${recapTvaHTML80}<tfoot><tr class="row-total"><td colspan="3">TOTAL ${tauxTva > 0 ? "TTC" : ""}</td><td style="text-align:right;white-space:nowrap">${total.toLocaleString("fr-FR")} FCFA</td></tr></tfoot></table>`
     : `${lignesEmpilees58(items)}
       <div class="sep-dashed"></div>
-      <div class="row-total"><span>TOTAL TTC</span><span>${total.toLocaleString("fr-FR")} FCFA</span></div>`;
+      ${recapTvaHTML58}
+      <div class="row-total"><span>TOTAL ${tauxTva > 0 ? "TTC" : ""}</span><span>${total.toLocaleString("fr-FR")} FCFA</span></div>`;
 
   const html = `<!DOCTYPE html>
 <html lang="fr">
@@ -183,6 +200,11 @@ function printTicket({ ref, date, items, paiement, total, montantRecu, monnaie, 
   <div style="font-size:${largeurMm === 80 ? 11 : 9}px">Montant recu${largeurMm === 80 ? "      " : " "}: ${montantRecu.toLocaleString("fr-FR")} FCFA</div>
   <div style="font-size:${largeurMm === 80 ? 11 : 9}px">Monnaie rendue${largeurMm === 80 ? "    " : " "}: ${(monnaie ?? 0).toLocaleString("fr-FR")} FCFA</div>` : ""}
   <div class="sep-solid"></div>
+  ${(etab?.licence_pharmacien_responsable || etab?.mentions_legales) ? `
+  <div style="font-size:${largeurMm === 80 ? 9 : 8}px;color:#000;text-align:center;margin-top:4px">
+    ${etab?.licence_pharmacien_responsable ? `Pharmacien responsable — Licence n° ${etab.licence_pharmacien_responsable}<br/>` : ""}
+    ${etab?.mentions_legales ? etab.mentions_legales : ""}
+  </div>` : ""}
   <div class="footer">MedOS — Merci de votre confiance</div>
 </body>
 </html>`;
@@ -345,7 +367,17 @@ function OngletCaisse({ onSaleComplete }) {
     }).catch(() => setFondModal(true));
   }, [auth?.etablissement_id]);
 
+  // Taux de TVA de l'établissement (0% par défaut) — les prix de vente restent
+  // TTC inchangés (montant_total du journal n'est jamais modifié par ce taux),
+  // seule la répartition HT / TVA / TTC affichée en découle.
+  const [tauxTva, setTauxTva] = useState(0);
+  useEffect(() => {
+    fetchEtabFromAuth(auth).then((etab) => setTauxTva(Number(etab.taux_tva) || 0)).catch(() => {});
+  }, [auth]);
+
   const total = cart.reduce((s, i) => s + (i.prix_unitaire ?? 0) * i.qty, 0);
+  const montantHT = tauxTva > 0 ? total / (1 + tauxTva / 100) : total;
+  const montantTvaCalc = total - montantHT;
 
   // Calculs selon mode de paiement
   const partAssurance = paiement === "assurance" || paiement === "cnss"
@@ -700,8 +732,20 @@ function OngletCaisse({ onSaleComplete }) {
               <span>Sous-total ({cart.reduce((s, i) => s + i.qty, 0)} articles)</span>
               <span>{total.toLocaleString()} FCFA</span>
             </div>
+            {tauxTva > 0 && (
+              <>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: 12, color: colors.textSecondary }}>
+                  <span>Total HT</span>
+                  <span>{montantHT.toLocaleString(undefined, { maximumFractionDigits: 0 })} FCFA</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 12, color: colors.textSecondary }}>
+                  <span>TVA ({tauxTva}%)</span>
+                  <span>{montantTvaCalc.toLocaleString(undefined, { maximumFractionDigits: 0 })} FCFA</span>
+                </div>
+              </>
+            )}
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 18, fontWeight: 800, color: colors.navy, marginBottom: 16 }}>
-              <span>TOTAL</span>
+              <span>TOTAL {tauxTva > 0 ? "TTC" : ""}</span>
               <span>{total.toLocaleString()} FCFA</span>
             </div>
 
@@ -949,10 +993,151 @@ function ClotureModal({ date, journal, byMode, totalEncaisse, fondMontant, auth,
   );
 }
 
+// ─── Modal Retour / Remboursement ──────────────────────────────────────────────
+// Ne touche jamais journal_caisse ni ventes (immuables, voir bandeau "IMMUABLE"
+// du registre) — crée uniquement des enregistrements retours/retours_lignes liés
+// par référence à la transaction d'origine, et réintègre le stock via les mêmes
+// mutations que partout ailleurs (incrementStock + mouvements_stock).
+function RetourModal({ row, medicaments, auth, onClose, onSaved }) {
+  const detail = Array.isArray(row.detail) ? row.detail : [];
+  const [selected, setSelected] = useState(() => new Set(detail.map((_, i) => i)));
+  const [quantites, setQuantites] = useState(() => Object.fromEntries(detail.map((d, i) => [i, d.qty])));
+  const [motif, setMotif] = useState("");
+  const [modeRemboursement, setModeRemboursement] = useState(row.mode_paiement ?? "especes");
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState(null);
+
+  const resolveMed = (nom) => medicaments.find((m) => (m.nom || "").trim().toLowerCase() === (nom || "").trim().toLowerCase());
+
+  const toggle = (i) => setSelected((s) => {
+    const next = new Set(s);
+    if (next.has(i)) next.delete(i); else next.add(i);
+    return next;
+  });
+
+  const montantTotal = detail.reduce((s, d, i) =>
+    selected.has(i) ? s + (d.prix_unitaire ?? 0) * (Number(quantites[i]) || 0) : s, 0);
+
+  const handleSave = async () => {
+    const lignesARetourner = detail
+      .map((d, i) => ({ ...d, index: i }))
+      .filter((d) => selected.has(d.index));
+    if (lignesARetourner.length === 0) { setFormError("Sélectionnez au moins un produit à retourner."); return; }
+    if (!motif.trim()) { setFormError("Indiquez un motif de retour."); return; }
+    for (const d of lignesARetourner) {
+      const qty = Number(quantites[d.index]);
+      if (!qty || qty <= 0 || qty > d.qty) { setFormError(`Quantité invalide pour "${d.nom}" (max ${d.qty}).`); return; }
+      if (!resolveMed(d.nom)) { setFormError(`"${d.nom}" introuvable dans l'inventaire actuel — impossible de réintégrer le stock. Décochez cet article pour continuer.`); return; }
+    }
+    setSaving(true);
+    setFormError(null);
+    try {
+      const retour = await insertRetour({
+        etablissement_id:   auth?.etablissement_id ?? null,
+        journal_caisse_id:  row.id,
+        motif:              motif.trim(),
+        mode_remboursement: modeRemboursement,
+        montant_total:      montantTotal,
+        created_by:         auth?.user?.id ?? null,
+        created_by_email:   auth?.user?.email ?? null,
+      });
+
+      const lignes = [];
+      for (const d of lignesARetourner) {
+        const med = resolveMed(d.nom);
+        const qty = Number(quantites[d.index]);
+        await incrementStock(med.id, qty);
+        await insertMouvementStock({
+          etablissement_id: auth?.etablissement_id ?? null,
+          medicament_id:    med.id,
+          type:             "entree",
+          quantite:         qty,
+          motif:            `Retour client — ${motif.trim()}`,
+          created_by:       auth?.user?.id ?? null,
+          created_by_email: auth?.user?.email ?? null,
+        });
+        lignes.push({
+          retour_id:      retour.id,
+          medicament_id:  med.id,
+          medicament_nom: d.nom,
+          quantite:       qty,
+          prix_unitaire:  d.prix_unitaire ?? null,
+          montant:        (d.prix_unitaire ?? 0) * qty,
+        });
+      }
+      await insertRetourLignes(lignes);
+
+      onSaved({ montantTotal, nbLignes: lignes.length });
+      onClose();
+    } catch (e) {
+      setFormError("Erreur : " + e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title={`Retour / remboursement — vente #${shortId(row.id)}`} onClose={onClose} width={560}>
+      <div style={{ marginBottom: 14, padding: "10px 14px", backgroundColor: "#EFF6FF", borderRadius: 8, fontSize: 12, color: "#1D4ED8" }}>
+        La vente d'origine n'est jamais modifiée — ce retour crée un enregistrement séparé, lié à
+        cette transaction, et réintègre le stock des produits sélectionnés.
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
+          Produits à retourner
+        </label>
+        <div style={{ border: "1.5px solid #E5E7EB", borderRadius: 10, overflow: "hidden" }}>
+          {detail.map((d, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderBottom: i < detail.length - 1 ? "1px solid #F3F4F6" : "none", opacity: selected.has(i) ? 1 : 0.5 }}>
+              <input type="checkbox" checked={selected.has(i)} onChange={() => toggle(i)} style={{ cursor: "pointer" }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#0A1628" }}>{d.nom}</div>
+                <div style={{ fontSize: 11, color: "#9CA3AF" }}>Vendu : {d.qty} × {(d.prix_unitaire ?? 0).toLocaleString("fr-FR")} FCFA</div>
+              </div>
+              <input
+                type="number"
+                min="1"
+                max={d.qty}
+                disabled={!selected.has(i)}
+                value={quantites[i]}
+                onChange={(e) => setQuantites((q) => ({ ...q, [i]: e.target.value }))}
+                style={{ width: 70, padding: "6px 8px", border: "1.5px solid #E5E7EB", borderRadius: 6, fontSize: 13, textAlign: "center" }}
+              />
+            </div>
+          ))}
+        </div>
+        <div style={{ textAlign: "right", fontSize: 13, fontWeight: 700, color: colors.navy, marginTop: 8 }}>
+          Montant à rembourser : {montantTotal.toLocaleString("fr-FR")} FCFA
+        </div>
+      </div>
+
+      <Row>
+        <Field label="Mode de remboursement">
+          <select style={selectStyle} value={modeRemboursement} onChange={(e) => setModeRemboursement(e.target.value)}>
+            {Object.entries(MODE_LABELS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+          </select>
+        </Field>
+        <Field label="Motif *">
+          <input style={inputStyle} value={motif} onChange={(e) => setMotif(e.target.value)} placeholder="Ex : produit défectueux, erreur de saisie…" />
+        </Field>
+      </Row>
+
+      {formError && (
+        <div style={{ fontSize: 12, color: "#EF4444", padding: "8px 12px", backgroundColor: "#FEF2F2", borderRadius: 8, marginBottom: 4 }}>
+          {formError}
+        </div>
+      )}
+      <ModalFooter onCancel={onClose} onSubmit={handleSave} submitLabel="Confirmer le retour" saving={saving} />
+    </Modal>
+  );
+}
+
 // ─── Onglet Journal du gérant ─────────────────────────────────────────────────
 function OngletJournal({ refreshKey }) {
-  const { error: showError } = useToast();
+  const { error: showError, success } = useToast();
   const { auth } = useAuth();
+  const { data: medicaments } = useMedicaments();
   const [date, setDate] = useState(todayISO());
   const [journal, setJournal] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -960,6 +1145,8 @@ function OngletJournal({ refreshKey }) {
   const [cloture, setCloture] = useState(null);
   const [showCloture, setShowCloture] = useState(false);
   const [fondCloture, setFondCloture] = useState(null);
+  const [retoursParVente, setRetoursParVente] = useState({}); // journal_caisse_id -> retours[]
+  const [retourModalRow, setRetourModalRow] = useState(null); // ligne journal en cours de retour
 
   const isGerant = auth?.role_interne === null || auth?.role_interne === "gerant";
 
@@ -975,6 +1162,12 @@ function OngletJournal({ refreshKey }) {
       setJournal(data);
       setCloture(clot);
       setFondCloture(fond?.montant ?? null);
+      const retours = await fetchRetoursParJournalCaisseId(data.map((r) => r.id)).catch(() => []);
+      const grouped = {};
+      for (const r of retours) {
+        (grouped[r.journal_caisse_id] ??= []).push(r);
+      }
+      setRetoursParVente(grouped);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -1016,6 +1209,20 @@ function OngletJournal({ refreshKey }) {
           auth={auth}
           onClose={() => setShowCloture(false)}
           onDone={() => { setShowCloture(false); load(); }}
+        />
+      )}
+
+      {/* Modal retour / remboursement */}
+      {retourModalRow && (
+        <RetourModal
+          row={retourModalRow}
+          medicaments={medicaments}
+          auth={auth}
+          onClose={() => setRetourModalRow(null)}
+          onSaved={({ montantTotal, nbLignes }) => {
+            success(`Retour enregistré — ${nbLignes} article${nbLignes > 1 ? "s" : ""}, ${montantTotal.toLocaleString("fr-FR")} FCFA à rembourser. Stock réintégré.`);
+            load();
+          }}
         />
       )}
 
@@ -1208,6 +1415,13 @@ function OngletJournal({ refreshKey }) {
                       )}
                     </div>
                   )}
+                  <button
+                    onClick={() => setRetourModalRow(row)}
+                    disabled={!Array.isArray(row.detail) || row.detail.length === 0}
+                    style={{ marginTop: 4, padding: "4px 10px", backgroundColor: "#FEF2F2", color: "#DC2626", border: "1px solid #FECACA", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "pointer" }}
+                  >
+                    Retour / remboursement
+                  </button>
                 </div>
               </div>
               {/* Détail articles avec prix unitaire */}
@@ -1224,6 +1438,15 @@ function OngletJournal({ refreshKey }) {
                   ))}
                 </div>
               )}
+              {/* Retours déjà enregistrés sur cette vente */}
+              {(retoursParVente[row.id] ?? []).map((r) => (
+                <div key={r.id} style={{ marginTop: 6, marginLeft: 10, padding: "6px 10px", backgroundColor: "#FEF2F2", borderRadius: 7, fontSize: 11, color: "#991B1B" }}>
+                  <strong>↩ Retour</strong> — {(r.retours_lignes ?? []).map((l) => `${l.medicament_nom} ×${l.quantite}`).join(", ")}
+                  {" — "}{(r.montant_total ?? 0).toLocaleString()} FCFA remboursés ({MODE_LABELS[r.mode_remboursement] ?? r.mode_remboursement})
+                  {r.motif ? ` — ${r.motif}` : ""}
+                  {r.created_by_email ? ` — par ${r.created_by_email}` : ""}
+                </div>
+              ))}
             </div>
           );
         })}

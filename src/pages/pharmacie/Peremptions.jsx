@@ -2,9 +2,12 @@ import { colors } from "../../theme";
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
+import Modal, { Field, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useMedicaments } from "../../hooks/useSupabaseData";
+import { insertMouvementStock, decrementStock } from "../../hooks/useMutations";
+import { useAuth } from "../../context/AuthContext";
 import { useThemeTokens } from "../../context/DarkModeContext";
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
@@ -28,12 +31,80 @@ function CriticiteBadge({ days }) {
   return <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, backgroundColor: "#FEF9C3", color: "#A16207" }}>Vigilance — {days}j</span>;
 }
 
+// ── Modal Détruire ce lot (mise au rebut réglementaire) ────────────────────────
+const MOTIFS_DESTRUCTION = ["Péremption", "Altération / casse", "Rappel fabricant", "Autre"];
+
+function DestructionModal({ med, auth, onClose, onSaved }) {
+  const [quantite, setQuantite] = useState(String(med.stock_actuel ?? 0));
+  const [motif, setMotif] = useState("Péremption");
+  const [motifLibre, setMotifLibre] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState(null);
+
+  const handleSave = async () => {
+    const qty = parseInt(quantite, 10);
+    if (!qty || qty <= 0) { setFormError("Quantité invalide."); return; }
+    if (qty > (med.stock_actuel ?? 0)) { setFormError(`Quantité supérieure au stock disponible (${med.stock_actuel ?? 0}).`); return; }
+    const motifFinal = motif === "Autre" ? (motifLibre.trim() || "Autre") : motif;
+    setSaving(true);
+    setFormError(null);
+    try {
+      await insertMouvementStock({
+        etablissement_id: auth?.etablissement_id ?? null,
+        medicament_id:    med.id,
+        type:             "destruction",
+        quantite:         qty,
+        motif:            motifFinal,
+        created_by:       auth?.user?.id ?? null,
+        created_by_email: auth?.user?.email ?? null,
+      });
+      await decrementStock(med.id, qty);
+      onSaved(qty);
+      onClose();
+    } catch (e) {
+      setFormError("Erreur : " + e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title={`Détruire ce lot — ${med.nom}`} onClose={onClose}>
+      <div style={{ marginBottom: 14, padding: "10px 14px", backgroundColor: "#FEF2F2", borderRadius: 8, fontSize: 12, color: "#991B1B" }}>
+        Cette action décrémente définitivement le stock et enregistre une mise au rebut consultable
+        dans Mouvements (qui, quand, combien). Elle ne peut pas être annulée.
+      </div>
+      <Field label={`Quantité à détruire (stock actuel : ${med.stock_actuel ?? 0})`}>
+        <input style={inputStyle} type="number" min="1" max={med.stock_actuel ?? 0} value={quantite} onChange={(e) => { setFormError(null); setQuantite(e.target.value); }} />
+      </Field>
+      <Field label="Motif">
+        <select style={selectStyle} value={motif} onChange={(e) => setMotif(e.target.value)}>
+          {MOTIFS_DESTRUCTION.map((m) => <option key={m} value={m}>{m}</option>)}
+        </select>
+      </Field>
+      {motif === "Autre" && (
+        <Field label="Précisez le motif">
+          <input style={inputStyle} value={motifLibre} onChange={(e) => setMotifLibre(e.target.value)} placeholder="Ex : contrôle qualité, dégât des eaux…" />
+        </Field>
+      )}
+      {formError && (
+        <div style={{ fontSize: 12, color: "#EF4444", padding: "8px 12px", backgroundColor: "#FEF2F2", borderRadius: 8, marginBottom: 4 }}>
+          {formError}
+        </div>
+      )}
+      <ModalFooter onCancel={onClose} onSubmit={handleSave} submitLabel="Confirmer la destruction" saving={saving} danger />
+    </Modal>
+  );
+}
+
 export default function Peremptions() {
   const t = useThemeTokens();
   const navigate = useNavigate();
-  const { data: medicaments, loading } = useMedicaments();
-  const { toasts } = useToast();
+  const { auth } = useAuth();
+  const { data: medicaments, loading, refetch } = useMedicaments();
+  const { toasts, success } = useToast();
   const [filtre, setFiltre] = useState(90); // jours
+  const [destructionModal, setDestructionModal] = useState(null); // médicament en cours de destruction
 
   const produits = useMemo(() => {
     return medicaments
@@ -69,6 +140,15 @@ export default function Peremptions() {
   return (
     <Layout title="Péremptions" subtitle="Médicaments arrivant à expiration">
       <Toast toasts={toasts} />
+
+      {destructionModal && (
+        <DestructionModal
+          med={destructionModal}
+          auth={auth}
+          onClose={() => setDestructionModal(null)}
+          onSaved={(qty) => { success(`${qty} unité${qty > 1 ? "s" : ""} de ${destructionModal.nom} détruite${qty > 1 ? "s" : ""} — stock mis à jour.`); refetch(); }}
+        />
+      )}
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
 
       {/* KPI */}
@@ -142,14 +222,24 @@ export default function Peremptions() {
                   <td style={{ padding: "12px 16px", fontSize: 13, color: t.text }}>{fmtDate(m.date_peremption)}</td>
                   <td style={{ padding: "12px 16px" }}><CriticiteBadge days={m.jours} /></td>
                   <td style={{ padding: "12px 16px" }}>
-                    {(m.stock_actuel ?? 0) > 0 && (
-                      <button
-                        onClick={() => navigate("/pharmacie/caisse")}
-                        style={{ padding: "5px 14px", backgroundColor: "#3B82F6", color: "white", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
-                      >
-                        Vendre
-                      </button>
-                    )}
+                    <div style={{ display: "flex", gap: 6 }}>
+                      {(m.stock_actuel ?? 0) > 0 && (m.jours ?? 0) >= 0 && (
+                        <button
+                          onClick={() => navigate("/pharmacie/caisse")}
+                          style={{ padding: "5px 14px", backgroundColor: "#3B82F6", color: "white", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                        >
+                          Vendre
+                        </button>
+                      )}
+                      {(m.stock_actuel ?? 0) > 0 && (
+                        <button
+                          onClick={() => setDestructionModal(m)}
+                          style={{ padding: "5px 14px", backgroundColor: "#FEF2F2", color: "#DC2626", border: "1px solid #FECACA", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}
+                        >
+                          Détruire ce lot
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
