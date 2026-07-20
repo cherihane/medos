@@ -85,6 +85,13 @@ export async function updateCommande(id, fields) {
   return run(supabase.from("commandes").update(fields).eq("id", id).select().single());
 }
 
+// Suppression complète : autorisée uniquement pour les commandes en brouillon
+// (appliqué aussi côté RLS, voir cmd_delete — pour tout autre statut,
+// utiliser updateCommande(id, { statut: "annulee" }) à la place).
+export async function deleteCommande(id) {
+  return run(supabase.from("commandes").delete().eq("id", id).select().single());
+}
+
 // ─── Patients ─────────────────────────────────────────────────────────────────
 export async function insertPatient(fields) {
   return run(supabase.from("patients").insert(fields).select().single());
