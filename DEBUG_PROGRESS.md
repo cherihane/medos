@@ -549,3 +549,47 @@ Non commencé — en attente de validation complète du module Pharmacie.
 ## Module HÔPITAL
 
 Non commencé — en attente de validation complète du module Pharmacie.
+
+---
+
+## RÉSOLU — Envoi d'email de commande fournisseur (2026-07-20, session 6)
+
+Suite à la rotation de `RESEND_API_KEY` par l'utilisateur, un nouveau blocage est apparu :
+`403 "This API key is not authorized to send emails from kelagroup.org"`. Vérifié par
+l'utilisateur sur Resend → Domains : c'est **`mail.kelagroup.org`** qui est vérifié, pas
+`kelagroup.org`. Les 4 fonctions email (`send-app-email`, `send-activation-email`,
+`send-inscription-email`, `check-stock-alert`) envoyaient toutes depuis `@kelagroup.org` (et
+`check-stock-alert` depuis `@medos.app`, un troisième domaine différent, jamais vérifié non plus).
+Corrigées pour envoyer depuis `@mail.kelagroup.org`, redéployées.
+
+**Preuve complète que ça fonctionne, de bout en bout, en conditions réelles de production :**
+
+1. **Action réelle dans l'app** (pas un appel direct à l'API) : commande passée via l'interface
+   Fournisseurs → Commander → Amoxicilline 500mg × 25 chez PharmaDistrib Congo.
+2. **Toast de confirmation affiché** : *"Commande CMD-64033716 envoyée chez PharmaDistrib Congo —
+   email de confirmation transmis."* (vert, succès — plus l'ancien message d'échec).
+3. **Log serveur exact** (`function_logs` via l'API Management Supabase) :
+   ```
+   [send-app-email] Email envoyé à cherihaneadam123@gmail.com | Sujet: Commande MedOS
+   CMD-64033716 — Amoxicilline 500mg (25 unités) | Resend id: 2ee2afb3-5c82-41bf-b55c-96806861ef5b
+   ```
+   → statut 200, id Resend confirmé (ajout d'un log de l'id Resend en cas de succès, absent avant
+   — utile pour tout diagnostic futur).
+4. **Réception réelle vérifiée dans Gmail** (recherche directe dans la boîte
+   `cherihaneadam123@gmail.com`, pas une supposition) : email reçu de `noreply@mail.kelagroup.org`,
+   sujet et contenu HTML corrects (tableau médicament/quantité, montant, date), le
+   20/07/2026 à 16:13:55 — thread Gmail `19f804e325bdbd03`.
+
+**Point 1 du module Fournisseurs (session 5) est donc désormais entièrement fonctionnel, pas
+seulement "prêt pour quand la clé serait corrigée".**
+
+Au passage, `send-activation-email` et `send-inscription-email` ont aussi été corrigées et
+redéployées (même bug de domaine expéditeur) — non testées individuellement aujourd'hui (hors
+scope de cette session), mais devraient désormais fonctionner pour la même raison. `check-stock-alert`
+reste bloquée par son problème `WEBHOOK_SECRET` déjà documenté et délégué séparément — son
+`FROM_EMAIL` a été corrigé au passage pour rester cohérent, mais ne résout pas ce blocage-là.
+
+**Note technique** : redéployer une fonction sans `--no-verify-jwt` réinitialise `verify_jwt` à
+`true` (confirmé : `check-stock-alert`, `send-inscription-email`, `send-activation-email` étaient à
+`false` avant ce redéploiement, elles sont repassées à `true`). À garder en tête pour la tâche
+déléguée sur `check-stock-alert`/`send-activation-email`.

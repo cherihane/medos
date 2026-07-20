@@ -16,7 +16,7 @@ const APP_URL          = Deno.env.get("APP_URL") ?? "http://localhost:3000";
 
 // Email du gérant (peut être surchargé par etablissement.email)
 const ADMIN_EMAIL      = Deno.env.get("ADMIN_EMAIL") ?? "admin@medos.app";
-const FROM_EMAIL       = "MedOS Alertes <alertes@medos.app>";
+const FROM_EMAIL       = "MedOS Alertes <alertes@mail.kelagroup.org>";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE);
 

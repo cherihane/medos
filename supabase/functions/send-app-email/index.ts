@@ -16,7 +16,7 @@ const RESEND_API_KEY    = Deno.env.get("RESEND_API_KEY")!;
 const SUPABASE_URL      = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const ADMIN_ALERT_EMAIL = Deno.env.get("ADMIN_ALERT_EMAIL") ?? "cherihaneadam123@gmail.com";
-const FROM_EMAIL        = "MedOS <noreply@kelagroup.org>";
+const FROM_EMAIL        = "MedOS <noreply@mail.kelagroup.org>";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin":  "*",
@@ -87,9 +87,10 @@ Deno.serve(async (req: Request) => {
     return new Response(`Resend error ${res.status}: ${body}`, { status: 502, headers: CORS_HEADERS });
   }
 
-  console.log("[send-app-email] Email envoyé à", to, "| Sujet:", subject);
+  const resendResult = await res.json();
+  console.log("[send-app-email] Email envoyé à", to, "| Sujet:", subject, "| Resend id:", resendResult.id);
 
-  return new Response(JSON.stringify({ ok: true }), {
+  return new Response(JSON.stringify({ ok: true, id: resendResult.id }), {
     headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
   });
 });

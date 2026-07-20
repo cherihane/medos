@@ -10,7 +10,7 @@
  */
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")!;
-const FROM_EMAIL     = "MedOS <noreply@kelagroup.org>";
+const FROM_EMAIL     = "MedOS <noreply@mail.kelagroup.org>";
 const ADMIN_EMAIL    = "contact@kelagroup.org";
 const APP_URL        = Deno.env.get("APP_URL") ?? "http://81.17.98.80";
 const SUPABASE_DASHBOARD = "https://supabase.com/dashboard";
