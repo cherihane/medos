@@ -411,6 +411,37 @@ FROM public.membres_personnel WHERE email IS NOT NULL AND email <> LOWER(TRIM(em
 
 Pas de changement frontend pour ce point (uniquement SQL), donc pas de redéploiement VPS nécessaire.
 
+**2026-07-20 — Point 2 : déconnexion automatique après 20 minutes d'inactivité. ✅**
+
+Ajouté [InactivityGuard.jsx](src/components/InactivityGuard.jsx), composant autonome monté une seule
+fois dans [App.js](src/App.js) (`AppRoutes()`, au-dessus de `<Routes>`, actif uniquement si `auth` est
+défini) — pas dupliqué par page. Suit `mousedown`/`keydown`/`touchstart`/`scroll` (capture sur
+`window`) pour réinitialiser le timer à chaque interaction. Avertissement modal avec compte à rebours
+en direct 60s avant déconnexion ("Rester connecté" réinitialise), puis appel à `logout()` (déjà
+exposé par le contexte : `signOut()` + `setAuth(null)`) et redirection vers `/`.
+
+**AuthContext.jsx non modifié** : `logout()` existait déjà et faisait exactement ce qu'il fallait —
+aucun ajout n'a été nécessaire dans ce fichier, donc la règle absolue est respectée sans exception à
+appliquer.
+
+**Testé en conditions réelles** (délais rendus configurables via
+`REACT_APP_INACTIVITY_LIMIT_MS`/`REACT_APP_INACTIVITY_WARNING_MS`, valeurs par défaut inchangées
+20min/60s — utilisé uniquement en local pour tester avec des délais courts plutôt que d'attendre 20
+minutes réelles ou de patcher temporairement le code de prod) :
+- Serveur de dev relancé avec `REACT_APP_INACTIVITY_LIMIT_MS=12000 REACT_APP_INACTIVITY_WARNING_MS=7000`
+  (déconnexion à 12s, avertissement dès 5s).
+- **Scénario A (avertissement + reset)** : capture d'écran à 6.5s d'inactivité confirmant l'affichage
+  exact ("Vous allez être déconnecté... dans 7 secondes... Rester connecté"), compte à rebours vérifié
+  décroissant (5 secondes à +2s), clic sur "Rester connecté" confirmé résoudre l'avertissement, et
+  session toujours active 6s après le reset (bien après le délai initial de 12s qui aurait dû
+  expirer sans le reset).
+- **Scénario B (timeout complet sans interaction)** : après 15s sans la moindre interaction, page de
+  connexion effectivement affichée, URL redirigée vers `/`, et confirmation directe qu'aucun token de
+  session valide ne subsiste dans `localStorage`.
+- Revalidé après déploiement : app fonctionnelle en production sans régression (dashboard toujours
+  correct), et confirmé dans le bundle déployé que la valeur par défaut réelle est bien `1200000`
+  (20 minutes), pas la valeur de test.
+
 ---
 
 ## Module DISTRIBUTEUR
