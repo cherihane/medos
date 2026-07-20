@@ -1,5 +1,6 @@
 import { colors } from "../../theme";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle } from "../../components/Modal";
 import Toast from "../../components/Toast";
@@ -8,7 +9,7 @@ import {
   useFournisseursPaginated, useCommandesRealtime, useCommandesPaginated,
   useCommandeHistorique, useMedicaments, useFournisseurs,
 } from "../../hooks/useSupabaseData";
-import { insertCommande, updateCommande, deleteCommande, insertFournisseur, updateFournisseur } from "../../hooks/useMutations";
+import { insertCommande, updateCommande, deleteCommande, insertCommandeLignes, insertFournisseur, updateFournisseur } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
 import { openDocument, tableHTML, infoGridHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
 import { supabase } from "../../supabaseClient";
@@ -17,8 +18,9 @@ import Pagination from "../../components/Pagination";
 // Génère et ouvre le bon de commande — utilisable à la création (données du
 // formulaire en mémoire) ET après coup depuis l'historique (données lues
 // depuis la ligne `commandes` persistée + ses jointures). Un seul document,
-// une seule fonction, pas de duplication de mise en page.
-async function printBonCommande({ fournisseur, medicamentNom, quantite, dateLivraison, notes, montantTotal, reference, auth }) {
+// une seule fonction, pas de duplication de mise en page. `lignes` est un
+// tableau [{ nom, quantite }] — une commande peut porter plusieurs produits.
+async function printBonCommande({ fournisseur, lignes, dateLivraison, notes, montantTotal, reference, auth }) {
   const etab = await fetchEtabFromAuth(auth);
   const dateFr = new Date().toLocaleDateString("fr-FR");
   openDocument({
@@ -45,7 +47,7 @@ async function printBonCommande({ fournisseur, medicamentNom, quantite, dateLivr
       },
       {
         titre: "Médicaments commandés",
-        html: tableHTML(["Médicament", "Quantité"], [[medicamentNom, String(quantite)]]),
+        html: tableHTML(["Médicament", "Quantité"], lignes.map((l) => [l.nom, String(l.quantite)])),
       },
     ],
   });
@@ -53,13 +55,21 @@ async function printBonCommande({ fournisseur, medicamentNom, quantite, dateLivr
 
 // Ouvre le bon de commande d'une commande déjà enregistrée (bouton "Voir le
 // bon de commande" dans l'historique) à partir des données persistées.
+// Utilise commande_lignes si la commande est multi-produits, sinon retombe
+// sur les colonnes historiques medicament_id/quantite (commandes créées
+// avant la migration commande_lignes).
 function printBonCommandeDepuisHistorique(commande, auth) {
+  const lignes = (commande.commande_lignes && commande.commande_lignes.length > 0)
+    ? commande.commande_lignes.map((l) => ({ nom: l.medicament_nom, quantite: l.quantite }))
+    : [{
+        nom: commande.medicaments
+          ? `${commande.medicaments.nom}${commande.medicaments.dosage ? " " + commande.medicaments.dosage : ""}`
+          : (commande.notes || "—"),
+        quantite: commande.quantite ?? "—",
+      }];
   return printBonCommande({
     fournisseur: commande.fournisseurs ?? { nom: "—" },
-    medicamentNom: commande.medicaments
-      ? `${commande.medicaments.nom}${commande.medicaments.dosage ? " " + commande.medicaments.dosage : ""}`
-      : (commande.notes || "—"),
-    quantite: commande.quantite ?? "—",
+    lignes,
     dateLivraison: commande.date_livraison_prevue,
     notes: commande.notes,
     montantTotal: commande.montant_total ?? 0,
@@ -74,13 +84,13 @@ function printBonCommandeDepuisHistorique(commande, auth) {
 // Retourne { filename, content } au format attendu par send-app-email, ou
 // null si la génération échoue (l'envoi d'email continue sans pièce jointe
 // plutôt que d'être bloqué entièrement par un souci de mise en page PDF).
-async function genererPieceJointeBonCommande({ fournisseur, medicamentNom, quantite, dateLivraison, montantTotal, reference, etabNom, notes }) {
+async function genererPieceJointeBonCommande({ fournisseur, lignes, dateLivraison, montantTotal, reference, etabNom, notes }) {
   try {
     const { data, error } = await supabase.functions.invoke("generate-bon-commande-pdf", {
       body: {
         reference, etablissementNom: etabNom,
         fournisseur: { nom: fournisseur.nom, telephone: fournisseur.telephone, email: fournisseur.email, pays: fournisseur.pays },
-        medicamentNom, quantite, dateLivraison, montantTotal, notes,
+        lignes, dateLivraison, montantTotal, notes,
       },
     });
     if (error || !data?.pdfBase64) return null;
@@ -90,11 +100,39 @@ async function genererPieceJointeBonCommande({ fournisseur, medicamentNom, quant
   }
 }
 
+// Tableau HTML des lignes de commande, réutilisé dans l'email fournisseur et
+// la notification interne.
+function lignesTableHTML(lignes) {
+  return `
+    <table style="width:100%;border-collapse:collapse;margin:16px 0">
+      <thead>
+        <tr style="background:#F8FAFC">
+          <th style="text-align:left;padding:8px 12px;font-size:12px;color:#6B7280;border-bottom:1px solid #e5e7eb">Médicament</th>
+          <th style="text-align:right;padding:8px 12px;font-size:12px;color:#6B7280;border-bottom:1px solid #e5e7eb">Quantité</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${lignes.map((l) => `
+        <tr>
+          <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #f3f4f6">${l.nom}</td>
+          <td style="text-align:right;padding:8px 12px;font-size:13px;border-bottom:1px solid #f3f4f6">${l.quantite}</td>
+        </tr>`).join("")}
+      </tbody>
+    </table>`;
+}
+
+// Résumé compact du contenu d'une commande pour les objets d'email.
+function resumeLignesTexte(lignes) {
+  return lignes.length === 1
+    ? `${lignes[0].nom} (${lignes[0].quantite} unités)`
+    : `${lignes.length} produits`;
+}
+
 // Envoi réel de l'email de commande au fournisseur (même pattern que le
 // module Distributeur : supabase.functions.invoke("send-app-email", ...)).
 // Lève une erreur explicite si le fournisseur n'a pas d'email, ou si
 // l'envoi échoue — jamais de faux succès silencieux.
-async function envoyerEmailCommande({ fournisseur, medicamentNom, quantite, dateLivraison, montantTotal, reference, etabNom, pieceJointe }) {
+async function envoyerEmailCommande({ fournisseur, lignes, dateLivraison, montantTotal, reference, etabNom, pieceJointe }) {
   if (!fournisseur.email || !fournisseur.email.trim()) {
     throw new Error(
       `${fournisseur.nom} n'a pas d'adresse email renseignée — impossible d'envoyer la commande par email. Ajoutez une adresse email à ce fournisseur ou contactez-le par un autre moyen.`
@@ -112,20 +150,7 @@ async function envoyerEmailCommande({ fournisseur, medicamentNom, quantite, date
     <p style="font-size:14px;color:#374151">
       ${etabNom} souhaite passer la commande suivante :
     </p>
-    <table style="width:100%;border-collapse:collapse;margin:16px 0">
-      <thead>
-        <tr style="background:#F8FAFC">
-          <th style="text-align:left;padding:8px 12px;font-size:12px;color:#6B7280;border-bottom:1px solid #e5e7eb">Médicament</th>
-          <th style="text-align:right;padding:8px 12px;font-size:12px;color:#6B7280;border-bottom:1px solid #e5e7eb">Quantité</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #f3f4f6">${medicamentNom}</td>
-          <td style="text-align:right;padding:8px 12px;font-size:13px;border-bottom:1px solid #f3f4f6">${quantite}</td>
-        </tr>
-      </tbody>
-    </table>
+    ${lignesTableHTML(lignes)}
     <p style="font-size:13px;color:#374151">
       <strong>Date de livraison souhaitée :</strong> ${dateLivraison ? new Date(dateLivraison).toLocaleDateString("fr-FR") : "Non précisée"}<br/>
       <strong>Montant total estimé :</strong> ${montantTotal > 0 ? montantTotal.toLocaleString("fr-FR") + " FCFA" : "Non précisé"}
@@ -142,7 +167,7 @@ async function envoyerEmailCommande({ fournisseur, medicamentNom, quantite, date
   const { error } = await supabase.functions.invoke("send-app-email", {
     body: {
       to:      fournisseur.email,
-      subject: `Commande MedOS ${reference} — ${medicamentNom} (${quantite} unités)`,
+      subject: `Commande MedOS ${reference} — ${resumeLignesTexte(lignes)}`,
       html,
       ...(pieceJointe ? { attachments: [pieceJointe] } : {}),
     },
@@ -157,7 +182,7 @@ async function envoyerEmailCommande({ fournisseur, medicamentNom, quantite, date
 // commande en pièce jointe. Aucune liste de destinataires admin dédiée
 // n'existe ailleurs dans le code — on retombe sur l'email de l'établissement
 // (le compte créateur), seul destinataire garanti d'exister.
-async function envoyerNotificationInterne({ fournisseur, medicamentNom, quantite, dateLivraison, montantTotal, reference, etabNom, etablissement_id, userEmail, pieceJointe }) {
+async function envoyerNotificationInterne({ fournisseur, lignes, dateLivraison, montantTotal, reference, etabNom, etablissement_id, userEmail, pieceJointe }) {
   const { data: etab, error: etabError } = await supabase
     .from("etablissements")
     .select("email")
@@ -177,20 +202,7 @@ async function envoyerNotificationInterne({ fournisseur, medicamentNom, quantite
     <p style="font-size:14px;color:#374151">
       <strong>${userEmail}</strong> a passé une commande chez <strong>${fournisseur.nom}</strong>.
     </p>
-    <table style="width:100%;border-collapse:collapse;margin:16px 0">
-      <thead>
-        <tr style="background:#F8FAFC">
-          <th style="text-align:left;padding:8px 12px;font-size:12px;color:#6B7280;border-bottom:1px solid #e5e7eb">Médicament</th>
-          <th style="text-align:right;padding:8px 12px;font-size:12px;color:#6B7280;border-bottom:1px solid #e5e7eb">Quantité</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #f3f4f6">${medicamentNom}</td>
-          <td style="text-align:right;padding:8px 12px;font-size:13px;border-bottom:1px solid #f3f4f6">${quantite}</td>
-        </tr>
-      </tbody>
-    </table>
+    ${lignesTableHTML(lignes)}
     <p style="font-size:13px;color:#374151">
       <strong>Date de livraison souhaitée :</strong> ${dateLivraison ? new Date(dateLivraison).toLocaleDateString("fr-FR") : "Non précisée"}<br/>
       <strong>Montant total estimé :</strong> ${montantTotal > 0 ? montantTotal.toLocaleString("fr-FR") + " FCFA" : "Non précisé"}
@@ -379,9 +391,20 @@ function FournisseurModal({ initial, onClose, onSaved }) {
   );
 }
 
-// ── Modal Passer commande ─────────────────────────────────────────────────────
-function CommandeModal({ fournisseur, etablissement_id, auth, onClose, onSaved }) {
+// ── Modal Passer commande (panier multi-produits) ─────────────────────────────
+// `prefillLignes`, si fourni (venant de l'écran Alertes), pré-remplit le
+// panier avec les médicaments et quantités suggérées — l'utilisateur peut
+// toujours ajuster les quantités ou ajouter/retirer des lignes avant d'envoyer.
+function CommandeModal({ fournisseur, etablissement_id, auth, prefillLignes, onClose, onSaved }) {
   const { data: medicaments, loading: loadingMeds } = useMedicaments();
+  const [cart, setCart] = useState(() =>
+    (prefillLignes || []).map((l) => ({
+      medicament_id: l.medicament_id,
+      nom:           l.nom,
+      quantite:      l.quantite,
+      prix_unitaire: l.prix_unitaire ?? 0,
+    }))
+  );
   const [medicamentId, setMedicamentId]   = useState("");
   const [quantite, setQuantite]           = useState("");
   const [dateLivraison, setDateLivraison] = useState("");
@@ -389,18 +412,42 @@ function CommandeModal({ fournisseur, etablissement_id, auth, onClose, onSaved }
   const [saving, setSaving]               = useState(false);
   const [formError, setFormError]         = useState(null);
 
-  // Médicament sélectionné et calcul automatique du montant
-  const selectedMed  = medicaments.find((m) => m.id === medicamentId) || null;
-  const prixUnitaire = selectedMed?.prix_unitaire ?? 0;
-  const qty          = parseInt(quantite, 10) || 0;
-  const montantTotal = qty * prixUnitaire;
+  const selectedMed = medicaments.find((m) => m.id === medicamentId) || null;
+  const montantTotal = cart.reduce((s, it) => s + (Number(it.quantite) || 0) * (it.prix_unitaire || 0), 0);
+
+  const addToCart = () => {
+    if (!medicamentId) { setFormError("Choisissez un médicament."); return; }
+    const qty = parseInt(quantite, 10);
+    if (!qty || qty <= 0) { setFormError("Quantité invalide."); return; }
+    const med = medicaments.find((m) => m.id === medicamentId);
+    setFormError(null);
+    setCart((c) => {
+      const existing = c.find((it) => it.medicament_id === medicamentId);
+      if (existing) {
+        return c.map((it) => it.medicament_id === medicamentId ? { ...it, quantite: (Number(it.quantite) || 0) + qty } : it);
+      }
+      const nom = `${med.nom}${med.dosage ? ` ${med.dosage}` : ""}${med.forme ? ` (${med.forme})` : ""}`;
+      return [...c, { medicament_id: med.id, nom, quantite: qty, prix_unitaire: med.prix_unitaire ?? 0 }];
+    });
+    setMedicamentId("");
+    setQuantite("");
+  };
+
+  const updateCartQuantite = (medicament_id, val) => {
+    const n = parseInt(val, 10);
+    setCart((c) => c.map((it) => it.medicament_id === medicament_id ? { ...it, quantite: Number.isNaN(n) ? "" : n } : it));
+  };
+  const removeFromCart = (medicament_id) => setCart((c) => c.filter((it) => it.medicament_id !== medicament_id));
 
   const handleSave = async () => {
-    if (!medicamentId) { setFormError("Veuillez sélectionner un médicament."); return; }
-    if (qty <= 0)      { setFormError("Veuillez saisir une quantité valide."); return; }
+    if (cart.length === 0) { setFormError("Ajoutez au moins un médicament à la commande."); return; }
+    for (const it of cart) {
+      if (!it.quantite || it.quantite <= 0) { setFormError(`Quantité invalide pour "${it.nom}".`); return; }
+    }
     setSaving(true);
     try {
       const reference = "CMD-" + Date.now().toString().slice(-8);
+      const isSingleLine = cart.length === 1;
       const commande = await insertCommande({
         reference,
         fournisseur_id:        fournisseur.id,
@@ -408,18 +455,31 @@ function CommandeModal({ fournisseur, etablissement_id, auth, onClose, onSaved }
         date_commande:         new Date().toISOString(),
         date_livraison_prevue: dateLivraison || null,
         montant_total:         montantTotal,
-        medicament_id:         medicamentId,
-        quantite:              qty,
+        // Colonnes historiques conservées pour rétrocompatibilité (affichage
+        // des commandes créées avant commande_lignes) — renseignées seulement
+        // pour une commande à une seule ligne.
+        medicament_id:         isSingleLine ? cart[0].medicament_id : null,
+        quantite:              isSingleLine ? cart[0].quantite : null,
         notes:                 notes || null,
         ...(etablissement_id ? { etablissement_id } : {}),
       });
+
+      await insertCommandeLignes(cart.map((it) => ({
+        commande_id:      commande.id,
+        etablissement_id: etablissement_id ?? null,
+        medicament_id:    it.medicament_id,
+        medicament_nom:   it.nom,
+        quantite:         it.quantite,
+        prix_unitaire:    it.prix_unitaire ?? null,
+      })));
 
       // L'email est une étape distincte de l'enregistrement de la commande :
       // la commande reste valide même si l'envoi échoue, mais le statut réel
       // de l'envoi est toujours tracé et remonté honnêtement à l'utilisateur.
       const etab = await fetchEtabFromAuth(auth);
+      const lignesInfo = cart.map((it) => ({ nom: it.nom, quantite: it.quantite }));
       const commandeInfo = {
-        fournisseur, medicamentNom: selectedMed.nom, quantite: qty,
+        fournisseur, lignes: lignesInfo,
         dateLivraison, montantTotal, reference, etabNom: etab.nom, notes,
       };
 
@@ -465,71 +525,77 @@ function CommandeModal({ fournisseur, etablissement_id, auth, onClose, onSaved }
     cursor: loadingMeds ? "wait" : "pointer",
   };
 
-  const readonlyStyle = {
-    ...inputStyle,
-    backgroundColor: colors.bgSurface,
-    color: montantTotal > 0 ? "#0A1628" : "#9CA3AF",
-    fontWeight: montantTotal > 0 ? 700 : 400,
-    cursor: "default",
-  };
-
   return (
-    <Modal title={`Commander chez ${fournisseur.nom}`} onClose={onClose}>
-      {/* Sélection médicament */}
-      <Field label="Médicament *">
-        <select
-          style={selectStyle}
-          value={medicamentId}
-          onChange={(e) => setMedicamentId(e.target.value)}
-          autoFocus
-        >
-          <option value="">{loadingMeds ? "Chargement…" : "— Sélectionner un médicament —"}</option>
-          {medicaments.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.nom}{m.dosage ? ` ${m.dosage}` : ""}{m.forme ? ` (${m.forme})` : ""}
-            </option>
-          ))}
-        </select>
-      </Field>
-
-      {/* Prix unitaire affiché si médicament sélectionné */}
-      {selectedMed && (
-        <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: -8, marginBottom: 12, paddingLeft: 2 }}>
-          Prix unitaire : <strong style={{ color: colors.navy }}>
-            {prixUnitaire > 0 ? `${prixUnitaire.toLocaleString("fr-FR")} FCFA / ${selectedMed.unite || "unité"}` : "non renseigné"}
-          </strong>
+    <Modal title={`Commander chez ${fournisseur.nom}`} onClose={onClose} width={620}>
+      {prefillLignes && prefillLignes.length > 0 && (
+        <div style={{ marginBottom: 16, padding: "8px 12px", backgroundColor: "#EFF6FF", color: "#2563EB", borderRadius: 8, fontSize: 12, fontWeight: 600 }}>
+          {prefillLignes.length > 1
+            ? `${prefillLignes.length} produits pré-remplis depuis les alertes de stock bas.`
+            : `Produit pré-rempli depuis une alerte de stock bas.`}
         </div>
       )}
 
-      <Row>
-        {/* Quantité */}
-        <Field label="Quantité *">
+      {/* Ajout d'un médicament au panier */}
+      <Field label="Ajouter un médicament">
+        <div style={{ display: "flex", gap: 8 }}>
+          <select
+            style={{ ...selectStyle, flex: 1 }}
+            value={medicamentId}
+            onChange={(e) => setMedicamentId(e.target.value)}
+          >
+            <option value="">{loadingMeds ? "Chargement…" : "— Sélectionner un médicament —"}</option>
+            {medicaments.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.nom}{m.dosage ? ` ${m.dosage}` : ""}{m.forme ? ` (${m.forme})` : ""}
+              </option>
+            ))}
+          </select>
           <input
-            style={inputStyle}
+            style={{ ...inputStyle, width: 100 }}
             type="number"
             min="1"
             value={quantite}
             onChange={(e) => setQuantite(e.target.value)}
-            placeholder="Ex : 500"
+            placeholder="Qté"
           />
-        </Field>
+          <button type="button" onClick={addToCart} disabled={!medicamentId} style={{ padding: "9px 16px", borderRadius: 8, border: "none", backgroundColor: medicamentId ? "#0A1628" : "#E5E7EB", color: medicamentId ? "white" : "#9CA3AF", cursor: medicamentId ? "pointer" : "not-allowed", fontSize: 13, fontWeight: 600, whiteSpace: "nowrap" }}>
+            + Ajouter
+          </button>
+        </div>
+        {selectedMed && (
+          <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 6 }}>
+            Prix unitaire : <strong style={{ color: colors.navy }}>
+              {selectedMed.prix_unitaire > 0 ? `${selectedMed.prix_unitaire.toLocaleString("fr-FR")} FCFA / ${selectedMed.unite || "unité"}` : "non renseigné"}
+            </strong>
+          </div>
+        )}
+      </Field>
 
-        {/* Montant calculé automatiquement — lecture seule */}
-        <Field label="Montant total (FCFA)">
-          <input
-            style={readonlyStyle}
-            readOnly
-            tabIndex={-1}
-            value={
-              montantTotal > 0
-                ? montantTotal.toLocaleString("fr-FR")
-                : qty > 0 && prixUnitaire === 0
-                  ? "Prix non renseigné"
-                  : "—"
-            }
-          />
-        </Field>
-      </Row>
+      {cart.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
+            Produits de la commande ({cart.length})
+          </label>
+          <div style={{ border: "1.5px solid #E5E7EB", borderRadius: 10, overflow: "hidden" }}>
+            {cart.map((it, i) => (
+              <div key={it.medicament_id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderBottom: i < cart.length - 1 ? "1px solid #F3F4F6" : "none" }}>
+                <div style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "#0A1628" }}>{it.nom}</div>
+                <input
+                  type="number"
+                  min="1"
+                  value={it.quantite}
+                  onChange={(e) => updateCartQuantite(it.medicament_id, e.target.value)}
+                  style={{ width: 80, padding: "6px 8px", border: "1.5px solid #E5E7EB", borderRadius: 6, fontSize: 13, textAlign: "center" }}
+                />
+                <button type="button" onClick={() => removeFromCart(it.medicament_id)} style={{ width: 26, height: 26, borderRadius: "50%", border: "none", backgroundColor: "#FEF2F2", color: "#DC2626", cursor: "pointer", fontSize: 14, lineHeight: 1 }}>×</button>
+              </div>
+            ))}
+          </div>
+          <div style={{ textAlign: "right", fontSize: 13, fontWeight: 700, color: colors.navy, marginTop: 8 }}>
+            Montant total : {montantTotal > 0 ? `${montantTotal.toLocaleString("fr-FR")} FCFA` : "—"}
+          </div>
+        </div>
+      )}
 
       <Field label="Date de livraison souhaitée">
         <input
@@ -556,16 +622,16 @@ function CommandeModal({ fournisseur, etablissement_id, auth, onClose, onSaved }
       )}
       <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", padding: "16px 0 0" }}>
         <button onClick={onClose} style={{ padding: "9px 18px", background: "white", border: "1.5px solid var(--border)", borderRadius: 9, fontSize: 13, color: colors.textSecondary, cursor: "pointer" }}>Annuler</button>
-        {selectedMed && qty > 0 && (
+        {cart.length > 0 && (
           <button
-            onClick={() => printBonCommande({ fournisseur, medicamentNom: selectedMed.nom, quantite: qty, dateLivraison, notes, montantTotal, auth })}
+            onClick={() => printBonCommande({ fournisseur, lignes: cart.map((it) => ({ nom: it.nom, quantite: it.quantite })), dateLivraison, notes, montantTotal, auth })}
             style={{ padding: "9px 16px", background: "#F8FAFC", color: colors.text, border: "1.5px solid var(--border)", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
           >
             Imprimer
           </button>
         )}
         <button onClick={handleSave} disabled={saving} style={{ padding: "9px 18px", background: saving ? "#E5E7EB" : "#10B981", color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer" }}>
-          {saving ? "Envoi…" : "Passer la commande"}
+          {saving ? "Envoi…" : cart.length > 1 ? `Passer la commande (${cart.length} produits)` : "Passer la commande"}
         </button>
       </div>
     </Modal>
@@ -607,9 +673,14 @@ function CommandeCard({ commande, auth, onChanged }) {
   const s = STATUT_STYLE[commande.statut] || { bg: "#F3F4F6", color: colors.textSecondary, label: commande.statut };
   const actions = STATUT_ACTIONS[commande.statut] || [];
 
-  const medicamentLabel = commande.medicaments
-    ? `${commande.medicaments.nom}${commande.medicaments.dosage ? " " + commande.medicaments.dosage : ""}`
-    : (commande.notes || "—");
+  const lignes = commande.commande_lignes && commande.commande_lignes.length > 0
+    ? commande.commande_lignes
+    : null;
+  const medicamentLabel = lignes
+    ? (lignes.length === 1 ? `${lignes[0].medicament_nom} × ${lignes[0].quantite}` : `${lignes.length} produits`)
+    : commande.medicaments
+      ? `${commande.medicaments.nom}${commande.medicaments.dosage ? " " + commande.medicaments.dosage : ""} × ${commande.quantite ?? "—"}`
+      : (commande.notes || "—");
 
   const handleStatutChange = async (next, label) => {
     if (next === "annulee" && !window.confirm(`Confirmer l'annulation de la commande ${commande.reference ?? ""} ?`)) return;
@@ -660,11 +731,22 @@ function CommandeCard({ commande, auth, onChanged }) {
             )}
           </div>
           <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>
-            {commande.fournisseurs?.nom ?? "—"} · {medicamentLabel} × {commande.quantite ?? "—"} · {new Date(commande.date_commande).toLocaleDateString("fr-FR")}
+            {commande.fournisseurs?.nom ?? "—"} · {medicamentLabel} · {new Date(commande.date_commande).toLocaleDateString("fr-FR")}
           </div>
         </div>
         <div style={{ fontSize: 15, fontWeight: 800, color: colors.navy }}>{(commande.montant_total ?? 0).toLocaleString()} FCFA</div>
       </div>
+
+      {lignes && lignes.length > 1 && (
+        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 3 }}>
+          {lignes.map((l) => (
+            <div key={l.id} style={{ fontSize: 12, color: colors.text, display: "flex", justifyContent: "space-between", padding: "4px 10px", backgroundColor: colors.bgSurface, borderRadius: 6 }}>
+              <span>{l.medicament_nom}</span>
+              <span style={{ fontWeight: 700 }}>× {l.quantite}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {commande.email_statut === "echec" && commande.email_erreur && (
         <div style={{ marginTop: 8, fontSize: 12, color: "#DC2626", backgroundColor: "#FEF2F2", padding: "6px 10px", borderRadius: 8 }}>
@@ -794,6 +876,8 @@ function CommandesTab({ etablissement_id, auth }) {
 export default function Fournisseurs() {
   const { auth } = useAuth();
   const etablissement_id = auth?.etablissement_id ?? null;
+  const location = useLocation();
+  const navigate = useNavigate();
   const [filtre, setFiltre] = useState("actifs"); // "actifs" | "inactifs" | "tous"
   const { data: liste, loading, error, total, page, setPage, totalPages, refetch } = useFournisseursPaginated(filtre);
   const { toasts, success, error: toastError } = useToast();
@@ -803,6 +887,19 @@ export default function Fournisseurs() {
   const [editModal, setEditModal]       = useState(null);   // fournisseur à éditer
   const [commandModal, setCommandModal] = useState(null);   // fournisseur à commander
   const [toggling, setToggling]         = useState(null);   // id en cours de désactivation
+
+  // Produits pré-remplis venant de l'écran Alertes ("Commander" sur une ou
+  // plusieurs alertes de stock bas) — en attente qu'un fournisseur soit
+  // choisi. Consommé une seule fois : on vide l'état de navigation tout de
+  // suite pour qu'un rafraîchissement de page ne le redéclenche pas.
+  const [pendingPrefill, setPendingPrefill] = useState(location.state?.prefillLignes ?? null);
+  useEffect(() => {
+    if (location.state?.prefillLignes) {
+      setTab("fournisseurs");
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleToggleActif = async (f) => {
     setToggling(f.id);
@@ -851,8 +948,10 @@ export default function Fournisseurs() {
           fournisseur={commandModal}
           etablissement_id={etablissement_id}
           auth={auth}
+          prefillLignes={pendingPrefill}
           onClose={() => setCommandModal(null)}
           onSaved={({ emailStatut, emailErreur, notifInterneStatut, notifInterneErreur, fournisseurNom, reference }) => {
+            setPendingPrefill(null);
             if (emailStatut === "envoye") {
               success(`Commande ${reference} envoyée chez ${fournisseurNom} — email de confirmation transmis.`);
             } else {
@@ -863,6 +962,17 @@ export default function Fournisseurs() {
             }
           }}
         />
+      )}
+
+      {pendingPrefill && pendingPrefill.length > 0 && !commandModal && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 12, padding: "14px 18px", marginBottom: 20, fontSize: 13, color: "#1E40AF" }}>
+          <span>
+            {pendingPrefill.length > 1 ? `${pendingPrefill.length} produits` : "1 produit"} en attente de commande (depuis les alertes de stock bas) — choisissez un fournisseur ci-dessous pour continuer.
+          </span>
+          <button onClick={() => setPendingPrefill(null)} style={{ background: "none", border: "none", color: "#1E40AF", fontWeight: 600, cursor: "pointer", fontSize: 12, whiteSpace: "nowrap", marginLeft: 12 }}>
+            Annuler
+          </button>
+        </div>
       )}
 
       {/* Onglets */}

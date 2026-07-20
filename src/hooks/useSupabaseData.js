@@ -121,7 +121,8 @@ export function useCommandesPaginated(etablissement_id = null, pageSize = 20, fi
       medicament_id, quantite, email_statut, email_erreur,
       etablissements ( nom, ville ),
       fournisseurs ( id, nom, telephone, email, pays ),
-      medicaments ( nom, dosage, forme )
+      medicaments ( nom, dosage, forme ),
+      commande_lignes ( id, medicament_id, medicament_nom, quantite, prix_unitaire )
     `, { count: "exact" }).order("date_commande", { ascending: false });
     if (etablissement_id) q = q.eq("etablissement_id", etablissement_id);
     if (statut) q = q.eq("statut", statut);

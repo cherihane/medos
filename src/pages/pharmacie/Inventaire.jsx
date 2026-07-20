@@ -1,5 +1,5 @@
 import { colors } from "../../theme";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
 import Toast from "../../components/Toast";
@@ -11,6 +11,7 @@ import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import { useAuth } from "../../context/AuthContext";
 import QrScanner from "../../components/QrScanner";
+import { rechercherLotPourPrefill } from "../../hooks/useVerificationLot";
 
 const FORMES_GALENIQUES = ["Comprimé", "Gélule", "Sirop", "Injectable", "Crème", "Suppositoire", "Patch"];
 
@@ -198,7 +199,37 @@ function NouveauModal({ onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
   const [showInlineScanner, setShowInlineScanner] = useState(false);
+  const [prefillInfo, setPrefillInfo] = useState(null); // message affiché si un lot certifié a été trouvé
+  const stockInputRef = useRef(null);
   const set = (k) => (e) => { setFormError(null); setForm((f) => ({ ...f, [k]: e.target.value })); };
+
+  const handleScan = async (text) => {
+    setShowInlineScanner(false);
+    setForm((f) => ({ ...f, code: text ?? "" }));
+
+    const infos = await rechercherLotPourPrefill(text).catch(() => null);
+    if (infos) {
+      setForm((f) => ({
+        ...f,
+        code: text ?? "",
+        nom: infos.nom || f.nom,
+        categorie: infos.categorie || f.categorie,
+        forme: infos.forme || f.forme,
+        fabricant: infos.fabricant || f.fabricant,
+        dci: infos.dci || f.dci,
+        prix_achat: infos.prix_achat !== "" ? infos.prix_achat : f.prix_achat,
+        prix_unitaire: infos.prix_unitaire !== "" ? infos.prix_unitaire : f.prix_unitaire,
+        date_peremption: infos.date_peremption || f.date_peremption,
+      }));
+      setPrefillInfo(`Lot certifié MedOS reconnu — champs pré-remplis automatiquement (${infos.nom}).`);
+      success("Lot certifié reconnu — informations pré-remplies.");
+      // Laisse le focus sur la quantité, seule saisie encore nécessaire.
+      setTimeout(() => stockInputRef.current?.focus(), 50);
+    } else {
+      setPrefillInfo(null);
+      success("Code scanne : " + text);
+    }
+  };
 
   const handleSave = async () => {
     if (!form.nom.trim()) { setFormError("Le nom du médicament est obligatoire."); return; }
@@ -244,16 +275,17 @@ function NouveauModal({ onClose, onSaved }) {
           {showInlineScanner && (
             <div style={{ marginTop: 8 }}>
               <QrScanner
-                onScan={(text) => {
-                  setForm((f) => ({ ...f, code: text ?? "" }));
-                  setShowInlineScanner(false);
-                  success("Code scanne : " + text);
-                }}
+                onScan={handleScan}
                 onClose={() => setShowInlineScanner(false)}
               />
               <button type="button" onClick={() => setShowInlineScanner(false)} style={{ marginTop: 6, fontSize: 12, color: colors.textMuted, background: "none", border: "none", cursor: "pointer" }}>
                 Annuler le scan
               </button>
+            </div>
+          )}
+          {prefillInfo && (
+            <div style={{ marginTop: 8, padding: "8px 12px", backgroundColor: "#DCFCE7", color: "#16A34A", borderRadius: 8, fontSize: 12, fontWeight: 600 }}>
+              ✓ {prefillInfo}
             </div>
           )}
         </Field>
@@ -281,7 +313,7 @@ function NouveauModal({ onClose, onSaved }) {
       </Row>
       <Row>
         <Field label="Stock initial">
-          <input style={inputStyle} type="number" min="0" value={form.stock_actuel} onChange={set("stock_actuel")} />
+          <input ref={stockInputRef} style={inputStyle} type="number" min="0" value={form.stock_actuel} onChange={set("stock_actuel")} />
         </Field>
         <Field label="Seuil minimum">
           <input style={inputStyle} type="number" min="0" value={form.stock_minimum} onChange={set("stock_minimum")} />

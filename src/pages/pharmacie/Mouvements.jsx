@@ -1,11 +1,13 @@
 import { colors } from "../../theme";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
 import Toast from "../../components/Toast";
+import QrScanner from "../../components/QrScanner";
 import { useToast } from "../../hooks/useToast";
 import { useMedicaments, useFournisseurs } from "../../hooks/useSupabaseData";
 import { insertMouvementStock, fetchMouvementsStock, incrementStock, decrementStock } from "../../hooks/useMutations";
+import { rechercherLotPourPrefill } from "../../hooks/useVerificationLot";
 import { useAuth } from "../../context/AuthContext";
 import { useThemeTokens } from "../../context/DarkModeContext";
 
@@ -28,39 +30,105 @@ function Skeleton() {
   ));
 }
 
-// ── Modal Nouvelle réception ──────────────────────────────────────────────────
+// ── Modal Nouvelle réception (scan multi-produits + ajout manuel) ─────────────
 function ReceptionModal({ medicaments, fournisseurs, auth, onClose, onSaved }) {
-  const { error: toastError } = useToast();
-  const [form, setForm] = useState({
-    medicament_id: "",
-    quantite: "",
+  const [header, setHeader] = useState({
     numero_bl: "",
     fournisseur: "",
     motif: "Reception commande",
   });
+  const [cart, setCart] = useState([]); // { tempId, medicament_id, nom, quantite }
+  const [showScanner, setShowScanner] = useState(false);
+  const [scannerKey, setScannerKey] = useState(0);
+  const [scanMsg, setScanMsg] = useState(null); // { ok: bool, text: string }
+  const [manualMedId, setManualMedId] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
-  const set = (k) => (e) => { setFormError(null); setForm((f) => ({ ...f, [k]: e.target.value })); };
+  const scanLockRef = useRef(false); // évite les décodages multiples d'un même scan (voir handleScan)
+  const setHeaderField = (k) => (e) => setHeader((f) => ({ ...f, [k]: e.target.value }));
+
+  const focusQuantite = (tempId) => {
+    setTimeout(() => document.getElementById(`cart-qty-${tempId}`)?.focus(), 60);
+  };
+
+  // Le updater de setCart doit rester pur (React 18 StrictMode l'invoque deux fois
+  // en dev) : le tempId est généré et le focus déclenché en dehors du updater,
+  // jamais à l'intérieur — sinon compteur et focus se désynchronisent (observé
+  // en test : id "cart-qty-2" généré pour le tout premier article ajouté).
+  const addOrIncrementCart = (medicament_id, nom) => {
+    const existing = cart.find((it) => it.medicament_id === medicament_id);
+    if (existing) {
+      setCart((c) => c.map((it) => it.medicament_id === medicament_id ? { ...it, quantite: it.quantite + 1 } : it));
+      focusQuantite(existing.tempId);
+      return;
+    }
+    const tempId = crypto.randomUUID();
+    setCart((c) => [...c, { tempId, medicament_id, nom, quantite: 1 }]);
+    focusQuantite(tempId);
+  };
+
+  const handleScan = async (text) => {
+    // html5-qrcode peut invoquer ce callback plusieurs fois pour un seul scan
+    // physique (le temps que stop() prenne effet, la même étiquette reste dans
+    // le champ et redéclenche un décodage) : verrou synchrone pour n'en traiter
+    // qu'un seul par session caméra — observé en test avec des dizaines de
+    // décodages en rafale sans ce garde-fou.
+    if (scanLockRef.current) return;
+    scanLockRef.current = true;
+    setShowScanner(false);
+    const infos = await rechercherLotPourPrefill(text).catch(() => null);
+    if (infos && infos.medicament_id) {
+      addOrIncrementCart(infos.medicament_id, infos.nom || "Médicament");
+      setScanMsg({ ok: true, text: `✓ ${infos.nom} ajouté à la réception.` });
+    } else {
+      setScanMsg({ ok: false, text: `⚠ Code "${text}" non reconnu — ajoutez ce produit manuellement ci-dessous.` });
+    }
+  };
+
+  const relancerScanner = () => {
+    scanLockRef.current = false;
+    setScannerKey((k) => k + 1);
+    setScanMsg(null);
+    setShowScanner(true);
+  };
+
+  const addManuel = () => {
+    if (!manualMedId) return;
+    const med = medicaments.find((m) => m.id === manualMedId);
+    if (!med) return;
+    addOrIncrementCart(med.id, med.nom);
+    setManualMedId("");
+  };
+
+  const updateQuantite = (tempId, val) => {
+    const n = parseInt(val, 10);
+    setCart((c) => c.map((it) => it.tempId === tempId ? { ...it, quantite: Number.isNaN(n) ? "" : n } : it));
+  };
+
+  const removeItem = (tempId) => setCart((c) => c.filter((it) => it.tempId !== tempId));
 
   const handleSave = async () => {
-    if (!form.medicament_id) { setFormError("Choisissez un médicament."); return; }
-    const qty = parseInt(form.quantite, 10);
-    if (!qty || qty <= 0) { setFormError("Quantite invalide."); return; }
+    if (cart.length === 0) { setFormError("Ajoutez au moins un produit (scanné ou manuel)."); return; }
+    for (const it of cart) {
+      if (!it.quantite || it.quantite <= 0) { setFormError(`Quantité invalide pour "${it.nom}".`); return; }
+    }
     setSaving(true);
     setFormError(null);
     try {
-      await insertMouvementStock({
-        etablissement_id: auth?.etablissement_id ?? null,
-        medicament_id:    form.medicament_id,
-        type:             "entree",
-        quantite:         qty,
-        motif:            form.motif || "Reception",
-        numero_bl:        form.numero_bl || null,
-        fournisseur:      form.fournisseur || null,
-        created_by:       auth?.user?.id ?? null,
-      });
-      await incrementStock(form.medicament_id, qty);
-      onSaved();
+      for (const it of cart) {
+        await insertMouvementStock({
+          etablissement_id: auth?.etablissement_id ?? null,
+          medicament_id:    it.medicament_id,
+          type:             "entree",
+          quantite:         it.quantite,
+          motif:            header.motif || "Reception",
+          numero_bl:        header.numero_bl || null,
+          fournisseur:      header.fournisseur || null,
+          created_by:       auth?.user?.id ?? null,
+        });
+        await incrementStock(it.medicament_id, it.quantite);
+      }
+      onSaved(cart.length);
       onClose();
     } catch (e) {
       setFormError("Erreur : " + e.message);
@@ -70,34 +138,83 @@ function ReceptionModal({ medicaments, fournisseurs, auth, onClose, onSaved }) {
   };
 
   return (
-    <Modal title="Nouvelle réception de stock" onClose={onClose}>
-      <Field label="Médicament *">
-        <select style={selectStyle} value={form.medicament_id} onChange={set("medicament_id")}>
-          <option value="">Choisir un médicament…</option>
-          {medicaments.map((m) => (
-            <option key={m.id} value={m.id}>{m.nom} — stock actuel : {m.stock_actuel ?? 0}</option>
-          ))}
-        </select>
-      </Field>
+    <Modal title="Nouvelle réception de stock" onClose={onClose} width={640}>
       <Row>
-        <Field label="Quantite reçue *">
-          <input style={inputStyle} type="number" min="1" value={form.quantite} onChange={set("quantite")} placeholder="Ex : 100" />
-        </Field>
         <Field label="N° de bon de livraison">
-          <input style={inputStyle} value={form.numero_bl} onChange={set("numero_bl")} placeholder="BL-2026-001" />
+          <input style={inputStyle} value={header.numero_bl} onChange={setHeaderField("numero_bl")} placeholder="BL-2026-001" />
+        </Field>
+        <Field label="Fournisseur">
+          <select style={selectStyle} value={header.fournisseur} onChange={setHeaderField("fournisseur")}>
+            <option value="">Fournisseur libre ou liste…</option>
+            {fournisseurs.map((f) => (
+              <option key={f.id} value={f.nom}>{f.nom}</option>
+            ))}
+          </select>
         </Field>
       </Row>
-      <Field label="Fournisseur">
-        <select style={selectStyle} value={form.fournisseur} onChange={set("fournisseur")}>
-          <option value="">Fournisseur libre ou liste…</option>
-          {fournisseurs.map((f) => (
-            <option key={f.id} value={f.nom}>{f.nom}</option>
-          ))}
-        </select>
-      </Field>
       <Field label="Motif">
-        <input style={inputStyle} value={form.motif} onChange={set("motif")} placeholder="Reception commande, Don, Transfert…" />
+        <input style={inputStyle} value={header.motif} onChange={setHeaderField("motif")} placeholder="Reception commande, Don, Transfert…" />
       </Field>
+
+      <Field label="Scanner les produits reçus">
+        {!showScanner && (
+          <button type="button" onClick={relancerScanner} style={{ padding: "9px 16px", borderRadius: 8, border: `1.5px solid ${colors.border}`, backgroundColor: colors.bgSurface, cursor: "pointer", fontSize: 13, fontWeight: 600, color: colors.navy }}>
+            {cart.length === 0 ? "Scanner un produit" : "Scanner le produit suivant"}
+          </button>
+        )}
+        {showScanner && (
+          <div style={{ marginTop: 8 }}>
+            <QrScanner key={scannerKey} onScan={handleScan} onClose={() => setShowScanner(false)} />
+            <button type="button" onClick={() => setShowScanner(false)} style={{ marginTop: 6, fontSize: 12, color: colors.textMuted, background: "none", border: "none", cursor: "pointer" }}>
+              Terminer le scan
+            </button>
+          </div>
+        )}
+        {scanMsg && (
+          <div style={{ marginTop: 8, padding: "8px 12px", backgroundColor: scanMsg.ok ? "#DCFCE7" : "#FEF3C7", color: scanMsg.ok ? "#16A34A" : "#B45309", borderRadius: 8, fontSize: 12, fontWeight: 600 }}>
+            {scanMsg.text}
+          </div>
+        )}
+      </Field>
+
+      <Field label="Ou ajouter manuellement">
+        <div style={{ display: "flex", gap: 8 }}>
+          <select style={{ ...selectStyle, flex: 1 }} value={manualMedId} onChange={(e) => setManualMedId(e.target.value)}>
+            <option value="">Choisir un médicament…</option>
+            {medicaments.map((m) => (
+              <option key={m.id} value={m.id}>{m.nom} — stock actuel : {m.stock_actuel ?? 0}</option>
+            ))}
+          </select>
+          <button type="button" onClick={addManuel} disabled={!manualMedId} style={{ padding: "9px 16px", borderRadius: 8, border: "none", backgroundColor: manualMedId ? "#0A1628" : "#E5E7EB", color: manualMedId ? "white" : "#9CA3AF", cursor: manualMedId ? "pointer" : "not-allowed", fontSize: 13, fontWeight: 600, whiteSpace: "nowrap" }}>
+            + Ajouter
+          </button>
+        </div>
+      </Field>
+
+      {cart.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
+            Produits de la réception ({cart.length})
+          </label>
+          <div style={{ border: "1.5px solid #E5E7EB", borderRadius: 10, overflow: "hidden" }}>
+            {cart.map((it, i) => (
+              <div key={it.tempId} data-medicament-id={it.medicament_id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderBottom: i < cart.length - 1 ? "1px solid #F3F4F6" : "none" }}>
+                <div style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "#0A1628" }}>{it.nom}</div>
+                <input
+                  id={`cart-qty-${it.tempId}`}
+                  type="number"
+                  min="1"
+                  value={it.quantite}
+                  onChange={(e) => updateQuantite(it.tempId, e.target.value)}
+                  style={{ width: 80, padding: "6px 8px", border: "1.5px solid #E5E7EB", borderRadius: 6, fontSize: 13, textAlign: "center" }}
+                />
+                <button type="button" onClick={() => removeItem(it.tempId)} style={{ width: 26, height: 26, borderRadius: "50%", border: "none", backgroundColor: "#FEF2F2", color: "#DC2626", cursor: "pointer", fontSize: 14, lineHeight: 1 }}>×</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {formError && (
         <div style={{ fontSize: 12, color: "#EF4444", padding: "8px 12px", backgroundColor: "#FEF2F2", borderRadius: 8, marginBottom: 4 }}>
           {formError}
@@ -106,7 +223,7 @@ function ReceptionModal({ medicaments, fournisseurs, auth, onClose, onSaved }) {
       <ModalFooter
         onCancel={onClose}
         onSubmit={handleSave}
-        submitLabel="Enregistrer la reception"
+        submitLabel={cart.length > 1 ? `Enregistrer la réception (${cart.length} produits)` : "Enregistrer la réception"}
         saving={saving}
       />
     </Modal>
@@ -190,7 +307,7 @@ export default function Mouvements() {
           fournisseurs={fournisseurs}
           auth={auth}
           onClose={() => setShowReception(false)}
-          onSaved={() => { success("Réception enregistrée"); load(); }}
+          onSaved={(count) => { success(count > 1 ? `Réception enregistrée — ${count} produits` : "Réception enregistrée"); load(); }}
         />
       )}
 

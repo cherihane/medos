@@ -158,6 +158,45 @@ async function creerAlerteSuspecte({ nomMedicament, numerolot, scannePar }) {
   // Insertion alerte — erreur silencieuse, ne pas bloquer le flux utilisateur
 }
 
+// ── Recherche pour pré-remplissage (Inventaire, Mouvements) ───────────────────
+// Contrairement à verifierSupabase() ci-dessus (pensé pour l'écran Scanner —
+// vérification d'authenticité, avec correspondance nom+lot), cette fonction
+// sert à pré-remplir un formulaire dès qu'un QR/code-barres scanné correspond
+// à un lot certifié MedOS : cherche d'abord une correspondance exacte sur
+// qr_code (ce que le scan encode le plus souvent), puis sur numero_lot.
+// Retourne les infos du médicament de référence + la date de péremption du
+// lot scanné, ou null si rien ne correspond (comportement actuel inchangé
+// dans ce cas — jamais bloquant).
+export async function rechercherLotPourPrefill(codeScanne) {
+  const code = (codeScanne || "").trim();
+  if (!code) return null;
+
+  const selectCols = "numero_lot, qr_code, fabricant, date_expiration, medicaments(id, nom, dosage, forme, categorie, fabricant, prix_unitaire, prix_achat, dci, code)";
+
+  let { data } = await supabase.from("lots").select(selectCols).eq("qr_code", code).limit(1).maybeSingle();
+  if (!data) {
+    ({ data } = await supabase.from("lots").select(selectCols).eq("numero_lot", code).limit(1).maybeSingle());
+  }
+  if (!data || !data.medicaments) return null;
+
+  const med = data.medicaments;
+  const nom = med.dosage && !normalise(med.nom).includes(normalise(med.dosage))
+    ? `${med.nom} ${med.dosage}`.trim()
+    : med.nom;
+
+  return {
+    medicament_id:    med.id ?? null,
+    nom:              nom || "",
+    categorie:        med.categorie ?? "",
+    forme:            med.forme ?? "",
+    fabricant:        med.fabricant || data.fabricant || "",
+    dci:              med.dci ?? "",
+    prix_achat:       med.prix_achat ?? "",
+    prix_unitaire:    med.prix_unitaire ?? "",
+    date_peremption:  data.date_expiration ? data.date_expiration.slice(0, 10) : "",
+  };
+}
+
 // ── Hook principal ─────────────────────────────────────────────────────────────
 export function useVerificationLot() {
   const [state, setState] = useState({

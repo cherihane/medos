@@ -638,3 +638,74 @@ l'établissement — un appel API direct sur une commande à tout autre statut n
   réussie via l'UI, commande disparue de la liste (9 → 8). Tentative de suppression directe (API,
   hors UI) d'une commande au statut "envoyee" → bloquée par RLS, 0 ligne supprimée, commande
   toujours présente en base après coup.
+
+---
+
+## Module Pharmacie — Trois raccourcis anti-saisie-manuelle (2026-07-20, session 7 suite)
+
+Trois améliorations dans le même esprit (réduire la saisie répétitive), toutes testées en
+conditions réelles avec de vraies données Supabase (pas de mocks).
+
+**1. Scan-pour-remplir dans Inventaire.** Nouvelle fonction `rechercherLotPourPrefill()` dans
+[useVerificationLot.js](src/hooks/useVerificationLot.js) : cherche le code scanné d'abord sur
+`lots.qr_code`, puis `lots.numero_lot`. Si trouvé, retourne les champs du médicament de référence
+(nom, catégorie, forme, fabricant, DCI, prix, date de péremption du lot). Dans
+[Inventaire.jsx](src/pages/pharmacie/Inventaire.jsx), `handleScan()` appelle cette fonction après
+un scan : si un lot certifié est trouvé, tous les champs disponibles sont pré-remplis, une bannière
+verte confirme, et le focus passe directement au champ "Stock initial". Si rien ne correspond,
+comportement inchangé (juste le code rempli) — jamais bloquant, comme demandé.
+
+**2. Réception multi-produits dans Mouvements.** [Mouvements.jsx](src/pages/pharmacie/Mouvements.jsx) :
+`ReceptionModal` remplacé par un panier scannable — bouton "Scanner un produit" (même
+`rechercherLotPourPrefill`), ajout manuel via liste déroulante, quantité éditable par ligne,
+validation unique "Enregistrer la réception (N produits)" qui boucle sur `insertMouvementStock` +
+`incrementStock` pour chaque ligne, tous rattachés au même n° de bon de livraison. **Deux bugs
+réels trouvés et corrigés en testant avec une vraie caméra factice (Playwright + Chromium
+`--use-file-for-fake-video-capture`, vidéo Y4M) plutôt qu'en supposant que ça marche :**
+  - Redémarrage automatique du scanner 900ms après un scan → si le même code-barres restait dans
+    le champ de la caméra, il était redécodé en boucle, provoquant des centaines de remontages du
+    composant caméra jusqu'à épuisement des ressources navigateur (`ERR_INSUFFICIENT_RESOURCES`,
+    "too many WebMediaPlayers"). Corrigé : le scanner se ferme après chaque décodage, l'utilisateur
+    relance explicitement via "Scanner le produit suivant".
+  - Verrou insuffisant : même après le premier correctif, un seul scan physique ajoutait parfois la
+    même ligne 255 fois d'affilée. Cause : `setCart(c => ...)` contenait un compteur d'id muté
+    (`tempIdRef.current++`) et un effet de bord (focus différé) *à l'intérieur* du updater — React
+    18 StrictMode invoque les updaters deux fois en dev pour détecter ce genre de bug, désynchronisant
+    le compteur. Corrigé : updater rendu pur (id généré via `crypto.randomUUID()` en dehors du
+    `setCart`), plus un verrou synchrone (`scanLockRef`) qui ignore tout décodage supplémentaire tant
+    que l'utilisateur n'a pas explicitement relancé le scanner.
+
+**3. Bouton "Commander" groupé depuis les alertes.** Nouvelle table
+[commande_lignes](diagnostic/migrations/47-commande-lignes.sql) (RLS alignée sur `commandes`),
+nouvelle page [Alertes.jsx](src/pages/pharmacie/Alertes.jsx) (route `/pharmacie/alertes`, entrée nav
+ajoutée dans `roleConfig.pharmacie.nav` — config statique, hors flux d'auth) listant les médicaments
+sous leur seuil minimum (même logique de statut que Inventaire/Dashboard), avec cases à cocher et
+bouton "Commander la sélection". `CommandeModal` dans
+[Fournisseurs.jsx](src/pages/pharmacie/Fournisseurs.jsx) refondu en panier multi-produits ; un clic
+Commander (seul ou groupé) navigue vers `/pharmacie/fournisseurs` avec les lignes pré-remplies en
+`location.state`, une bannière invite à choisir le fournisseur, puis le panier de la commande
+s'ouvre déjà rempli (quantités éditables). `insertCommandeLignes()` enregistre une ligne par
+médicament ; les colonnes historiques `commandes.medicament_id`/`quantite` restent renseignées
+seulement pour les commandes à une seule ligne (rétrocompatibilité de l'affichage/PDF pour les
+commandes créées avant cette migration — vérifié à l'écran, l'historique affiche correctement les
+anciennes ET les nouvelles commandes). Edge Function `generate-bon-commande-pdf` étendue pour
+accepter un tableau `lignes` (repli sur l'ancien format `medicamentNom`/`quantite` si absent) ;
+emails fournisseur/interne également étendus à un tableau de lignes.
+
+**Preuve de test en conditions réelles :**
+- Inventaire : QR d'un lot certifié (`QR-TEST-VITD3-42`) scanné via caméra factice → capture d'écran
+  confirmant nom, DCI, fabricant, catégorie, prix d'achat/vente, date de péremption tous pré-remplis,
+  focus sur "Stock initial", bannière "Lot certifié MedOS reconnu" visible.
+- Mouvements : 1 scan réel (caméra factice) + 2 ajouts manuels (même logique de panier) → panier à 3
+  produits → 1 clic "Enregistrer la réception (3 produits)" → vérifié en base : 3 lignes
+  `mouvements_stock` (type "entree", même n° de BL `BL-TEST-MULTI-001`, quantités 5/8/3) et
+  `medicaments.stock_actuel` incrémenté exactement pour les 3 (0→5, 20→28, 15→18).
+- Alertes → Commander groupé : 2 alertes sélectionnées (Amoxicilline, Oméprazole) → clic "Commander
+  la sélection (2)" → atterrissage sur Fournisseurs avec bannière "2 produits en attente" → choix du
+  fournisseur → `CommandeModal` déjà rempli avec les 2 lignes et quantités suggérées → commande
+  validée → vérifié en base (`commande_lignes` : 2 lignes correctes) **et vérifié par vraie réception
+  Gmail** : email fournisseur ("Commande MedOS CMD-77750044 — 2 produits", tableau à 2 lignes, PDF
+  `bon-de-commande-CMD-77750044.pdf` en pièce jointe) + notification interne, tous deux reçus
+  (`email_statut: "envoye"` en base). Écran Commandes vérifié : la carte multi-produits affiche
+  "2 produits" + le détail des 2 lignes, les commandes historiques à une seule ligne (créées avant
+  cette migration) continuent de s'afficher normalement.

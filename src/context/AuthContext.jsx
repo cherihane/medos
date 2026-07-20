@@ -148,6 +148,7 @@ export const roleConfig = {
         icon: "peremptions",
       },
       { path: "/pharmacie/scanner", label: "Scanner", icon: "scanner" },
+      { path: "/pharmacie/alertes", label: "Alertes", icon: "alertes" },
       { path: "/parametres", label: "Paramètres", icon: "parametres" },
     ],
   },
