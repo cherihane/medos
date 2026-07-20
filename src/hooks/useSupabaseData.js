@@ -113,16 +113,34 @@ export function useFournisseursPaginated(filtre = "actifs", pageSize = 20) {
   }, [filtre], pageSize);
 }
 
-export function useCommandesPaginated(etablissement_id = null, pageSize = 20) {
+export function useCommandesPaginated(etablissement_id = null, pageSize = 20, filtres = {}) {
+  const { statut = "", fournisseur_id = "", search = "" } = filtres;
   return usePaginated(() => {
     let q = supabase.from("commandes").select(`
       id, reference, statut, date_commande, date_livraison_prevue, montant_total, notes,
+      medicament_id, quantite, email_statut, email_erreur,
       etablissements ( nom, ville ),
-      fournisseurs ( nom )
+      fournisseurs ( id, nom, telephone, email, pays ),
+      medicaments ( nom, dosage, forme )
     `, { count: "exact" }).order("date_commande", { ascending: false });
     if (etablissement_id) q = q.eq("etablissement_id", etablissement_id);
+    if (statut) q = q.eq("statut", statut);
+    if (fournisseur_id) q = q.eq("fournisseur_id", fournisseur_id);
+    if (search.trim()) q = q.ilike("reference", `%${search.trim()}%`);
     return q;
-  }, [etablissement_id], pageSize);
+  }, [etablissement_id, statut, fournisseur_id, search], pageSize);
+}
+
+// Historique des changements de statut d'une commande (append-only, voir trigger SQL)
+export function useCommandeHistorique(commande_id) {
+  return useQuery(() => {
+    if (!commande_id) return Promise.resolve({ data: [], error: null });
+    return supabase
+      .from("commande_statut_historique")
+      .select("id, statut, changed_at")
+      .eq("commande_id", commande_id)
+      .order("changed_at", { ascending: true });
+  }, [commande_id]);
 }
 
 // Totaux commandes pour les KPI Crédits (montant_total + statut seulement)

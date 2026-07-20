@@ -4,18 +4,26 @@ import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle } from "../../components/Modal";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
-import { useFournisseursPaginated, useCommandesRealtime, useMedicaments } from "../../hooks/useSupabaseData";
-import { insertCommande, insertFournisseur, updateFournisseur } from "../../hooks/useMutations";
+import {
+  useFournisseursPaginated, useCommandesRealtime, useCommandesPaginated,
+  useCommandeHistorique, useMedicaments, useFournisseurs,
+} from "../../hooks/useSupabaseData";
+import { insertCommande, updateCommande, insertFournisseur, updateFournisseur } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
 import { openDocument, tableHTML, infoGridHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
+import { supabase } from "../../supabaseClient";
 import Pagination from "../../components/Pagination";
 
-async function printBonCommandeFournisseur({ fournisseur, medicamentNom, quantite, dateLivraison, notes, montantTotal, auth }) {
+// Génère et ouvre le bon de commande — utilisable à la création (données du
+// formulaire en mémoire) ET après coup depuis l'historique (données lues
+// depuis la ligne `commandes` persistée + ses jointures). Un seul document,
+// une seule fonction, pas de duplication de mise en page.
+async function printBonCommande({ fournisseur, medicamentNom, quantite, dateLivraison, notes, montantTotal, reference, auth }) {
   const etab = await fetchEtabFromAuth(auth);
   const dateFr = new Date().toLocaleDateString("fr-FR");
   openDocument({
     titre: "Bon de commande fournisseur",
-    sousTitre: `Émis le ${dateFr}`,
+    sousTitre: reference ? `${reference} — Émis le ${dateFr}` : `Émis le ${dateFr}`,
     etablissement: etab,
     sections: [
       {
@@ -24,7 +32,7 @@ async function printBonCommandeFournisseur({ fournisseur, medicamentNom, quantit
           { label: "Nom", value: fournisseur.nom },
           { label: "Téléphone", value: fournisseur.telephone ?? "—" },
           { label: "Email", value: fournisseur.email ?? "—" },
-          { label: "Ville", value: fournisseur.ville ?? "—" },
+          { label: "Pays", value: fournisseur.pays ?? "—" },
         ]),
       },
       {
@@ -42,6 +50,91 @@ async function printBonCommandeFournisseur({ fournisseur, medicamentNom, quantit
     ],
   });
 }
+
+// Ouvre le bon de commande d'une commande déjà enregistrée (bouton "Voir le
+// bon de commande" dans l'historique) à partir des données persistées.
+function printBonCommandeDepuisHistorique(commande, auth) {
+  return printBonCommande({
+    fournisseur: commande.fournisseurs ?? { nom: "—" },
+    medicamentNom: commande.medicaments
+      ? `${commande.medicaments.nom}${commande.medicaments.dosage ? " " + commande.medicaments.dosage : ""}`
+      : (commande.notes || "—"),
+    quantite: commande.quantite ?? "—",
+    dateLivraison: commande.date_livraison_prevue,
+    notes: commande.notes,
+    montantTotal: commande.montant_total ?? 0,
+    reference: commande.reference,
+    auth,
+  });
+}
+
+// Envoi réel de l'email de commande au fournisseur (même pattern que le
+// module Distributeur : supabase.functions.invoke("send-app-email", ...)).
+// Lève une erreur explicite si le fournisseur n'a pas d'email, ou si
+// l'envoi échoue — jamais de faux succès silencieux.
+async function envoyerEmailCommande({ fournisseur, medicamentNom, quantite, dateLivraison, montantTotal, reference, etabNom }) {
+  if (!fournisseur.email || !fournisseur.email.trim()) {
+    throw new Error(
+      `${fournisseur.nom} n'a pas d'adresse email renseignée — impossible d'envoyer la commande par email. Ajoutez une adresse email à ce fournisseur ou contactez-le par un autre moyen.`
+    );
+  }
+
+  const dateFr = new Date().toLocaleDateString("fr-FR");
+  const html = `
+<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+  <div style="background:#0A1628;padding:24px 32px;border-radius:8px 8px 0 0">
+    <h1 style="color:white;font-size:18px;margin:0">Nouvelle commande — ${reference}</h1>
+  </div>
+  <div style="padding:24px 32px;border:1px solid #e5e7eb;border-top:none">
+    <p style="font-size:14px;color:#374151">Bonjour ${fournisseur.contact_nom || ""},</p>
+    <p style="font-size:14px;color:#374151">
+      ${etabNom} souhaite passer la commande suivante :
+    </p>
+    <table style="width:100%;border-collapse:collapse;margin:16px 0">
+      <thead>
+        <tr style="background:#F8FAFC">
+          <th style="text-align:left;padding:8px 12px;font-size:12px;color:#6B7280;border-bottom:1px solid #e5e7eb">Médicament</th>
+          <th style="text-align:right;padding:8px 12px;font-size:12px;color:#6B7280;border-bottom:1px solid #e5e7eb">Quantité</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #f3f4f6">${medicamentNom}</td>
+          <td style="text-align:right;padding:8px 12px;font-size:13px;border-bottom:1px solid #f3f4f6">${quantite}</td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="font-size:13px;color:#374151">
+      <strong>Date de livraison souhaitée :</strong> ${dateLivraison ? new Date(dateLivraison).toLocaleDateString("fr-FR") : "Non précisée"}<br/>
+      <strong>Montant total estimé :</strong> ${montantTotal > 0 ? montantTotal.toLocaleString("fr-FR") + " FCFA" : "Non précisé"}
+    </p>
+    <p style="font-size:12px;color:#9CA3AF;margin-top:24px">
+      Commande émise le ${dateFr}
+    </p>
+  </div>
+  <div style="background:#F8FAFC;padding:16px 32px;border-top:1px solid #e5e7eb;text-align:center">
+    <p style="font-size:12px;color:#9CA3AF;margin:0">MedOS — ${etabNom}</p>
+  </div>
+</div>`;
+
+  const { error } = await supabase.functions.invoke("send-app-email", {
+    body: {
+      to:      fournisseur.email,
+      subject: `Commande MedOS ${reference} — ${medicamentNom} (${quantite} unités)`,
+      html,
+    },
+  });
+  if (error) {
+    throw new Error(`L'email n'a pas pu être envoyé à ${fournisseur.email} : ${error.message}`);
+  }
+}
+
+// Actions de transition manuelle du statut — statut courant → action suivante proposée
+const STATUT_ACTIONS = {
+  envoyee:    [{ label: "Marquer confirmée", next: "confirmee" }, { label: "Annuler", next: "annulee", danger: true }],
+  confirmee:  [{ label: "Marquer en transit", next: "en_transit" }, { label: "Annuler", next: "annulee", danger: true }],
+  en_transit: [{ label: "Marquer reçue", next: "livree" }, { label: "Annuler", next: "annulee", danger: true }],
+};
 
 // ── Statuts commandes ─────────────────────────────────────────────────────────
 const STATUT_STYLE = {
@@ -219,16 +312,39 @@ function CommandeModal({ fournisseur, etablissement_id, auth, onClose, onSaved }
     if (qty <= 0)      { setFormError("Veuillez saisir une quantité valide."); return; }
     setSaving(true);
     try {
-      await insertCommande({
+      const reference = "CMD-" + Date.now().toString().slice(-8);
+      const commande = await insertCommande({
+        reference,
         fournisseur_id:        fournisseur.id,
         statut:                "envoyee",
         date_commande:         new Date().toISOString(),
         date_livraison_prevue: dateLivraison || null,
         montant_total:         montantTotal,
-        notes: `${selectedMed.nom} — Qté : ${qty}${notes ? " — " + notes : ""}`,
+        medicament_id:         medicamentId,
+        quantite:              qty,
+        notes:                 notes || null,
         ...(etablissement_id ? { etablissement_id } : {}),
       });
-      onSaved();
+
+      // L'email est une étape distincte de l'enregistrement de la commande :
+      // la commande reste valide même si l'envoi échoue, mais le statut réel
+      // de l'envoi est toujours tracé et remonté honnêtement à l'utilisateur.
+      let emailStatut = "non_envoye";
+      let emailErreur = null;
+      try {
+        const etab = await fetchEtabFromAuth(auth);
+        await envoyerEmailCommande({
+          fournisseur, medicamentNom: selectedMed.nom, quantite: qty,
+          dateLivraison, montantTotal, reference, etabNom: etab.nom,
+        });
+        emailStatut = "envoye";
+      } catch (emailErr) {
+        emailStatut = "echec";
+        emailErreur = emailErr.message;
+      }
+      await updateCommande(commande.id, { email_statut: emailStatut, email_erreur: emailErreur });
+
+      onSaved({ emailStatut, emailErreur, fournisseurNom: fournisseur.nom, reference });
       onClose();
     } catch (e) {
       setFormError("Erreur : " + e.message);
@@ -336,7 +452,7 @@ function CommandeModal({ fournisseur, etablissement_id, auth, onClose, onSaved }
         <button onClick={onClose} style={{ padding: "9px 18px", background: "white", border: "1.5px solid var(--border)", borderRadius: 9, fontSize: 13, color: colors.textSecondary, cursor: "pointer" }}>Annuler</button>
         {selectedMed && qty > 0 && (
           <button
-            onClick={() => printBonCommandeFournisseur({ fournisseur, medicamentNom: selectedMed.nom, quantite: qty, dateLivraison, notes, montantTotal, auth })}
+            onClick={() => printBonCommande({ fournisseur, medicamentNom: selectedMed.nom, quantite: qty, dateLivraison, notes, montantTotal, auth })}
             style={{ padding: "9px 16px", background: "#F8FAFC", color: colors.text, border: "1.5px solid var(--border)", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
           >
             Imprimer
@@ -350,6 +466,198 @@ function CommandeModal({ fournisseur, etablissement_id, auth, onClose, onSaved }
   );
 }
 
+// ── Historique des statuts (append-only, voir trigger SQL) ───────────────────
+const STATUT_LABEL_HISTORIQUE = {
+  brouillon: "Brouillon créé", envoyee: "Commande envoyée", confirmee: "Confirmée par le fournisseur",
+  en_transit: "En transit", livree: "Reçue (stock mis à jour)", annulee: "Annulée",
+};
+
+function CommandeHistoriqueInline({ commandeId }) {
+  const { data: historique, loading } = useCommandeHistorique(commandeId);
+  if (loading) return <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 10 }}>Chargement de l'historique…</div>;
+  if (historique.length === 0) return null;
+  return (
+    <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px dashed var(--border)" }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.4 }}>
+        Historique du statut
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {historique.map((h) => (
+          <div key={h.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+            <span style={{ color: colors.text }}>{STATUT_LABEL_HISTORIQUE[h.statut] ?? h.statut}</span>
+            <span style={{ color: colors.textMuted }}>{new Date(h.changed_at).toLocaleString("fr-FR")}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Carte commande (onglet historique) ────────────────────────────────────────
+function CommandeCard({ commande, auth, onChanged }) {
+  const [expanded, setExpanded] = useState(false);
+  const [updating, setUpdating] = useState(false);
+  const { success, error: toastError } = useToast();
+  const s = STATUT_STYLE[commande.statut] || { bg: "#F3F4F6", color: colors.textSecondary, label: commande.statut };
+  const actions = STATUT_ACTIONS[commande.statut] || [];
+
+  const medicamentLabel = commande.medicaments
+    ? `${commande.medicaments.nom}${commande.medicaments.dosage ? " " + commande.medicaments.dosage : ""}`
+    : (commande.notes || "—");
+
+  const handleStatutChange = async (next, label) => {
+    if (next === "annulee" && !window.confirm(`Confirmer l'annulation de la commande ${commande.reference ?? ""} ?`)) return;
+    setUpdating(true);
+    try {
+      await updateCommande(commande.id, { statut: next });
+      success(`${commande.reference ?? "Commande"} — ${label.toLowerCase()}${next === "livree" ? " : stock mis à jour" : ""}`);
+      onChanged();
+    } catch (e) {
+      toastError("Erreur : " + e.message);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  return (
+    <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "18px 20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 13, fontWeight: 800, color: colors.navy }}>{commande.reference || commande.id.slice(0, 8).toUpperCase()}</span>
+            <span style={{ fontSize: 10, fontWeight: 700, color: s.color, padding: "2px 8px", backgroundColor: s.bg, borderRadius: 8 }}>{s.label}</span>
+            {commande.email_statut === "envoye" && (
+              <span title="Email envoyé au fournisseur" style={{ fontSize: 10, fontWeight: 700, color: "#16A34A", backgroundColor: "#DCFCE7", padding: "2px 8px", borderRadius: 8 }}>✉ Envoyé</span>
+            )}
+            {commande.email_statut === "echec" && (
+              <span title={commande.email_erreur || "Échec de l'envoi"} style={{ fontSize: 10, fontWeight: 700, color: "#DC2626", backgroundColor: "#FEF2F2", padding: "2px 8px", borderRadius: 8 }}>✉ Non envoyé</span>
+            )}
+            {commande.email_statut === "non_envoye" && (
+              <span style={{ fontSize: 10, fontWeight: 700, color: "#9CA3AF", backgroundColor: "#F3F4F6", padding: "2px 8px", borderRadius: 8 }}>✉ Pas d'email</span>
+            )}
+          </div>
+          <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>
+            {commande.fournisseurs?.nom ?? "—"} · {medicamentLabel} × {commande.quantite ?? "—"} · {new Date(commande.date_commande).toLocaleDateString("fr-FR")}
+          </div>
+        </div>
+        <div style={{ fontSize: 15, fontWeight: 800, color: colors.navy }}>{(commande.montant_total ?? 0).toLocaleString()} FCFA</div>
+      </div>
+
+      {commande.email_statut === "echec" && commande.email_erreur && (
+        <div style={{ marginTop: 8, fontSize: 12, color: "#DC2626", backgroundColor: "#FEF2F2", padding: "6px 10px", borderRadius: 8 }}>
+          {commande.email_erreur}
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 6, marginTop: 12, flexWrap: "wrap" }}>
+        {actions.map((a) => (
+          <button
+            key={a.next}
+            disabled={updating}
+            onClick={() => handleStatutChange(a.next, a.label)}
+            style={{
+              padding: "7px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: updating ? "wait" : "pointer", border: "none",
+              backgroundColor: a.danger ? "#FEF2F2" : "#EFF6FF",
+              color: a.danger ? "#DC2626" : "#2563EB",
+            }}
+          >
+            {a.label}
+          </button>
+        ))}
+        <button
+          onClick={() => printBonCommandeDepuisHistorique(commande, auth)}
+          style={{ padding: "7px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)" }}
+        >
+          Voir le bon de commande
+        </button>
+        <button
+          onClick={() => setExpanded((e) => !e)}
+          style={{ padding: "7px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", backgroundColor: "transparent", color: colors.textMuted, border: "none" }}
+        >
+          {expanded ? "Masquer l'historique ▲" : "Historique ▾"}
+        </button>
+      </div>
+
+      {expanded && <CommandeHistoriqueInline commandeId={commande.id} />}
+    </div>
+  );
+}
+
+// ── Onglet Commandes (historique filtrable) ───────────────────────────────────
+const STATUTS_FILTRE = [
+  { key: "",           label: "Tous" },
+  { key: "envoyee",    label: "Envoyée" },
+  { key: "confirmee",  label: "Confirmée" },
+  { key: "en_transit", label: "En transit" },
+  { key: "livree",     label: "Reçue" },
+  { key: "annulee",    label: "Annulée" },
+];
+
+function CommandesTab({ etablissement_id, auth }) {
+  const [filtreStatut, setFiltreStatut]         = useState("");
+  const [filtreFournisseur, setFiltreFournisseur] = useState("");
+  const [search, setSearch]                     = useState("");
+  const { data: fournisseursListe }              = useFournisseurs();
+  const { data: commandes, loading, error, total, page, setPage, totalPages, refetch } =
+    useCommandesPaginated(etablissement_id, 20, { statut: filtreStatut, fournisseur_id: filtreFournisseur, search });
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 18, backgroundColor: colors.bgCard, padding: 14, borderRadius: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+        <input
+          placeholder="Rechercher par référence…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ padding: "7px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 12, minWidth: 200 }}
+        />
+        <select
+          value={filtreFournisseur}
+          onChange={(e) => setFiltreFournisseur(e.target.value)}
+          style={{ padding: "7px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 12, backgroundColor: colors.bgCard }}
+        >
+          <option value="">Tous les fournisseurs</option>
+          {fournisseursListe.map((f) => <option key={f.id} value={f.id}>{f.nom}</option>)}
+        </select>
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+          {STATUTS_FILTRE.map((s) => (
+            <button
+              key={s.key}
+              onClick={() => setFiltreStatut(s.key)}
+              style={{
+                padding: "6px 12px", borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: "pointer", border: "none",
+                backgroundColor: filtreStatut === s.key ? "#3B82F6" : "#F3F4F6",
+                color: filtreStatut === s.key ? "white" : "#6B7280",
+              }}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+        <div style={{ marginLeft: "auto", fontSize: 12, color: colors.textMuted }}>
+          {loading ? "Chargement…" : `${total} commande${total !== 1 ? "s" : ""}`}
+        </div>
+      </div>
+
+      {error && (
+        <div style={{ backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 12, padding: "14px 18px", marginBottom: 20, fontSize: 13, color: "#DC2626" }}>
+          Une erreur s'est produite. Veuillez réessayer.
+        </div>
+      )}
+
+      {loading && <div style={{ textAlign: "center", padding: "40px 0", color: colors.textMuted, fontSize: 13 }}>Chargement…</div>}
+      {!loading && commandes.length === 0 && (
+        <div style={{ textAlign: "center", padding: "60px 0", color: colors.textMuted, fontSize: 14 }}>Aucune commande trouvée.</div>
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {commandes.map((c) => <CommandeCard key={c.id} commande={c} auth={auth} onChanged={refetch} />)}
+      </div>
+
+      <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
+    </div>
+  );
+}
+
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function Fournisseurs() {
   const { auth } = useAuth();
@@ -357,6 +665,7 @@ export default function Fournisseurs() {
   const [filtre, setFiltre] = useState("actifs"); // "actifs" | "inactifs" | "tous"
   const { data: liste, loading, error, total, page, setPage, totalPages, refetch } = useFournisseursPaginated(filtre);
   const { toasts, success, error: toastError } = useToast();
+  const [tab, setTab] = useState("fournisseurs"); // "fournisseurs" | "commandes"
 
   const [addModal, setAddModal]         = useState(false);
   const [editModal, setEditModal]       = useState(null);   // fournisseur à éditer
@@ -411,10 +720,40 @@ export default function Fournisseurs() {
           etablissement_id={etablissement_id}
           auth={auth}
           onClose={() => setCommandModal(null)}
-          onSaved={() => success(`Commande envoyée chez ${commandModal.nom}`)}
+          onSaved={({ emailStatut, emailErreur, fournisseurNom, reference }) => {
+            if (emailStatut === "envoye") {
+              success(`Commande ${reference} envoyée chez ${fournisseurNom} — email de confirmation transmis.`);
+            } else {
+              toastError(`Commande ${reference} enregistrée chez ${fournisseurNom}, mais l'email n'a pas pu être envoyé : ${emailErreur}`);
+            }
+          }}
         />
       )}
 
+      {/* Onglets */}
+      <div style={{ display: "flex", gap: 2, backgroundColor: colors.bgCard, borderRadius: 10, padding: 3, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 20, width: "fit-content" }}>
+        {[
+          { key: "fournisseurs", label: "Fournisseurs" },
+          { key: "commandes", label: "Commandes" },
+        ].map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            style={{
+              padding: "8px 18px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer",
+              backgroundColor: tab === t.key ? "#3B82F6" : "transparent",
+              color: tab === t.key ? "white" : "#6B7280",
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "commandes" && <CommandesTab etablissement_id={etablissement_id} auth={auth} />}
+
+      {tab === "fournisseurs" && (
+      <>
       {/* Commandes temps réel */}
       <MesCommandesPanel etablissement_id={etablissement_id} />
 
@@ -566,6 +905,8 @@ export default function Fournisseurs() {
         })}
       </div>
       <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
+      </>
+      )}
     </Layout>
   );
 }
