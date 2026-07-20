@@ -370,6 +370,49 @@ migration précise, ou `supabase db query --linked "<SQL>"` pour une requête ci
 
 ---
 
+## SÉCURITÉ TRANSVERSALE (au-delà du seul module Pharmacie)
+
+**2026-07-20 — Point 1 : normalisation des emails pour les policies RLS. ✅**
+
+`mes_etablissements()` — la fonction dont dépend TOUTE l'isolation RLS par établissement (patients,
+ventes, ordonnances, medicaments, fournisseurs, etc., via `is_membre_actif()`/`is_autorite_sanitaire()`)
+— comparait les emails avec `=` strict (`u.email = e.email`), sans normaliser casse ni espaces. Un
+email stocké avec une casse différente de celle d'`auth.jwt()->>'email'` (ex: saisi
+"Pharmacie@X.com" alors que le compte Auth est "pharmacie@x.com") ferait perdre silencieusement
+l'accès à tout l'établissement — 0 ligne visible partout, sans erreur.
+
+**Vérifié avant application** (script de vérification, aucune ligne affectée) :
+```sql
+SELECT 'etablissements' AS table_name, id, email, LOWER(TRIM(email)) AS normalized
+FROM public.etablissements WHERE email IS NOT NULL AND email <> LOWER(TRIM(email))
+UNION ALL
+SELECT 'membres_personnel', id, email, LOWER(TRIM(email))
+FROM public.membres_personnel WHERE email IS NOT NULL AND email <> LOWER(TRIM(email));
+```
+→ 0 ligne (données actuelles déjà propres, correctif préventif). Idem vérifié sur `auth.users`.
+
+**Migration appliquée** :
+[20260720_normalisation_emails_rls.sql](supabase/migrations/20260720_normalisation_emails_rls.sql)
+1. `mes_etablissements()` compare désormais `LOWER(TRIM(...))` des deux côtés (auth.users.email et
+   etablissements.email/membres_personnel.email).
+2. Trigger `BEFORE INSERT OR UPDATE OF email` (fonction `normalize_email()`) sur `etablissements` et
+   `membres_personnel` : normalise automatiquement toute nouvelle valeur stockée.
+3. `UPDATE` ponctuel de backfill sur les deux tables (no-op actuellement, gardé pour rejouabilité sur
+   un autre environnement).
+
+**Testé en conditions réelles** :
+- Trigger : insert test dans une transaction annulée (`BEGIN...ROLLBACK`) avec
+  `'  TEST.Normalize@Example.COM  '` → confirmé stocké/retourné comme `test.normalize@example.com`
+  avant le rollback (aucune donnée laissée en base).
+- Non-régression RLS : après mise à jour de `mes_etablissements()`, connexion réelle à l'app
+  (medos.kelagroup.org) confirmée — dashboard affiche toujours 6 médicaments référencés et 3 patients
+  enregistrés (identique aux comptages directs en base), Jean Dupont et Awa Nkoulou toujours visibles
+  dans la liste des patients. Aucune perte d'accès.
+
+Pas de changement frontend pour ce point (uniquement SQL), donc pas de redéploiement VPS nécessaire.
+
+---
+
 ## Module DISTRIBUTEUR
 
 Non commencé — en attente de validation complète du module Pharmacie.
