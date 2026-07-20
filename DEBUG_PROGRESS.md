@@ -709,3 +709,11 @@ emails fournisseur/interne également étendus à un tableau de lignes.
   (`email_statut: "envoye"` en base). Écran Commandes vérifié : la carte multi-produits affiche
   "2 produits" + le détail des 2 lignes, les commandes historiques à une seule ligne (créées avant
   cette migration) continuent de s'afficher normalement.
+
+**Revalidation en production (medos.kelagroup.org), après déploiement (`git pull` + `npm run build`
++ `systemctl restart nginx`) :** page `/pharmacie/alertes` accessible depuis le nouveau lien de nav,
+liste réelle (Oméprazole 0/15 Critique, Amoxicilline 2/20 Critique, Vitamine D3 5/10 Alerte) ; clic
+"Commander" sur une seule alerte → atterrissage sur Fournisseurs avec bannière "1 produit en
+attente" → `CommandeModal` de PharmaDistrib Congo confirmé pré-rempli ("Produits de la commande (1)
+— Oméprazole 20mg (Gelule)", montant calculé 18 000 FCFA). Modal fermé sans valider (déjà prouvé de
+bout en bout via le test groupé ci-dessus) pour ne pas créer de commande de test supplémentaire.
