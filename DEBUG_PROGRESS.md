@@ -475,6 +475,71 @@ Management (`GET /v1/projects/{ref}/analytics/endpoints/logs.all?sql=...`).
 complet de la fonction ET consulté ses logs réels — les deux causes ici étaient entièrement dans le
 code applicatif, pas dans Supabase.
 
+**Corroboration a posteriori** : en cherchant dans Gmail pour valider les tests du module Fournisseurs
+(voir plus bas), un email "Votre accès MedOS est activé" (`noreply@mail.kelagroup.org`, 17/07/2026) a
+été retrouvé — preuve que l'envoi d'email via Resend fonctionnait bel et bien par le passé. La clé
+`RESEND_API_KEY` a donc probablement expiré/été révoquée depuis, plutôt que d'avoir toujours été
+invalide. Renforce la conclusion : il suffit d'une nouvelle clé valide pour que tout reparte, aucun
+changement de code nécessaire côté `send-app-email`.
+
+---
+
+## Module Pharmacie — Fournisseurs : commandes complètes (2026-07-20, session 5)
+
+Le module Fournisseurs gère désormais l'envoi réel de commande, la consultation du bon de commande
+après coup, la gestion manuelle du statut avec historique, et un historique filtrable. Fonctionne pour
+un fournisseur externe (n'utilisant pas MedOS) — le mode "fournisseur MedOS temps réel" reste pour le
+sprint distributeur, non traité ici.
+
+**Schéma** — [20260720_commandes_structurees_historique.sql](supabase/migrations/20260720_commandes_structurees_historique.sql) :
+`commandes.medicament_id`/`quantite` (structurés — auparavant écrasés dans un champ `notes` texte
+libre, impossible à exploiter fiablement pour incrémenter le bon stock ou régénérer le bon de
+commande), `commandes.email_statut`/`email_erreur` (traçabilité honnête de l'envoi), nouvelle table
+append-only `commande_statut_historique` + trigger de journalisation automatique (insert + tout
+changement réel de statut), et un trigger d'incrément de stock (`AFTER UPDATE OF statut ... WHEN
+NEW.statut = 'livree' AND OLD.statut IS DISTINCT FROM NEW.statut` — protégé contre le double incrément
+en cas de reclique/retry).
+
+**Point 1 — Envoi réel de la commande par email.** ✅ `envoyerEmailCommande()` dans
+[Fournisseurs.jsx](src/pages/pharmacie/Fournisseurs.jsx) : même pattern que le module Distributeur
+(`supabase.functions.invoke("send-app-email", ...)`), mais avec vérification honnête du résultat (le
+pattern distributeur original ignore l'erreur silencieusement — pas reproduit ici). Si le fournisseur
+n'a pas d'email, l'erreur est levée avant même de tenter l'envoi. Testé en conditions réelles (local
++ production) avec le fournisseur de test dont l'email est réellement `cherihaneadam123@gmail.com` :
+l'échec réel (clé Resend invalide, cause déjà diagnostiquée ci-dessus) est capturé et affiché
+honnêtement à l'utilisateur — vérifié via recherche Gmail qu'aucun email n'est jamais arrivé,
+confirmant qu'aucun faux succès n'est jamais affiché. **Fonctionnera automatiquement, sans changement
+de code, dès qu'une clé Resend valide sera configurée.**
+
+**Point 2 — Confirmation visible + bon de commande accessible après coup.** ✅ Toast distinct selon
+que l'email a réussi ou échoué (jamais de message ambigu). Bouton "Voir le bon de commande" sur
+chaque commande de l'historique, réutilisant la même fonction de génération de document
+(`printBonCommande`) qu'à la création, alimentée cette fois par les données persistées + jointures
+(`fournisseurs`, `medicaments`). Testé : bon de commande régénéré après coup, vérifié visuellement
+identique (référence, fournisseur, médicament, quantité, montant) à celui de la création.
+
+**Point 3 — Gestion manuelle du statut + historique.** ✅ Boutons d'action contextuels selon le statut
+courant (`envoyee` → Marquer confirmée/Annuler, `confirmee` → Marquer en transit/Annuler,
+`en_transit` → Marquer reçue/Annuler ; aucune action sur les statuts terminaux `livree`/`annulee`).
+"Marquer reçue" incrémente le stock via le trigger DB (pas de code client dupliqué, robuste même en
+cas de modification directe en base). Historique affiché avec dates réelles, repliable par commande.
+Testé de bout en bout : commande envoyée → confirmée → en transit → reçue, stock du médicament
+concerné vérifié +25 exact en base (1 → 26), historique confirmé à 4 entrées avec timestamps distincts
+dans l'ordre chronologique. Annulation testée séparément (fonctionne, dialogue de confirmation géré).
+
+**Point 4 — Historique filtrable.** ✅ Nouvel onglet "Commandes" (bascule Fournisseurs/Commandes en
+haut de page). Filtres par statut (boutons) et par fournisseur (menu déroulant, alimenté par
+`useFournisseurs()`), recherche par référence. Basé sur `useCommandesPaginated()` déjà existant,
+étendu avec ces filtres plutôt que dupliqué. Testé : filtre statut et filtre fournisseur tous deux
+fonctionnels sans erreur, compteur de résultats correct.
+
+**Compatibilité avec les commandes existantes** : les 3 commandes créées avant cette migration
+(texte libre en `notes`, pas de `medicament_id`/`quantite`) restent visibles et actionnables dans le
+nouvel onglet — statut modifiable normalement, mais sans incrément de stock automatique à la
+réception (aucune donnée structurée pour savoir quel médicament/quantité), et affichage du médicament
+un peu moins net (retombe sur le texte de `notes`). Comportement dégradé mais non bloquant, pas de
+perte de données.
+
 ---
 
 ## Module DISTRIBUTEUR
