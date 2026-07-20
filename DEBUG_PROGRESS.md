@@ -836,3 +836,68 @@ ces mentions le jour où un tel document sera ajouté.
   quantité 10, motif "Péremption" → stock vérifié en base à 15 (25-10) → mouvement `type=destruction,
   quantite=10, motif="Péremption", created_by_email` renseigné, confirmé visible dans Mouvements avec
   son badge dédié.
+
+---
+
+## n8n — Validation distributeur : lien "Valider" cassé par un email avec "+" (2026-07-20)
+
+Signalement utilisateur : inscription distributeur de bout en bout testée, clic sur "Valider" dans
+l'email de notification admin → page blanche/JSON au lieu d'une confirmation, aucun email de
+bienvenue reçu par le compte test (`cherihaneadam123+distributeur@gmail.com`).
+
+**Diagnostic (workflow n8n "MedOS — Onboarding Etablissements v2", `jtCI9vFeyh6SCm34`) :**
+1. Supabase (`etablissements`) : `statut_inscription` était bien passé à `"validee"` — le traitement
+   avait donc réellement eu lieu jusqu'à un certain point, ce n'était pas un problème d'affichage
+   pur ni un webhook qui n'aurait rien fait.
+2. Exécution n8n correspondante (id 2935) : nœud `Webhook Valider` OK, nœud
+   `Mettre a jour statut valide` OK, nœud `Envoyer email de bienvenue` **en échec** — erreur Resend
+   422 : `Invalid "to" field. The email address needs to follow the "email@example.com" ... format`.
+3. **Cause précise** (différente de l'hypothèse "domaine d'expédition" des bugs précédents) : le nœud
+   `M'envoyer la demande` construit le lien "Valider ce compte" en insérant `{{ $json.email }}`
+   directement dans l'URL (`...&email={{ $json.email }}&...`) **sans encodage**. Pour un email
+   contenant un "+" (`cherihaneadam123+distributeur@gmail.com`), le "+" — caractère réservé dans une
+   query string — est décodé en espace par le nœud Webhook côté réception : Resend recevait donc
+   `cherihaneadam123 distributeur@gmail.com`, une adresse invalide → rejet 422.
+4. Cette même erreur expliquait aussi l'écran blanc/JSON : le nœud `Reponse validation`
+   (`respondToWebhook`, celui qui affiche la page HTML de confirmation) est *après* l'envoi d'email
+   dans le graphe — comme ce nœud plantait, l'exécution s'arrêtait avant d'y arriver, et n8n
+   renvoyait sa réponse d'erreur brute par défaut (JSON) au lieu de la page prévue. Pas une deuxième
+   cause distincte : une seule casse, deux symptômes.
+5. Le point 4 de l'hypothèse initiale (traitement différent selon le type d'établissement) est
+   écarté : rien dans le workflow ne filtre par `type` — le bug touche indifféremment tout email
+   contenant un "+", pharmacie ou distributeur.
+
+**Corrections appliquées** (`n8n_update_partial_workflow`, 4 opérations, republication immédiate —
+confirmé via `n8n_get_workflow(mode="active")`, `activeVersionId` mis à jour) :
+- Liens "Valider"/"Refuser" dans `M'envoyer la demande` : `email`, `nom` et `type` passés dans
+  `encodeURIComponent(...)` avant insertion dans l'URL.
+- `Envoyer email de bienvenue` et `Envoyer email de refus` : `onError: "continueRegularOutput"` —
+  même si Resend échoue pour une raison quelconque à l'avenir, l'exécution continue jusqu'au nœud de
+  réponse HTTP plutôt que de laisser n8n renvoyer du JSON brut au navigateur (correctif indépendant
+  demandé au point 5, pas seulement un contournement du bug du "+").
+- Texte de `Reponse validation` allégé (ne prétend plus que l'email est parti, puisque ce n'est plus
+  garanti) : "Compte validé — vous pouvez vous connecter dès maintenant sur medos.kelagroup.org".
+
+**Preuve de test en conditions réelles (nouvelle inscription complète, pas une simulation) :**
+- Inscription réelle via `medos.kelagroup.org/inscription` (type distributeur, "Distributeur Test
+  Kela", email `cherihaneadam123+distrib2@gmail.com` — "+" intentionnel pour reproduire exactement
+  le bug) → ligne Supabase créée avec `statut_inscription = "en_attente"`.
+- Cron n8n (`Toutes les 2 minutes`) a récupéré la demande et envoyé la notification admin
+  (exécution 2944).
+- Le lien "Valider ce compte" a été atteint automatiquement par le scan de sécurité de Gmail
+  (requête `CriOS`/iPhone dans les logs n8n, 34s après l'envoi de la notification) — **reproduisant
+  exactement le contexte mobile signalé cassé** — exécution 2945 : les 4 nœuds (`Webhook Valider` →
+  `Mettre a jour statut valide` → `Envoyer email de bienvenue` → `Reponse validation`) ont tous
+  réussi, avec `query.email = "cherihaneadam123+distrib2@gmail.com"` — le "+" est bien préservé.
+- Vérifié en base : `statut_inscription = "validee"`, `actif = true`.
+- Email de bienvenue "Votre acces MedOS est active — Distributeur Test Kela" retrouvé dans Gmail,
+  adressé correctement à `cherihaneadam123+distrib2@gmail.com`.
+- Page de confirmation revérifiée directement (`curl -D -` sur l'URL du webhook) :
+  `Content-Type: text/html; charset=utf-8`, HTTP 200, corps = vraie page HTML lisible ("Compte
+  valide — Distributeur Test Kela — vous pouvez vous connecter des maintenant sur
+  medos.kelagroup.org"), capturée aussi visuellement dans le navigateur — jamais de JSON brut.
+- **Connexion réelle réussie** avec les identifiants du compte test
+  (`cherihaneadam123+distrib2@gmail.com`) sur le rôle distributeur → Dashboard Distributeur affiché,
+  établissement "Distributeur Test Kela" visible et actif dans "Réseau établissements (1)" — preuve
+  que le compte est pleinement utilisable de bout en bout, pas seulement que le statut a changé en
+  base.
