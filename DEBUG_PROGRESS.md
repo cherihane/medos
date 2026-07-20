@@ -762,3 +762,6 @@ nom, ajout au panier). Une frappe humaine normale, même à Entrée, n'est jamai
 - Changement du réglage en 58mm via Paramètres (toast de confirmation) → nouvelle vente imprimée →
   capture d'écran confirmant la mise en page empilée compacte, largeur de body calculée à 219.2px
   (= 58mm exactement).
+
+**Revalidation en production (medos.kelagroup.org)** après déploiement : section "Ticket de caisse"
+confirmée visible dans Paramètres avec les deux boutons 80mm/58mm.
