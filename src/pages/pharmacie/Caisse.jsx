@@ -1,5 +1,5 @@
 import { colors } from "../../theme";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Layout from "../../components/Layout";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
@@ -97,18 +97,62 @@ function FondCaisseModal({ auth, date, onSaved, onSkip }) {
   );
 }
 
-// ─── Ticket de caisse imprimable ─────────────────────────────────────────────
-function printTicket({ ref, date, items, paiement, total, montantRecu, monnaie, etab }) {
-  const dateStr = date.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
-  const heureStr = date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-  const modeLabel = MODE_LABELS[paiement] ?? paiement;
-  const lignes = items.map((i) => `
+// ─── Ticket de caisse imprimable (thermique 58mm / 80mm) ─────────────────────
+// Deux mises en page distinctes, pas une seule redimensionnée : le 58mm est trop
+// étroit pour un tableau à 4 colonnes lisible (d'où l'empilement nom/quantité-prix
+// par article), alors que le 80mm garde le format tabulaire classique.
+function lignesTable80(items) {
+  return items.map((i) => `
     <tr>
-      <td style="padding:2px 0;font-size:11px;max-width:28mm;overflow:hidden;white-space:nowrap">${i.nom}</td>
+      <td style="padding:2px 0;font-size:11px;max-width:32mm;overflow:hidden;white-space:nowrap">${i.nom}</td>
       <td style="text-align:center;padding:2px 4px;font-size:11px">${i.qty}</td>
       <td style="text-align:right;padding:2px 0;font-size:11px;white-space:nowrap">${(i.prix_unitaire ?? 0).toLocaleString("fr-FR")} FCFA</td>
       <td style="text-align:right;padding:2px 0;font-size:11px;white-space:nowrap">${((i.prix_unitaire ?? 0) * i.qty).toLocaleString("fr-FR")}</td>
     </tr>`).join("");
+}
+
+function lignesEmpilees58(items) {
+  return items.map((i) => `
+    <div style="margin-bottom:3px">
+      <div style="font-size:10px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${i.nom}</div>
+      <div style="display:flex;justify-content:space-between;font-size:9px;color:#000">
+        <span>${i.qty} x ${(i.prix_unitaire ?? 0).toLocaleString("fr-FR")}</span>
+        <span style="font-weight:bold">${((i.prix_unitaire ?? 0) * i.qty).toLocaleString("fr-FR")} FCFA</span>
+      </div>
+    </div>`).join("");
+}
+
+function printTicket({ ref, date, items, paiement, total, montantRecu, monnaie, etab }) {
+  const largeurMm = etab?.largeur_ticket_mm === 58 ? 58 : 80;
+  const dateStr = date.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const heureStr = date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  const modeLabel = MODE_LABELS[paiement] ?? paiement;
+
+  const bodyCSS80 = `
+    body { font-family:'Courier New',Courier,monospace; width:80mm; padding:4mm 3mm; font-size:12px; color:#000; }
+    table { width:100%; border-collapse:collapse; }
+    th { font-size:9px; text-transform:uppercase; padding:2px 0; border-bottom:1px solid #000; }
+    th:nth-child(2),td:nth-child(2) { text-align:center; }
+    th:nth-child(3),td:nth-child(3),th:nth-child(4),td:nth-child(4) { text-align:right; }
+    .row-total td { font-weight:bold; font-size:14px; border-top:1px solid #000; padding-top:4px; }
+    @media print { @page { size:80mm auto; margin:0; } body { width:80mm; } }
+  `;
+  const bodyCSS58 = `
+    body { font-family:'Courier New',Courier,monospace; width:58mm; padding:2mm 2mm; font-size:10px; color:#000; }
+    .row-total { display:flex; justify-content:space-between; font-weight:bold; font-size:12px; border-top:1px solid #000; padding-top:3px; }
+    @media print { @page { size:58mm auto; margin:0; } body { width:58mm; } }
+  `;
+
+  const itemsHTML = largeurMm === 80
+    ? `<table>
+        <thead><tr><th style="text-align:left">Article</th><th>Qte</th><th>P.U.</th><th>Total</th></tr></thead>
+        <tbody>${lignesTable80(items)}</tbody>
+      </table>
+      <div class="sep-dashed"></div>
+      <table><tfoot><tr class="row-total"><td colspan="3">TOTAL TTC</td><td style="text-align:right;white-space:nowrap">${total.toLocaleString("fr-FR")} FCFA</td></tr></tfoot></table>`
+    : `${lignesEmpilees58(items)}
+      <div class="sep-dashed"></div>
+      <div class="row-total"><span>TOTAL TTC</span><span>${total.toLocaleString("fr-FR")} FCFA</span></div>`;
 
   const html = `<!DOCTYPE html>
 <html lang="fr">
@@ -117,49 +161,27 @@ function printTicket({ ref, date, items, paiement, total, montantRecu, monnaie, 
   <title>Ticket ${ref}</title>
   <style>
     * { margin:0; padding:0; box-sizing:border-box; }
-    body { font-family:'Courier New',Courier,monospace; width:72mm; padding:4mm 3mm; font-size:12px; color:#000; }
     .centre { text-align:center; }
     .bold   { font-weight:bold; }
     .sep-solid  { border-top:1px solid #000; margin:5px 0; }
     .sep-dashed { border-top:1px dashed #000; margin:5px 0; }
-    table { width:100%; border-collapse:collapse; }
-    th { font-size:9px; text-transform:uppercase; padding:2px 0; border-bottom:1px solid #000; }
-    th:nth-child(2),td:nth-child(2) { text-align:center; }
-    th:nth-child(3),td:nth-child(3),th:nth-child(4),td:nth-child(4) { text-align:right; }
-    .row-total td { font-weight:bold; font-size:14px; border-top:1px solid #000; padding-top:4px; }
     .footer { text-align:center; font-size:10px; margin-top:8px; }
-    @media print { @page { size:72mm auto; margin:0; } body { width:72mm; } }
+    ${largeurMm === 80 ? bodyCSS80 : bodyCSS58}
   </style>
 </head>
 <body>
-  <div class="centre bold" style="font-size:15px">${etab?.nom ?? "Pharmacie"}</div>
-  ${etab?.ville ? `<div class="centre" style="font-size:10px">${etab.ville}</div>` : ""}
+  <div class="centre bold" style="font-size:${largeurMm === 80 ? 15 : 12}px">${etab?.nom ?? "Pharmacie"}</div>
+  ${etab?.ville ? `<div class="centre" style="font-size:${largeurMm === 80 ? 10 : 9}px">${etab.ville}</div>` : ""}
   <div class="sep-solid"></div>
-  <div class="centre bold" style="font-size:12px;letter-spacing:1px">${ref}</div>
-  <div class="centre" style="font-size:10px">${dateStr} &nbsp; ${heureStr}</div>
+  <div class="centre bold" style="font-size:${largeurMm === 80 ? 12 : 10}px;letter-spacing:1px">${ref}</div>
+  <div class="centre" style="font-size:${largeurMm === 80 ? 10 : 9}px">${dateStr} &nbsp; ${heureStr}</div>
   <div class="sep-dashed"></div>
-  <table>
-    <thead>
-      <tr>
-        <th style="text-align:left">Article</th>
-        <th>Qte</th>
-        <th>P.U.</th>
-        <th>Total</th>
-      </tr>
-    </thead>
-    <tbody>${lignes}</tbody>
-    <tfoot>
-      <tr class="row-total">
-        <td colspan="3">TOTAL TTC</td>
-        <td style="text-align:right;white-space:nowrap">${total.toLocaleString("fr-FR")} FCFA</td>
-      </tr>
-    </tfoot>
-  </table>
+  ${itemsHTML}
   <div class="sep-dashed"></div>
-  <div style="font-size:11px">Mode de paiement : <strong>${modeLabel}</strong></div>
+  <div style="font-size:${largeurMm === 80 ? 11 : 9}px">Mode de paiement : <strong>${modeLabel}</strong></div>
   ${paiement === "especes" && montantRecu != null ? `
-  <div style="font-size:11px">Montant recu      : ${montantRecu.toLocaleString("fr-FR")} FCFA</div>
-  <div style="font-size:11px">Monnaie rendue    : ${(monnaie ?? 0).toLocaleString("fr-FR")} FCFA</div>` : ""}
+  <div style="font-size:${largeurMm === 80 ? 11 : 9}px">Montant recu${largeurMm === 80 ? "      " : " "}: ${montantRecu.toLocaleString("fr-FR")} FCFA</div>
+  <div style="font-size:${largeurMm === 80 ? 11 : 9}px">Monnaie rendue${largeurMm === 80 ? "    " : " "}: ${(monnaie ?? 0).toLocaleString("fr-FR")} FCFA</div>` : ""}
   <div class="sep-solid"></div>
   <div class="footer">MedOS — Merci de votre confiance</div>
 </body>
@@ -346,6 +368,53 @@ function OngletCaisse({ onSaleComplete }) {
     if (found) addToCart(found);
     else showError("Médicament non trouvé, vérifiez l'inventaire.");
   };
+
+  // Toujours la dernière version de handleScan (medicaments/addToCart évoluent
+  // à chaque rendu) sans avoir à réattacher l'écouteur clavier à chaque fois.
+  const handleScanRef = useRef(handleScan);
+  handleScanRef.current = handleScan;
+
+  // Douchette USB/Bluetooth (keyboard wedge) : ces appareils émettent les
+  // caractères du code en quelques ms les uns des autres, suivis d'un Entrée
+  // automatique — une frappe humaine, même rapide, dépasse largement cet
+  // intervalle. Écoute globale (pas besoin de focus dans un champ précis) :
+  // dès qu'une séquence de caractères arrivés "trop vite" est validée par
+  // Entrée, elle est traitée exactement comme un scan caméra (handleScan).
+  useEffect(() => {
+    const SCAN_MAX_GAP_MS = 40;
+    const SCAN_MIN_LENGTH = 4;
+    const SCAN_MAX_LENGTH = 64;
+    let buffer = "";
+    let isFast = true;
+    let lastKeyTime = 0;
+
+    const onKeyDown = (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const now = performance.now();
+
+      if (e.key === "Enter") {
+        const code = buffer;
+        const wasFast = isFast && code.length >= SCAN_MIN_LENGTH;
+        buffer = "";
+        isFast = true;
+        if (wasFast) {
+          e.preventDefault();
+          handleScanRef.current(code);
+        }
+        return;
+      }
+
+      if (e.key.length === 1) {
+        if (buffer.length > 0 && now - lastKeyTime > SCAN_MAX_GAP_MS) isFast = false;
+        buffer += e.key;
+        if (buffer.length > SCAN_MAX_LENGTH) { buffer = ""; isFast = true; }
+      }
+      lastKeyTime = now;
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   // Bloque les médicaments sans prix : force à saisir un prix avant de vendre
   const addToCart = (med) => {

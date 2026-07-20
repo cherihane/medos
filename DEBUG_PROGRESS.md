@@ -717,3 +717,48 @@ liste réelle (Oméprazole 0/15 Critique, Amoxicilline 2/20 Critique, Vitamine D
 attente" → `CommandeModal` de PharmaDistrib Congo confirmé pré-rempli ("Produits de la commande (1)
 — Oméprazole 20mg (Gelule)", montant calculé 18 000 FCFA). Modal fermé sans valider (déjà prouvé de
 bout en bout via le test groupé ci-dessus) pour ne pas créer de commande de test supplémentaire.
+
+---
+
+## Caisse — Impression thermique 58/80mm + douchette clavier (2026-07-20, session 7 suite)
+
+Deux corrections pour que le comptoir de Caisse fonctionne avec du vrai matériel de pharmacie
+(imprimante thermique, douchette USB/Bluetooth), pas seulement un navigateur.
+
+**1. Impression thermique 58mm / 80mm.** Le ticket de caisse a toujours eu sa propre mise en page
+dédiée dans [Caisse.jsx](src/pages/pharmacie/Caisse.jsx) (`printTicket`, fenêtre HTML séparée, pas
+le moteur A4 de `MedOSDocument.js` — celui-ci reste inchangé, toujours utilisé pour ordonnances et
+rapports). Elle était figée à 72mm ; remplacée par deux mises en page distinctes choisies via
+`etablissements.largeur_ticket_mm` (nouvelle colonne, `CHECK IN (58, 80)`, défaut 80,
+[migration](diagnostic/migrations/50-largeur-ticket.sql)) :
+  - **80mm** : tableau classique (Article / Qté / P.U. / Total), inchangé dans l'esprit.
+  - **58mm** : mise en page empilée (nom du médicament sur une ligne, "qté × prix ... total" sur la
+    suivante) — un tableau à 4 colonnes est illisible sur une bande à peine plus large que 50mm
+    utiles ; polices réduites (9-10px vs 11-12px).
+  - `@page { size: <largeur>mm auto; margin:0 }` correspondant à chaque format.
+  - `fetchEtabFromAuth()` (MedOSDocument.js) étendu pour renvoyer `largeur_ticket_mm` (défaut 80 si
+    absent) — seul point de lecture, déjà utilisé par `printTicket` et `printCloture`.
+  - Nouveau réglage dans [Parametres.jsx](src/pages/Parametres.jsx) (`SectionTicketCaisse`, visible
+    uniquement pour le rôle pharmacie) : deux boutons 80mm/58mm, sauvegarde immédiate sur
+    `etablissements.largeur_ticket_mm`.
+
+**2. Douchette USB/Bluetooth (keyboard wedge).** Nouvel écouteur `keydown` global dans
+`OngletCaisse` (Caisse.jsx) — actif tant que l'écran Caisse est monté, sans exiger de focus dans un
+champ précis. Distingue un scan d'une frappe humaine par la vitesse : si l'écart entre deux
+caractères dépasse 40ms, la séquence est marquée "non rapide" (jamais traitée comme un scan) ; à
+Entrée, une séquence d'au moins 4 caractères restée rapide de bout en bout est envoyée à
+`handleScan()` — exactement la même fonction que le scan caméra existant (recherche par code ou
+nom, ajout au panier). Une frappe humaine normale, même à Entrée, n'est jamais interceptée (le
+`preventDefault()` ne s'applique qu'aux séquences reconnues comme rapides).
+
+**Preuve de test en conditions réelles :**
+- Douchette : simulation d'une frappe à 3ms d'intervalle par caractère (code-barres réel
+  `01034009349994511726033110KX017`) + Entrée, **sans clic préalable dans un champ** → "Doliprane"
+  ajouté au panier, aucun toast d'erreur. Contre-test : la même séquence tapée à 90ms/caractère
+  (frappe humaine) dans le champ de recherche n'est jamais traitée comme un scan (pas de faux
+  déclenchement).
+- Impression 80mm : vente réelle imprimée → capture d'écran confirmant le tableau classique, largeur
+  de body calculée à 302.36px (= 80mm exactement à 96dpi).
+- Changement du réglage en 58mm via Paramètres (toast de confirmation) → nouvelle vente imprimée →
+  capture d'écran confirmant la mise en page empilée compacte, largeur de body calculée à 219.2px
+  (= 58mm exactement).

@@ -224,7 +224,7 @@ function SectionEtablissement({ etablissement_id }) {
     if (!etablissement_id) return;
     supabase
       .from("etablissements")
-      .select("id, nom, type, ville, pays, adresse, email, licence_numero, notes_inscription")
+      .select("id, nom, type, ville, pays, adresse, email, licence_numero, notes_inscription, largeur_ticket_mm")
       .eq("id", etablissement_id)
       .single()
       .then(({ data }) => {
@@ -320,6 +320,79 @@ function SectionEtablissement({ etablissement_id }) {
             </button>
           </div>
         )}
+      </Card>
+    </>
+  );
+}
+
+// ─── Section Ticket de caisse (impression thermique) ─────────────────────────
+function SectionTicketCaisse({ etablissement_id }) {
+  const { toasts, success, error: toastError } = useToast();
+  const [largeur, setLargeur] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!etablissement_id) return;
+    supabase
+      .from("etablissements")
+      .select("largeur_ticket_mm")
+      .eq("id", etablissement_id)
+      .single()
+      .then(({ data }) => setLargeur(data?.largeur_ticket_mm === 58 ? 58 : 80));
+  }, [etablissement_id]);
+
+  const choisir = async (mm) => {
+    if (mm === largeur || saving) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from("etablissements")
+        .update({ largeur_ticket_mm: mm })
+        .eq("id", etablissement_id);
+      if (error) throw error;
+      setLargeur(mm);
+      success(`Ticket de caisse : format ${mm}mm activé.`);
+    } catch (e) {
+      toastError("Erreur : " + e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (largeur === null) return (
+    <Card title="Ticket de caisse">
+      <div style={{ color: colors.textMuted, fontSize: 13 }}>Chargement…</div>
+    </Card>
+  );
+
+  return (
+    <>
+      <Toast toasts={toasts} />
+      <Card title="Ticket de caisse">
+        <p style={{ margin: "0 0 14px", fontSize: 12, color: colors.textSecondary }}>
+          Largeur de bande de votre imprimante thermique. Détermine la mise en page du ticket
+          imprimé depuis Caisse (80mm : format le plus courant ; 58mm : imprimantes compactes).
+        </p>
+        <div style={{ display: "flex", gap: 10 }}>
+          {[80, 58].map((mm) => (
+            <button
+              key={mm}
+              onClick={() => choisir(mm)}
+              disabled={saving}
+              style={{
+                flex: 1, padding: "14px", borderRadius: 10, cursor: saving ? "wait" : "pointer",
+                border: `2px solid ${largeur === mm ? "#3B82F6" : "var(--border)"}`,
+                backgroundColor: largeur === mm ? "#EFF6FF" : colors.bgCard,
+                textAlign: "center",
+              }}
+            >
+              <div style={{ fontSize: 16, fontWeight: 800, color: largeur === mm ? "#1D4ED8" : colors.navy }}>{mm}mm</div>
+              <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>
+                {mm === 80 ? "Format standard" : "Format compact"}
+              </div>
+            </button>
+          ))}
+        </div>
       </Card>
     </>
   );
@@ -706,6 +779,7 @@ export default function Parametres() {
       )}
       <SectionApparence />
       <SectionEtablissement etablissement_id={etablissement_id} />
+      {role === "pharmacie" && <SectionTicketCaisse etablissement_id={etablissement_id} />}
       <SectionPersonnel etablissement_id={etablissement_id} role={role} />
     </Layout>
   );
