@@ -444,6 +444,39 @@ minutes réelles ou de patcher temporairement le code de prod) :
 
 ---
 
+## CORRECTIF — Le "bug plateforme Edge Functions 401" des sessions précédentes n'en était pas un
+
+**2026-07-20 (session 4)** — Avant de commencer le module Fournisseurs (envoi d'email de commande via
+`send-app-email`), l'utilisateur a demandé de vérifier précisément les logs plutôt que de supposer un
+problème hors de portée. Bien fait : **ce n'était jamais un bug de la plateforme Supabase.**
+
+Méthode : token d'accès CLI récupéré depuis le Keychain macOS (`security find-generic-password -s
+"Supabase CLI" -w`), utilisé pour interroger directement `function_logs`/`edge_logs` via l'API
+Management (`GET /v1/projects/{ref}/analytics/endpoints/logs.all?sql=...`).
+
+- **`send-app-email`** : son code vérifie `supabase.auth.getUser()` sur le JWT reçu — elle exige un
+  **vrai jeton de session utilisateur connecté**, pas la clé anon/publishable envoyée dans tous mes
+  tests précédents (curl, client `@supabase/supabase-js` sans login préalable). En me connectant
+  d'abord (`signInWithPassword`) puis en appelant `functions.invoke(...)`, le 401 a disparu — remplacé
+  par un **502** avec le message exact des logs : `Resend error: 401 {"message":"API key is invalid"}`.
+  **Cause réelle : la clé `RESEND_API_KEY` configurée comme secret Supabase est invalide/expirée.**
+  Nécessite une nouvelle clé Resend valide de la part de l'utilisateur (pas générable par moi-même).
+- **`check-stock-alert`** : cause différente — son code vérifie un header `x-webhook-secret` contre
+  un secret `WEBHOOK_SECRET` déjà configuré côté projet (`if (authHeader !== webhookSecret) return 401`).
+  Le trigger Postgres corrigé en session 3 n'envoyait plus ce header du tout (je ne savais pas encore
+  que cette vérification existait). Corrigeable moi-même (rotation du secret + mise à jour du trigger).
+  Le même secret `WEBHOOK_SECRET` est aussi utilisé par `send-activation-email` (déclenchée par
+  [20240112000000_inscription_email_trigger.sql](supabase/migrations/20240112000000_inscription_email_trigger.sql)),
+  dont le trigger a le même défaut historique (`current_setting('app.webhook_secret')`, jamais
+  configurable — voir session 3). Repéré mais pas corrigé aujourd'hui (hors scope du module
+  Fournisseurs), à traiter dans une session dédiée aux emails transactionnels d'inscription.
+
+**Leçon retenue** : ne plus conclure "bug plateforme hors de portée" sans avoir lu le code source
+complet de la fonction ET consulté ses logs réels — les deux causes ici étaient entièrement dans le
+code applicatif, pas dans Supabase.
+
+---
+
 ## Module DISTRIBUTEUR
 
 Non commencé — en attente de validation complète du module Pharmacie.
