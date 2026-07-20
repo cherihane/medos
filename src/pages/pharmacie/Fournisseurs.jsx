@@ -8,7 +8,7 @@ import {
   useFournisseursPaginated, useCommandesRealtime, useCommandesPaginated,
   useCommandeHistorique, useMedicaments, useFournisseurs,
 } from "../../hooks/useSupabaseData";
-import { insertCommande, updateCommande, insertFournisseur, updateFournisseur } from "../../hooks/useMutations";
+import { insertCommande, updateCommande, deleteCommande, insertFournisseur, updateFournisseur } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
 import { openDocument, tableHTML, infoGridHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
 import { supabase } from "../../supabaseClient";
@@ -68,11 +68,33 @@ function printBonCommandeDepuisHistorique(commande, auth) {
   });
 }
 
+// Génère le PDF du bon de commande côté serveur (Edge Function
+// generate-bon-commande-pdf, mêmes données que printBonCommande), pour
+// l'attacher aux emails envoyés au fournisseur et en notification interne.
+// Retourne { filename, content } au format attendu par send-app-email, ou
+// null si la génération échoue (l'envoi d'email continue sans pièce jointe
+// plutôt que d'être bloqué entièrement par un souci de mise en page PDF).
+async function genererPieceJointeBonCommande({ fournisseur, medicamentNom, quantite, dateLivraison, montantTotal, reference, etabNom, notes }) {
+  try {
+    const { data, error } = await supabase.functions.invoke("generate-bon-commande-pdf", {
+      body: {
+        reference, etablissementNom: etabNom,
+        fournisseur: { nom: fournisseur.nom, telephone: fournisseur.telephone, email: fournisseur.email, pays: fournisseur.pays },
+        medicamentNom, quantite, dateLivraison, montantTotal, notes,
+      },
+    });
+    if (error || !data?.pdfBase64) return null;
+    return { filename: data.filename, content: data.pdfBase64 };
+  } catch {
+    return null;
+  }
+}
+
 // Envoi réel de l'email de commande au fournisseur (même pattern que le
 // module Distributeur : supabase.functions.invoke("send-app-email", ...)).
 // Lève une erreur explicite si le fournisseur n'a pas d'email, ou si
 // l'envoi échoue — jamais de faux succès silencieux.
-async function envoyerEmailCommande({ fournisseur, medicamentNom, quantite, dateLivraison, montantTotal, reference, etabNom }) {
+async function envoyerEmailCommande({ fournisseur, medicamentNom, quantite, dateLivraison, montantTotal, reference, etabNom, pieceJointe }) {
   if (!fournisseur.email || !fournisseur.email.trim()) {
     throw new Error(
       `${fournisseur.nom} n'a pas d'adresse email renseignée — impossible d'envoyer la commande par email. Ajoutez une adresse email à ce fournisseur ou contactez-le par un autre moyen.`
@@ -122,10 +144,76 @@ async function envoyerEmailCommande({ fournisseur, medicamentNom, quantite, date
       to:      fournisseur.email,
       subject: `Commande MedOS ${reference} — ${medicamentNom} (${quantite} unités)`,
       html,
+      ...(pieceJointe ? { attachments: [pieceJointe] } : {}),
     },
   });
   if (error) {
     throw new Error(`L'email n'a pas pu être envoyé à ${fournisseur.email} : ${error.message}`);
+  }
+}
+
+// Notification interne : informe le(s) responsable(s) de l'établissement
+// qu'une commande a été passée (qui, chez qui, quoi), avec le même bon de
+// commande en pièce jointe. Aucune liste de destinataires admin dédiée
+// n'existe ailleurs dans le code — on retombe sur l'email de l'établissement
+// (le compte créateur), seul destinataire garanti d'exister.
+async function envoyerNotificationInterne({ fournisseur, medicamentNom, quantite, dateLivraison, montantTotal, reference, etabNom, etablissement_id, userEmail, pieceJointe }) {
+  const { data: etab, error: etabError } = await supabase
+    .from("etablissements")
+    .select("email")
+    .eq("id", etablissement_id)
+    .maybeSingle();
+  if (etabError || !etab?.email) {
+    throw new Error("Impossible de déterminer le destinataire de la notification interne (email de l'établissement introuvable).");
+  }
+
+  const dateFr = new Date().toLocaleDateString("fr-FR");
+  const html = `
+<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+  <div style="background:#0A1628;padding:24px 32px;border-radius:8px 8px 0 0">
+    <h1 style="color:white;font-size:18px;margin:0">Commande passée — ${reference}</h1>
+  </div>
+  <div style="padding:24px 32px;border:1px solid #e5e7eb;border-top:none">
+    <p style="font-size:14px;color:#374151">
+      <strong>${userEmail}</strong> a passé une commande chez <strong>${fournisseur.nom}</strong>.
+    </p>
+    <table style="width:100%;border-collapse:collapse;margin:16px 0">
+      <thead>
+        <tr style="background:#F8FAFC">
+          <th style="text-align:left;padding:8px 12px;font-size:12px;color:#6B7280;border-bottom:1px solid #e5e7eb">Médicament</th>
+          <th style="text-align:right;padding:8px 12px;font-size:12px;color:#6B7280;border-bottom:1px solid #e5e7eb">Quantité</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #f3f4f6">${medicamentNom}</td>
+          <td style="text-align:right;padding:8px 12px;font-size:13px;border-bottom:1px solid #f3f4f6">${quantite}</td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="font-size:13px;color:#374151">
+      <strong>Date de livraison souhaitée :</strong> ${dateLivraison ? new Date(dateLivraison).toLocaleDateString("fr-FR") : "Non précisée"}<br/>
+      <strong>Montant total estimé :</strong> ${montantTotal > 0 ? montantTotal.toLocaleString("fr-FR") + " FCFA" : "Non précisé"}
+    </p>
+    <p style="font-size:12px;color:#9CA3AF;margin-top:24px">
+      Commande émise le ${dateFr}
+    </p>
+  </div>
+  <div style="background:#F8FAFC;padding:16px 32px;border-top:1px solid #e5e7eb;text-align:center">
+    <p style="font-size:12px;color:#9CA3AF;margin:0">MedOS — ${etabNom}</p>
+  </div>
+</div>`;
+
+  const { error } = await supabase.functions.invoke("send-app-email", {
+    body: {
+      to:      etab.email,
+      subject: `[MedOS] Commande passée ${reference} — ${fournisseur.nom}`,
+      html,
+      ...(pieceJointe ? { attachments: [pieceJointe] } : {}),
+    },
+  });
+  if (error) {
+    throw new Error(`La notification interne n'a pas pu être envoyée à ${etab.email} : ${error.message}`);
   }
 }
 
@@ -329,14 +417,21 @@ function CommandeModal({ fournisseur, etablissement_id, auth, onClose, onSaved }
       // L'email est une étape distincte de l'enregistrement de la commande :
       // la commande reste valide même si l'envoi échoue, mais le statut réel
       // de l'envoi est toujours tracé et remonté honnêtement à l'utilisateur.
+      const etab = await fetchEtabFromAuth(auth);
+      const commandeInfo = {
+        fournisseur, medicamentNom: selectedMed.nom, quantite: qty,
+        dateLivraison, montantTotal, reference, etabNom: etab.nom, notes,
+      };
+
+      // Un seul PDF généré, réutilisé pour les deux emails (fournisseur +
+      // notification interne). null si la génération échoue — les emails
+      // partent alors sans pièce jointe plutôt que d'être bloqués.
+      const pieceJointe = await genererPieceJointeBonCommande(commandeInfo);
+
       let emailStatut = "non_envoye";
       let emailErreur = null;
       try {
-        const etab = await fetchEtabFromAuth(auth);
-        await envoyerEmailCommande({
-          fournisseur, medicamentNom: selectedMed.nom, quantite: qty,
-          dateLivraison, montantTotal, reference, etabNom: etab.nom,
-        });
+        await envoyerEmailCommande({ ...commandeInfo, pieceJointe });
         emailStatut = "envoye";
       } catch (emailErr) {
         emailStatut = "echec";
@@ -344,7 +439,18 @@ function CommandeModal({ fournisseur, etablissement_id, auth, onClose, onSaved }
       }
       await updateCommande(commande.id, { email_statut: emailStatut, email_erreur: emailErreur });
 
-      onSaved({ emailStatut, emailErreur, fournisseurNom: fournisseur.nom, reference });
+      let notifInterneStatut = "envoye";
+      let notifInterneErreur = null;
+      try {
+        await envoyerNotificationInterne({
+          ...commandeInfo, etablissement_id, userEmail: auth?.user?.email ?? "un utilisateur", pieceJointe,
+        });
+      } catch (notifErr) {
+        notifInterneStatut = "echec";
+        notifInterneErreur = notifErr.message;
+      }
+
+      onSaved({ emailStatut, emailErreur, notifInterneStatut, notifInterneErreur, fournisseurNom: fournisseur.nom, reference });
       onClose();
     } catch (e) {
       setFormError("Erreur : " + e.message);
@@ -519,6 +625,23 @@ function CommandeCard({ commande, auth, onChanged }) {
     }
   };
 
+  // Suppression complète : uniquement pour les brouillons (protégé aussi
+  // côté RLS — voir cmd_delete). Pour tout autre statut, seule "Annuler" est
+  // disponible, afin de garder une trace d'audit complète.
+  const handleDelete = async () => {
+    if (!window.confirm(`Supprimer définitivement le brouillon ${commande.reference ?? ""} ? Cette action est irréversible.`)) return;
+    setUpdating(true);
+    try {
+      await deleteCommande(commande.id);
+      success(`${commande.reference ?? "Brouillon"} supprimé.`);
+      onChanged();
+    } catch (e) {
+      toastError("Erreur : " + e.message);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   return (
     <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "18px 20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
@@ -564,6 +687,15 @@ function CommandeCard({ commande, auth, onChanged }) {
             {a.label}
           </button>
         ))}
+        {commande.statut === "brouillon" && (
+          <button
+            disabled={updating}
+            onClick={handleDelete}
+            style={{ padding: "7px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: updating ? "wait" : "pointer", border: "none", backgroundColor: "#FEF2F2", color: "#DC2626" }}
+          >
+            Supprimer
+          </button>
+        )}
         <button
           onClick={() => printBonCommandeDepuisHistorique(commande, auth)}
           style={{ padding: "7px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)" }}
@@ -720,11 +852,14 @@ export default function Fournisseurs() {
           etablissement_id={etablissement_id}
           auth={auth}
           onClose={() => setCommandModal(null)}
-          onSaved={({ emailStatut, emailErreur, fournisseurNom, reference }) => {
+          onSaved={({ emailStatut, emailErreur, notifInterneStatut, notifInterneErreur, fournisseurNom, reference }) => {
             if (emailStatut === "envoye") {
               success(`Commande ${reference} envoyée chez ${fournisseurNom} — email de confirmation transmis.`);
             } else {
               toastError(`Commande ${reference} enregistrée chez ${fournisseurNom}, mais l'email n'a pas pu être envoyé : ${emailErreur}`);
+            }
+            if (notifInterneStatut === "echec") {
+              toastError(`Commande ${reference} : la notification interne n'a pas pu être envoyée : ${notifInterneErreur}`);
             }
           }}
         />

@@ -4,7 +4,8 @@
  * Proxy d'envoi d'emails via Resend, côté serveur uniquement.
  * La clé RESEND_API_KEY ne quitte jamais le backend.
  *
- * Payload attendu : { to: string, subject: string, html: string }
+ * Payload attendu : { to: string, subject: string, html: string, attachments?: { filename: string, content: string }[] }
+ * attachments[].content = fichier encodé en base64 (ex: PDF généré par generate-bon-commande-pdf)
  * Cas spécial     : to === "admin_alert" → utilise ADMIN_ALERT_EMAIL (env var)
  *
  * Authentification : JWT Supabase valide obligatoire (Authorization: Bearer <jwt>)
@@ -23,10 +24,16 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+interface EmailAttachment {
+  filename: string;
+  content:  string; // base64
+}
+
 interface EmailPayload {
-  to:      string;
-  subject: string;
-  html:    string;
+  to:          string;
+  subject:     string;
+  html:        string;
+  attachments?: EmailAttachment[];
 }
 
 Deno.serve(async (req: Request) => {
@@ -63,7 +70,7 @@ Deno.serve(async (req: Request) => {
     return new Response("Invalid JSON", { status: 400, headers: CORS_HEADERS });
   }
 
-  const { to: toRaw, subject, html } = payload;
+  const { to: toRaw, subject, html, attachments } = payload;
   if (!toRaw || !subject || !html) {
     return new Response("Missing required fields: to, subject, html", { status: 400, headers: CORS_HEADERS });
   }
@@ -78,7 +85,10 @@ Deno.serve(async (req: Request) => {
       "Authorization": `Bearer ${RESEND_API_KEY}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ from: FROM_EMAIL, to: [to], subject, html }),
+    body: JSON.stringify({
+      from: FROM_EMAIL, to: [to], subject, html,
+      ...(attachments?.length ? { attachments } : {}),
+    }),
   });
 
   if (!res.ok) {
