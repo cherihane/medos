@@ -44,6 +44,30 @@ export async function insertVentes(rows) {
   return run(supabase.from("ventes").insert(rows).select());
 }
 
+// ─── Retours / remboursements ──────────────────────────────────────────────────
+// La vente d'origine (journal_caisse / ventes) n'est jamais modifiée ni
+// supprimée — ces enregistrements sont purement additifs (voir aussi
+// l'absence de policy UPDATE/DELETE côté RLS : un retour, une fois créé, est
+// définitif).
+export async function insertRetour(fields) {
+  return run(supabase.from("retours").insert(fields).select().single());
+}
+
+export async function insertRetourLignes(lignes) {
+  if (!lignes || lignes.length === 0) return [];
+  return run(supabase.from("retours_lignes").insert(lignes).select());
+}
+
+export async function fetchRetoursParJournalCaisseId(journalCaisseIds) {
+  if (!journalCaisseIds || journalCaisseIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from("retours")
+    .select("id, journal_caisse_id, motif, mode_remboursement, montant_total, created_by_email, created_at, retours_lignes(medicament_nom, quantite, prix_unitaire, montant)")
+    .in("journal_caisse_id", journalCaisseIds);
+  if (error) throw new Error(`retours: ${error.message}`);
+  return data ?? [];
+}
+
 // ─── Journal de caisse ────────────────────────────────────────────────────────
 // Colonnes : id, etablissement_id, caissier_id, caissier_email,
 //            montant_total, montant_recu, monnaie_rendue,
@@ -211,7 +235,7 @@ export async function insertMouvementStock(fields) {
 export async function fetchMouvementsStock({ etablissement_id, medicament_id, type, dateDebut, dateFin, limit = 100 }) {
   let q = supabase
     .from("mouvements_stock")
-    .select("id, type, quantite, motif, numero_bl, fournisseur, created_at, medicaments(nom, categorie)")
+    .select("id, type, quantite, motif, numero_bl, fournisseur, created_by_email, created_at, medicaments(nom, categorie)")
     .order("created_at", { ascending: false })
     .limit(limit);
   if (etablissement_id) q = q.eq("etablissement_id", etablissement_id);

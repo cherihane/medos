@@ -765,3 +765,74 @@ nom, ajout au panier). Une frappe humaine normale, même à Entrée, n'est jamai
 
 **Revalidation en production (medos.kelagroup.org)** après déploiement : section "Ticket de caisse"
 confirmée visible dans Paramètres avec les deux boutons 80mm/58mm.
+
+---
+
+## Caisse — Retours, destruction périmés, TVA, mentions légales (2026-07-20, session 7 suite)
+
+Quatre ajouts de conformité/gestion, testés en conditions réelles avec de vraies écritures en base.
+
+**1. Retours et remboursements.** Nouvelles tables
+[retours / retours_lignes](diagnostic/migrations/52-retours-destruction-tva-mentions.sql) — RLS en
+lecture/insertion seulement, **aucune policy UPDATE/DELETE** : un retour, une fois créé, est
+définitif, au même titre que `journal_caisse` (bandeau "IMMUABLE" déjà existant). Bouton "Retour /
+remboursement" ajouté sur chaque transaction du Journal du gérant
+([Caisse.jsx](src/pages/pharmacie/Caisse.jsx), `RetourModal`) : sélection des produits et quantités
+à retourner (pré-rempli avec tout, ajustable), motif obligatoire, mode de remboursement (par défaut
+le mode de paiement d'origine, modifiable). La vente d'origine (`ventes`, `journal_caisse`) n'est
+**jamais** modifiée ni supprimée — le retour crée uniquement un enregistrement séparé lié par
+`journal_caisse_id`, et réintègre le stock via les mêmes mutations que partout ailleurs
+(`incrementStock` + `insertMouvementStock` type "entree", motif "Retour client — …"). Le médicament
+de chaque ligne est retrouvé par correspondance de nom exact (`journal_caisse.detail` ne porte pas
+de `medicament_id`, volontairement non modifié pour ce chantier) ; si un article a été supprimé de
+l'inventaire depuis la vente, le retour bloque cette ligne avec un message explicite plutôt que de
+silencieusement ignorer la réintégration de stock. Les retours déjà enregistrés sur une vente
+s'affichent directement sous la transaction dans le Journal (qui, quoi, combien, motif).
+
+**2. Mise au rebut des périmés.** Type de mouvement `destruction` ajouté au `CHECK` de
+`mouvements_stock.type` (jusque-là seulement `entree`/`sortie`) + colonne `created_by_email` pour
+tracer qui a détruit sans jointure sur `auth.users`. Bouton "Détruire ce lot" dans
+[Peremptions.jsx](src/pages/pharmacie/Peremptions.jsx) (`DestructionModal`) : quantité (plafonnée au
+stock actuel), motif (liste + "Autre" libre), décrémente le stock via `decrementStock` et enregistre
+le mouvement. [Mouvements.jsx](src/pages/pharmacie/Mouvements.jsx) reconnaît désormais ce troisième
+type distinctement (badge et couleur propres, plus dans le filtre et le total KPI "Total détruit") —
+jamais confondu avec une "Sortie" manuelle ni avec une vente (qui ne passe toujours pas par
+`mouvements_stock`).
+
+**3. TVA configurable.** Colonne `etablissements.taux_tva` (0-100, défaut 0). Réglage éditable dans
+[Parametres.jsx](src/pages/Parametres.jsx) (rôle pharmacie uniquement, dans la section Informations
+de l'établissement). **Choix de conception important** : les prix de vente existants restent TTC —
+la TVA n'est jamais ajoutée par-dessus le total déjà utilisé partout (KPI caisse, clôture, écart de
+caisse, `journal_caisse.montant_total`) ; elle est seulement **isolée** de ce total
+(`HT = TTC / (1 + taux/100)`). Aucune donnée ni calcul existant n'est donc modifié, seule une
+répartition d'affichage est ajoutée : panier de Caisse (si taux > 0), ticket imprimé (lignes "Total
+HT" / "TVA (x%)" avant le "TOTAL TTC", dans les deux formats 58mm et 80mm), et dans Rapports (export
+CSV "Journal des ventes" avec colonnes HT/TVA par ligne, export Excel "Rapport mensuel" avec la
+répartition dans la feuille Resume).
+
+**4. Mentions légales.** Colonnes `etablissements.licence_pharmacien_responsable` et
+`mentions_legales` (texte libre, adaptable pays par pays), éditables dans Paramètres (rôle
+pharmacie). Affichées si renseignées : dans le pied de page de `openDocument()`
+([MedOSDocument.js](src/utils/MedOSDocument.js) — couvre tous ses appelants actuels : bons de
+commande Fournisseurs, exports Rapports, journal/clôture de Caisse) et directement dans le ticket de
+caisse (`printTicket`, avant "Merci de votre confiance"). **Note de périmètre** : le point demandait
+aussi les ordonnances, mais Ordonnances.jsx n'a actuellement aucune fonction d'impression/export —
+il n'y a donc rien à modifier là pour l'instant ; le moteur `MedOSDocument.js` est prêt à afficher
+ces mentions le jour où un tel document sera ajouté.
+
+**Preuve de test en conditions réelles (un seul scénario enchaîné) :**
+- Paramètres : taux de TVA réglé à 18%, licence "MSP-PHR-TEST-001", mentions "Pharmacie Mimi — RCCM
+  CG-BZV-TEST-001" → toast de confirmation.
+- Vente réelle de Doliprane ×2 (2 500 FCFA/u) avec ce taux → panier affiche "Total HT" (4 237 FCFA)
+  et "TVA (18%)" (763 FCFA) avant le TOTAL (5 000 FCFA) → ticket imprimé confirmé par capture
+  d'écran : mêmes montants HT/TVA/TTC, plus la licence et les mentions légales dans le pied de page.
+- Retour complet sur cette même vente (Journal du gérant → "Retour / remboursement", 2 unités,
+  motif "Test retour — produit non désiré") → vérifié en base : `retours` (montant 5 000, mode
+  "especes", motif) + `retours_lignes` (Doliprane ×2, 2 500/u) créés ; stock Doliprane revenu à 44
+  (valeur d'avant-vente, aller-retour exact) ; **vente d'origine intacte** (`ventes.quantite` toujours
+  2, `montant_total` toujours 5000 — vérifié directement en base après le retour) ; badge "↩ Retour"
+  visible sous la transaction dans le Journal, transaction elle-même inchangée (capture d'écran).
+- Destruction : médicament de test "Ibuprofene Test Destruction" (stock 25) → "Détruire ce lot",
+  quantité 10, motif "Péremption" → stock vérifié en base à 15 (25-10) → mouvement `type=destruction,
+  quantite=10, motif="Péremption", created_by_email` renseigné, confirmé visible dans Mouvements avec
+  son badge dédié.

@@ -177,6 +177,19 @@ const SHARED_CSS = `
   }
   .sign-box { border-top: 1.5px solid ${NAVY}; padding-top: 8px; font-size: 11px; color: #6B7280; }
 
+  /* ── Mentions légales ── */
+  .mentions-legales {
+    margin-top: 24px;
+    padding-top: 10px;
+    border-top: 1px dashed #E5E7EB;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 10px;
+    color: #6B7280;
+    line-height: 1.5;
+  }
+
   /* ── Pied de page ── */
   .doc-footer {
     margin-top: 36px;
@@ -331,14 +344,16 @@ export function etabFromAuth(auth) {
   };
 }
 
+const ETAB_FALLBACK = { largeur_ticket_mm: 80, taux_tva: 0, licence_pharmacien_responsable: "", mentions_legales: "" };
+
 /**
  * Construit l'objet établissement depuis le contexte auth en interrogeant la base de données.
  * Priorité : nom réel dans `etablissements` > auth.structure (si non générique) > auth.user.email > "MedOS".
  * @param {object|null} auth
- * @returns {Promise<{ nom: string, ville: string, type: string, largeur_ticket_mm: number }>}
+ * @returns {Promise<{ nom: string, ville: string, type: string, largeur_ticket_mm: number, taux_tva: number, licence_pharmacien_responsable: string, mentions_legales: string }>}
  */
 export async function fetchEtabFromAuth(auth) {
-  if (!auth) return { nom: "MedOS", ville: "", type: "", largeur_ticket_mm: 80 };
+  if (!auth) return { nom: "MedOS", ville: "", type: "", ...ETAB_FALLBACK };
 
   // 1. Cherche dans la table etablissements via etablissement_id
   if (auth.etablissement_id) {
@@ -346,7 +361,7 @@ export async function fetchEtabFromAuth(auth) {
       const { supabase } = await import("../supabaseClient");
       const { data } = await supabase
         .from("etablissements")
-        .select("nom, ville, type, largeur_ticket_mm")
+        .select("nom, ville, type, largeur_ticket_mm, taux_tva, licence_pharmacien_responsable, mentions_legales")
         .eq("id", auth.etablissement_id)
         .maybeSingle();
       if (data?.nom) {
@@ -355,6 +370,9 @@ export async function fetchEtabFromAuth(auth) {
           ville: data.ville || "",
           type:  data.type  || auth.label || "",
           largeur_ticket_mm: data.largeur_ticket_mm === 58 ? 58 : 80,
+          taux_tva: Number(data.taux_tva) || 0,
+          licence_pharmacien_responsable: data.licence_pharmacien_responsable || "",
+          mentions_legales: data.mentions_legales || "",
         };
       }
     } catch {
@@ -366,7 +384,7 @@ export async function fetchEtabFromAuth(auth) {
   const structure = auth.structure ?? "";
   if (!isGeneric(structure)) {
     const [ville = ""] = (auth.location ?? "").split(",");
-    return { nom: structure, ville: ville.trim(), type: auth.label ?? "", largeur_ticket_mm: 80 };
+    return { nom: structure, ville: ville.trim(), type: auth.label ?? "", ...ETAB_FALLBACK };
   }
 
   // 3. Email de l'utilisateur en dernier recours
@@ -374,7 +392,7 @@ export async function fetchEtabFromAuth(auth) {
     nom:   auth.user?.email || "MedOS",
     ville: "",
     type:  auth.label ?? "",
-    largeur_ticket_mm: 80,
+    ...ETAB_FALLBACK,
   };
 }
 
@@ -415,6 +433,17 @@ export function openDocument({
   const etabType  = etablissement.type  ?? "";
   const etabMeta  = [etabVille, etabType].filter(Boolean).join(" · ");
 
+  // Mentions légales — affichées uniquement si renseignées dans Paramètres
+  // (licence du pharmacien responsable + texte libre, adaptable pays par pays).
+  const licence  = etablissement.licence_pharmacien_responsable ?? "";
+  const mentions = etablissement.mentions_legales ?? "";
+  const mentionsLegalesHTML = (licence || mentions)
+    ? `<div class="mentions-legales">
+        ${licence ? `<span>Pharmacien responsable — Licence n° ${licence}</span>` : ""}
+        ${mentions ? `<span>${mentions}</span>` : ""}
+      </div>`
+    : "";
+
   const sectionsHTML = sections
     .map(({ titre: st, html }) => sectionHTML(st, html))
     .join("");
@@ -453,6 +482,8 @@ export function openDocument({
 
   <!-- Contenu -->
   ${sectionsHTML}
+
+  ${mentionsLegalesHTML}
 
   <!-- Pied de page -->
   <div class="doc-footer">

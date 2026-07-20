@@ -106,8 +106,19 @@ function downloadXLSX(filename, sheets) {
   XLSX.writeFile(wb, filename);
 }
 
+// Répartit un montant TTC en HT/TVA selon le taux établissement (prix de vente
+// déjà TTC — la TVA n'est jamais ajoutée par-dessus, seulement isolée du total
+// existant, pour ne rien changer aux montants déjà encaissés/enregistrés).
+function repartitionTva(montantTTC, tauxTva) {
+  if (!tauxTva) return { ht: montantTTC, tva: 0 };
+  const ht = montantTTC / (1 + tauxTva / 100);
+  return { ht, tva: montantTTC - ht };
+}
+
 async function exportVentesCSV(auth) {
   const etablissement_id = auth?.etablissement_id;
+  const etab = await fetchEtabFromAuth(auth);
+  const tauxTva = Number(etab.taux_tva) || 0;
   const { data } = await supabase
     .from("ventes")
     .select("created_at, medicament_nom, quantite, prix_unitaire, montant_total, mode_paiement")
@@ -117,15 +128,22 @@ async function exportVentesCSV(auth) {
 
   if (!data || data.length === 0) { throw new Error("Aucune vente trouvée."); }
 
-  const header = ["Date", "Médicament", "Quantité", "Prix unitaire", "Total", "Mode de paiement"];
-  const rows = data.map((v) => [
-    v.created_at ? new Date(v.created_at).toLocaleDateString("fr-FR") : "—",
-    v.medicament_nom ?? "—",
-    v.quantite ?? 0,
-    v.prix_unitaire ?? 0,
-    v.montant_total ?? 0,
-    v.mode_paiement ?? "—",
-  ]);
+  const header = tauxTva > 0
+    ? ["Date", "Médicament", "Quantité", "Prix unitaire", "Total TTC", "Dont HT", `Dont TVA (${tauxTva}%)`, "Mode de paiement"]
+    : ["Date", "Médicament", "Quantité", "Prix unitaire", "Total", "Mode de paiement"];
+  const rows = data.map((v) => {
+    const { ht, tva } = repartitionTva(v.montant_total ?? 0, tauxTva);
+    const base = [
+      v.created_at ? new Date(v.created_at).toLocaleDateString("fr-FR") : "—",
+      v.medicament_nom ?? "—",
+      v.quantite ?? 0,
+      v.prix_unitaire ?? 0,
+      v.montant_total ?? 0,
+    ];
+    return tauxTva > 0
+      ? [...base, Math.round(ht), Math.round(tva), v.mode_paiement ?? "—"]
+      : [...base, v.mode_paiement ?? "—"];
+  });
   downloadCSV(`journal_ventes_${new Date().toISOString().slice(0,10)}.csv`, [header, ...rows]);
 }
 
@@ -150,6 +168,8 @@ function exportInventaireXLSX(medicaments) {
 
 async function exportMensuelXLSX(auth) {
   const etablissement_id = auth?.etablissement_id;
+  const etab = await fetchEtabFromAuth(auth);
+  const tauxTva = Number(etab.taux_tva) || 0;
   const debut = new Date();
   debut.setDate(1); debut.setHours(0,0,0,0);
 
@@ -181,11 +201,16 @@ async function exportMensuelXLSX(auth) {
   const resumeHeader = ["Mode de paiement", "Total (FCFA)"];
   const resumeRows = Object.entries(byMode).map(([k, v]) => [k, v]);
   const totalGlobal = data.reduce((s, v) => s + (v.montant_total ?? 0), 0);
+  const { ht: totalHT, tva: totalTva } = repartitionTva(totalGlobal, tauxTva);
+
+  const resumeSheet = tauxTva > 0
+    ? [resumeHeader, ...resumeRows, [], ["Total TTC", totalGlobal], ["Dont Total HT", Math.round(totalHT)], [`Dont TVA (${tauxTva}%)`, Math.round(totalTva)]]
+    : [resumeHeader, ...resumeRows, ["TOTAL", totalGlobal]];
 
   const mois = debut.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
   downloadXLSX(`rapport_mensuel_${mois.replace(" ", "_")}.xlsx`, [
     { name: "Detail", data: [detailHeader, ...detailRows] },
-    { name: "Resume", data: [resumeHeader, ...resumeRows, ["TOTAL", totalGlobal]] },
+    { name: "Resume", data: resumeSheet },
   ]);
 }
 
