@@ -335,10 +335,10 @@ export function etabFromAuth(auth) {
  * Construit l'objet établissement depuis le contexte auth en interrogeant la base de données.
  * Priorité : nom réel dans `etablissements` > auth.structure (si non générique) > auth.user.email > "MedOS".
  * @param {object|null} auth
- * @returns {Promise<{ nom: string, ville: string, type: string }>}
+ * @returns {Promise<{ nom: string, ville: string, type: string, largeur_ticket_mm: number }>}
  */
 export async function fetchEtabFromAuth(auth) {
-  if (!auth) return { nom: "MedOS", ville: "", type: "" };
+  if (!auth) return { nom: "MedOS", ville: "", type: "", largeur_ticket_mm: 80 };
 
   // 1. Cherche dans la table etablissements via etablissement_id
   if (auth.etablissement_id) {
@@ -346,7 +346,7 @@ export async function fetchEtabFromAuth(auth) {
       const { supabase } = await import("../supabaseClient");
       const { data } = await supabase
         .from("etablissements")
-        .select("nom, ville, type")
+        .select("nom, ville, type, largeur_ticket_mm")
         .eq("id", auth.etablissement_id)
         .maybeSingle();
       if (data?.nom) {
@@ -354,6 +354,7 @@ export async function fetchEtabFromAuth(auth) {
           nom:   data.nom,
           ville: data.ville || "",
           type:  data.type  || auth.label || "",
+          largeur_ticket_mm: data.largeur_ticket_mm === 58 ? 58 : 80,
         };
       }
     } catch {
@@ -365,7 +366,7 @@ export async function fetchEtabFromAuth(auth) {
   const structure = auth.structure ?? "";
   if (!isGeneric(structure)) {
     const [ville = ""] = (auth.location ?? "").split(",");
-    return { nom: structure, ville: ville.trim(), type: auth.label ?? "" };
+    return { nom: structure, ville: ville.trim(), type: auth.label ?? "", largeur_ticket_mm: 80 };
   }
 
   // 3. Email de l'utilisateur en dernier recours
@@ -373,6 +374,7 @@ export async function fetchEtabFromAuth(auth) {
     nom:   auth.user?.email || "MedOS",
     ville: "",
     type:  auth.label ?? "",
+    largeur_ticket_mm: 80,
   };
 }
 
