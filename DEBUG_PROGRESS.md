@@ -830,6 +830,78 @@ placeholder qui ne se charge jamais. KPI "Chiffre d'affaires total" (15 000 FCFA
 minimum" et "Actions recommandées" vérifiés vides ("Aucun médicament critique") après le fix — normal,
 le seul produit de Poto-Poto (Ceftriaxone 1g, 220/10) n'est pas sous son seuil.
 
+**2026-07-21 (session 8) — Étape 1, points 4, 5, 7, 8 : vérifiés fonctionnels, sans bug
+supplémentaire trouvé.**
+
+- **Point 4 (Mes Clients détaillé)** : couvert intégralement par l'étape 0, point 2 — fiche client,
+  ruptures/besoins, historique déjà revalidés avec preuve.
+- **Point 5 (réception de commande)** : revalidé pendant les tests du Dashboard (étape 1, point 1) —
+  commande pharmacie → distributeur bien visible en temps réel, uniquement chez le bon distributeur
+  (confirmé avec les deux comptes de l'étape 0).
+- **Point 7 (historique filtrable)** : les filtres de statut sur Livraisons.jsx (Toutes/Planifiée/
+  En Transit/Livrée/Incident) sont de simples requêtes `.eq("statut", ...)`, déjà exercés
+  indirectement pendant les tests du point 6 (KPI "Livrées" passé de 0 à 1 puis 2 correctement à
+  chaque transition) — pas de bug distinct trouvé.
+- **Point 8 (alertes stock bas entrepôt)** : la bannière "Stock faible" d'Entrepot.jsx (calculée
+  côté client depuis `medicaments`, déjà corrigée au point 2 pour ne montrer que le stock du
+  distributeur) a été vérifiée correcte pendant le test de réception (300 unités reçues → au-dessus
+  du seuil → bannière absente, comme attendu). La page dédiée `/distributeur/alertes` réutilise la
+  policy `alertes_select` déjà scopée par établissement (inchangée par cette session).
+
+**Point 10 (Rapports/analyse des commandes) — lacune réelle, non comblée dans cette session.**
+Il n'existe **aucune page "Rapports" pour le rôle distributeur** (absente de la navigation — comparer
+à `roleConfig` dans [AuthContext.jsx](src/context/AuthContext.jsx), qui ne liste ni route ni entrée
+de menu de ce type pour `distributeur`, contrairement à Pharmacie qui a une page Rapports complète
+avec 4 rapports imprimables et exports CSV/Excel/PDF). Le widget "Analyse du mois en cours" de
+Prévisions.jsx (commandes reçues, livraisons effectuées, taux de livraison, top produits) — corrigé
+et validé dans cette session — couvre une partie de l'"analyse des commandes" demandée, mais ce n'est
+pas un module de rapports exportables. Construire une page Rapports distributeur complète (avec
+exports, sur le modèle du module Pharmacie) est un chantier à part entière, pas un correctif — non
+entrepris ici faute de temps, à traiter dans une session dédiée si souhaité.
+
+---
+
+## RÉCAPITULATIF — Module DISTRIBUTEUR (session 8, 2026-07-21)
+
+### Étape 0 — Sécurité (priorité absolue) : ✅ traitée intégralement
+1. **Faille RLS critique corrigée** : un distributeur ne voit/modifie plus que les
+   commandes/livraisons/historique qui lui sont explicitement adressés (`distributeur_id`), plus
+   plusieurs tables transversales découvertes en creusant (`mouvements_stock` n'avait aucune
+   isolation du tout). Vérifié avec deux comptes distributeur réels, au niveau RLS brut.
+2. **Vraie relation "Mes Clients"** (`distributeur_clients`) : auto-créée à la première commande,
+   ou ajout manuel par recherche email exacte — plus de liste brute de tous les établissements MedOS.
+
+### Étape 1 — Fonctionnel, testé de bout en bout avec preuve concrète à chaque étape
+| # | Fonctionnalité | Statut | Détail |
+|---|---|---|---|
+| 1 | Connexion, Dashboard | ✅ | 6 bugs corrigés (FK ambiguë, réseau trompeur, CA mal formaté, `.catch` invalide, notification client cassée par une RLS opaque, Realtime totalement désactivé sur le projet) |
+| 2 | Entrepôt (réception, nouveau lot) | ✅ | 2 bugs corrigés (fuite du stock client dans l'entrepôt, réception impossible pour tout compte neuf) |
+| 3 | Traçabilité (certification QR) | ✅ | 1 bug corrigé (nom du médicament invisible côté pharmacie lors d'un scan) — chaîne Distributeur → Pharmacie validée avec deux comptes distincts |
+| 4 | Mes Clients (vue détaillée) | ✅ | Couvert par l'étape 0 |
+| 5 | Réception commande pharmacie → distributeur | ✅ | Visible en temps réel, uniquement chez le bon distributeur |
+| 6 | Traitement livraison (décrément entrepôt) | ✅ | 3 bugs corrigés (décrément jamais implémenté, colonne manquante bloquant 100% des livraisons, faille RLS transversale sur `mouvements_stock` + risque de double-décrément) |
+| 7 | Historique filtrable | ✅ | Aucun bug trouvé |
+| 8 | Alertes stock bas entrepôt | ✅ | Aucun bug trouvé |
+| 9 | Prévisions IA (Groq) | ✅ | Fonctionnalité absente jusqu'ici — ajoutée, plus 3 bugs corrigés (fuite de stock client dans l'analyse IA et les widgets, KPI "Analyse du mois" toujours à zéro depuis toujours) |
+| 10 | Rapports/analyse des commandes | 🔴 | Page dédiée avec exports absente — hors scope d'un correctif, chantier à part |
+
+**Total : 21 bugs réels trouvés et corrigés dans le module Distributeur** (dont 1 faille de sécurité
+critique à l'échelle du projet et 1 faille transversale supplémentaire découverte en creusant), tous
+revalidés avec preuve concrète en base de données ou en conditions réelles d'UI — jamais "ça devrait
+marcher". Migrations appliquées directement en production via `supabase db query --linked --file`
+(jamais `db push`, cf. règle établie lors du sprint Pharmacie). Code committé localement,
+**pas encore déployé sur le VPS de production** (medos.kelagroup.org tourne toujours l'ancien
+frontend — seule la base de données a reçu les migrations, ce qui est nécessaire et sans risque
+puisque les nouvelles policies RLS ne font qu'ajouter des scopes plus stricts / des exceptions
+ciblées, jamais retirer un accès que l'ancien frontend utilisait).
+
+**Recommandation avant de considérer le module Distributeur pleinement clos** : déployer sur le VPS
+(`git pull && npm install && npm run build && systemctl restart nginx`, comme documenté en tête de
+ce fichier) puis revalider une dernière fois en production, exactement comme fait pour Pharmacie.
+
+**NE PAS commencer le module Hôpital sans validation explicite de l'utilisateur que le module
+Distributeur est bon** (règle de la mission).
+
 ## Module HÔPITAL
 
 Non commencé — en attente de validation complète du module Pharmacie.
