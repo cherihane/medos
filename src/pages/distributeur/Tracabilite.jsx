@@ -312,7 +312,7 @@ export default function Tracabilite() {
               style={{ width: "100%", height: 160, backgroundColor: "#0A1628", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16, cursor: "pointer", position: "relative", overflow: "hidden" }}>
               <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse at center, rgba(245,158,11,0.15) 0%, transparent 70%)" }} />
               <div style={{ textAlign: "center", position: "relative" }}>
-                <div style={{ fontSize: 32, marginBottom: 8 }}>📷</div>
+                <Camera size={32} color="rgba(255,255,255,0.5)" style={{ marginBottom: 8 }} />
                 <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12 }}>Cliquer pour activer la caméra</div>
                 <div style={{ color: "rgba(255,255,255,0.35)", fontSize: 11, marginTop: 2 }}>QR code / Code-barres</div>
               </div>
@@ -399,7 +399,7 @@ export default function Tracabilite() {
             <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Résultat</h3>
             {!result && !loading && (
               <div style={{ textAlign: "center", color: colors.textMuted, padding: "30px 0" }}>
-                <div style={{ fontSize: 32, marginBottom: 8 }}>🔍</div>
+                <Search size={32} color={colors.textMuted} style={{ marginBottom: 8 }} />
                 <div style={{ fontSize: 13 }}>En attente de scan…</div>
               </div>
             )}
