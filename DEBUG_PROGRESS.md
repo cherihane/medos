@@ -1025,6 +1025,40 @@ la relancer. Reconstruit sur le modèle exact du couple Fournisseurs/Commandes d
 - **Incrément de stock vérifié en base** après passage à "Reçue" : Ceftriaxone 1g 180→230 (+50 exact),
   Paracetamol Injectable 125→155 (+30 exact) — correspond exactement aux quantités commandées.
 
+**Point 5 — Scan-pour-enregistrer depuis Traçabilité (quantité + lot par médicament). ✅**
+
+Le scanner de `Tracabilite.jsx` ne servait qu'à *vérifier* l'authenticité d'un médicament — aucune
+action ne permettait d'enregistrer une réception physique directement depuis un scan, il fallait
+ressaisir manuellement dans l'écran Entrepôt. Ajout d'un second bouton "Enregistrer dans l'entrepôt"
+à côté de "Vérifier l'authenticité", sur le même modèle que le "scan-pour-ajouter" de l'Inventaire
+pharmacie :
+- Réutilise directement `rechercherLotPourPrefill()` (déjà utilisée par Inventaire.jsx) : si le code
+  scanné correspond à un lot déjà certifié MedOS, les champs (nom, forme, fabricant, prix, date de
+  péremption) sont pré-remplis automatiquement.
+- Nouvelle `ModalScanEnregistrer` : demande uniquement la quantité reçue (+ fabricant, dates
+  optionnelles) puisque le médicament est déjà identifié par le scan ou la saisie ; réutilise la
+  fiche médicament existante du distributeur si le nom correspond (insensible à la casse), sinon en
+  crée une nouvelle — même logique que `ModalReception` de l'écran Entrepôt.
+- Un seul numéro de lot MedOS (`MEDOS-AAAA-DIST-XXXXX`) est généré **par appel, donc par médicament**
+  — cette action ne traite qu'un seul produit à la fois (contrairement à un panier multi-produits), ce
+  qui garantit structurellement qu'on n'obtient jamais un numéro de lot unique partagé entre plusieurs
+  produits reçus ensemble.
+- À la validation : création du lot (`insertLot`) + incrément du stock (`incrementStock`), exactement
+  comme la réception classique.
+
+**Testé en conditions réelles (Poto-Poto), les deux cas de figure :**
+- Produit déjà au catalogue : "Ceftriaxone 1g" saisi → message "Produit déjà dans votre catalogue —
+  le stock sera incrémenté." → fabricant "Sanofi", quantité 40 → lot `MEDOS-2026-DIST-DXO9H` créé →
+  toast "40 unités de Ceftriaxone 1g ajoutées à l'entrepôt" → **vérifié en base** : `lots` contient
+  bien le nouveau lot (quantite_initiale 40, medicament_id correct), `medicaments.stock_actuel`
+  180→220 (+40 exact).
+- Produit inconnu : "Amoxicilline 500mg Test" saisi → message "Nouveau produit — une fiche sera créée
+  dans votre catalogue." → fabricant "GSK", quantité 15 → lot `MEDOS-2026-DIST-WQNCP` créé → **vérifié
+  en base** : nouvelle fiche `medicaments` créée avec `stock_actuel = 15`, lot bien lié par
+  `medicament_id`, quantite_initiale = 15.
+- Données de test nettoyées après validation (lots et médicament de test supprimés, stock de
+  Ceftriaxone 1g ramené à 180).
+
 ## Module HÔPITAL
 
 Non commencé — en attente de validation complète du module Pharmacie.
