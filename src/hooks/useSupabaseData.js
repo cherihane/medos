@@ -211,10 +211,16 @@ function useQuery(fn, deps = []) {
 }
 
 // ─── médicaments ─────────────────────────────────────────────────────────────
-export function useMedicaments() {
-  return useQuery(() =>
-    supabase.from("medicaments").select("*").order("nom", { ascending: true }).limit(500)
-  );
+// etablissement_id : filtre explicite optionnel — nécessaire pour un
+// distributeur, dont le RLS laisse aussi passer le stock de ses clients
+// réels (médicaments) en plus du sien (voir med_select_distributeur_clients) ;
+// sans ce filtre, "son" entrepôt afficherait aussi le stock de ses clients.
+export function useMedicaments(etablissement_id = null) {
+  return useQuery(() => {
+    let q = supabase.from("medicaments").select("*").order("nom", { ascending: true }).limit(500);
+    if (etablissement_id) q = q.eq("etablissement_id", etablissement_id);
+    return q;
+  }, [etablissement_id]);
 }
 
 export function useMedicamentsCritiques(limit = 8) {

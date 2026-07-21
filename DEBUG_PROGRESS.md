@@ -714,6 +714,51 @@ Fournisseurs.jsx pharmacie (`MesCommandesPanel`/`CommandesTab` — bénéficient
 correctifs FK/realtime, à revalider), traitement livraison (décrément stock entrepôt), historique
 filtrable, alertes stock bas entrepôt, Prévisions IA, Rapports.
 
+**2026-07-21 (session 8) — Étape 1, point 2 : Entrepôt — 2 bugs trouvés et corrigés.**
+
+1. **`useMedicaments()` sans filtre fuyait le stock des clients dans "son" entrepôt.** La policy
+   `med_select_distributeur_clients` (étape 0, pour que la fiche client affiche ses ruptures) rend
+   aussi visibles les médicaments d'un CLIENT réel à son distributeur — `Entrepot.jsx` utilisait
+   `useMedicaments()` sans filtre, donc son propre tableau "Entrepôt" (et la liste déroulante de la
+   modale de réception) aurait mélangé le stock du distributeur ET celui de ses clients, avec un
+   risque réel d'incrémenter par erreur le stock d'une pharmacie cliente au lieu du sien. Corrigé :
+   `useMedicaments(etablissement_id)` accepte désormais un filtre explicite optionnel, passé par
+   `Entrepot.jsx` avec son propre `auth.etablissement_id` — la RLS reste une deuxième ligne de
+   défense, pas le seul filtre.
+2. **Réception impossible pour tout distributeur neuf.** La modale "Réceptionner livraison" ne
+   proposait qu'un `<select>` de médicaments déjà existants — un distributeur neuf (0 médicament
+   dans son propre catalogue) n'avait donc AUCUN moyen de réceptionner son tout premier arrivage.
+   Remplacé par un champ texte (+ `datalist` de suggestion) : un nom déjà connu incrémente le stock
+   existant, un nom nouveau crée automatiquement la fiche médicament (`insertMedicament`, contrainte
+   `UNIQUE(nom, etablissement_id)` déjà en place) avant de générer le lot.
+
+**Revalidé en conditions réelles** : compte Poto-Poto (0 référence au départ) → réception de
+"Ceftriaxone 1g" (Sanofi, 300 unités, péremption 30/06/2027) → lot `MEDOS-2026-DIST-5JDUD` généré →
+vérifié en base (`medicaments.etablissement_id` = Poto-Poto, `stock_actuel` = 300, `lots.medicament_id`
+correctement lié) → tableau Entrepôt affiche "1 total références", "840 000 FCFA" de valeur de stock.
+
+**2026-07-21 (session 8) — Étape 1, point 3 : Traçabilité — 1 bug trouvé et corrigé, chaîne
+Distributeur → Pharmacie validée de bout en bout.**
+
+Le lot `MEDOS-2026-DIST-5JDUD` généré côté distributeur est bien listé et vérifiable comme "Certifié
+MedOS" dans Traçabilité (distributeur). Mais testé depuis la Pharmacie (comme demandé explicitement —
+"vérifie... scannable ensuite depuis pharmacie") : `lots` est bien lisible (registre partagé, déjà
+volontairement public depuis le sprint Pharmacie), mais la jointure `lots.medicaments(nom)` renvoyait
+`medicaments: null` pour toute pharmacie autre que le distributeur propriétaire — l'isolation
+`medicaments` par établissement (posée pendant le sprint Pharmacie) bloque aussi la lecture du NOM du
+médicament lors d'une simple vérification d'authenticité, alors que le lot lui-même est déjà public.
+Corrigé par une policy scopée supplémentaire (`med_select_via_lot_public`) : un médicament référencé
+par au moins un lot (donc déjà dans le registre anti-contrefaçon public) devient lisible par
+n'importe quel établissement membre — cohérent avec le fait que `lots` est déjà public, pas une
+extension de la surface d'exposition.
+
+**Revalidé en conditions réelles, des deux côtés** : côté distributeur (Poto-Poto), scan/saisie du
+lot → "Certifié MedOS", tous les détails corrects. Côté pharmacie (Pharmacie Mimi, compte
+complètement différent, aucune relation commerciale avec Poto-Poto à ce stade) → même lot saisi dans
+Scanner Contrefaçons → **"Certifié MedOS — Lot enregistré par un distributeur certifié"**, médicament
+"Ceftriaxone 1g" correctement affiché. Preuve que la chaîne de confiance MedOS fonctionne
+effectivement entre les deux rôles, pas seulement en interne au distributeur.
+
 ## Module HÔPITAL
 
 Non commencé — en attente de validation complète du module Pharmacie.
