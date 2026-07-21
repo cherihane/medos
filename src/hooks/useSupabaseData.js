@@ -132,6 +132,42 @@ export function useCommandesPaginated(etablissement_id = null, pageSize = 20, fi
   }, [etablissement_id, statut, fournisseur_id, search], pageSize);
 }
 
+// Commandes passées à des fabricants (module Distributeur) — même table que
+// useCommandesPaginated, filtrée sur fabricant_id non nul pour ne jamais
+// mélanger avec les commandes fournisseur du module Pharmacie.
+export function useCommandesFabricantPaginated(etablissement_id = null, pageSize = 20, filtres = {}) {
+  const { statut = "", fabricant_id = "", search = "" } = filtres;
+  return usePaginated(() => {
+    let q = supabase.from("commandes").select(`
+      id, reference, statut, date_commande, date_livraison_prevue, montant_total, notes,
+      email_statut, email_erreur,
+      fabricants ( id, nom, telephone, email ),
+      commande_lignes ( id, medicament_id, medicament_nom, quantite, prix_unitaire )
+    `, { count: "exact" }).not("fabricant_id", "is", null).order("date_commande", { ascending: false });
+    if (etablissement_id) q = q.eq("etablissement_id", etablissement_id);
+    if (statut) q = q.eq("statut", statut);
+    if (fabricant_id) q = q.eq("fabricant_id", fabricant_id);
+    if (search.trim()) q = q.ilike("reference", `%${search.trim()}%`);
+    return q;
+  }, [etablissement_id, statut, fabricant_id, search], pageSize);
+}
+
+export function useFabricantsPaginated(filtre = "actifs", pageSize = 20) {
+  return usePaginated(() => {
+    let q = supabase.from("fabricants").select("*", { count: "exact" }).order("nom");
+    if (filtre === "actifs")   q = q.eq("actif", true);
+    if (filtre === "inactifs") q = q.eq("actif", false);
+    return q;
+  }, [filtre], pageSize);
+}
+
+// Liste simple (non paginée) des fabricants actifs — pour les menus déroulants
+export function useFabricants() {
+  return useQuery(() =>
+    supabase.from("fabricants").select("id, nom, email, telephone").eq("actif", true).order("nom"),
+  []);
+}
+
 // Historique des changements de statut d'une commande (append-only, voir trigger SQL)
 export function useCommandeHistorique(commande_id) {
   return useQuery(() => {

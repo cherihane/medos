@@ -204,6 +204,15 @@ export async function updateFournisseur(id, fields) {
   return run(supabase.from("fournisseurs").update(fields).eq("id", id).select().single());
 }
 
+// ─── Fabricants (contacts externes du distributeur) ────────────────────────────
+export async function insertFabricant(fields) {
+  return run(supabase.from("fabricants").insert(fields).select().single());
+}
+
+export async function updateFabricant(id, fields) {
+  return run(supabase.from("fabricants").update(fields).eq("id", id).select().single());
+}
+
 // ─── Clôtures de caisse ───────────────────────────────────────────────────────
 export async function insertClotureCaisse(fields) {
   return run(supabase.from("clotures_caisse").insert(fields).select().single());

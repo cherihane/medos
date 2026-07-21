@@ -47,6 +47,7 @@ interface BonCommandePayload {
   reference?:        string;
   etablissementNom?: string;
   fournisseur?:       { nom?: string; telephone?: string; email?: string; pays?: string };
+  entiteLabel?:       string; // "FOURNISSEUR" (défaut) ou "FABRICANT"
   medicamentNom?:     string;
   quantite?:          number | string;
   lignes?:            { nom?: string; quantite?: number | string }[];
@@ -86,6 +87,7 @@ Deno.serve(async (req: Request) => {
 
   const {
     reference = "", etablissementNom = "MedOS", fournisseur = {},
+    entiteLabel = "FOURNISSEUR",
     medicamentNom = "—", quantite = "—", lignes,
     dateLivraison = null, montantTotal = 0, notes = "",
   } = payload;
@@ -119,7 +121,7 @@ Deno.serve(async (req: Request) => {
     page.drawLine({ start: { x: left, y }, end: { x: right, y }, thickness: 1.5, color: navy });
     y -= 32;
 
-    page.drawText("Bon de commande fournisseur", { x: left, y, size: 16, font: bold, color: black });
+    page.drawText(pdfSafe(`Bon de commande ${entiteLabel.toLowerCase()}`), { x: left, y, size: 16, font: bold, color: black });
     y -= 18;
     const dateFr = new Date().toLocaleDateString("fr-FR");
     page.drawText(pdfSafe(`${reference} — Émis le ${dateFr}`), { x: left, y, size: 10, font, color: gray });
@@ -134,11 +136,11 @@ Deno.serve(async (req: Request) => {
       y -= 17;
     };
 
-    section("FOURNISSEUR");
+    section(entiteLabel);
     ligne(`Nom : ${fournisseur.nom ?? "—"}`);
     ligne(`Téléphone : ${fournisseur.telephone ?? "—"}`);
     ligne(`Email : ${fournisseur.email ?? "—"}`);
-    ligne(`Pays : ${fournisseur.pays ?? "—"}`);
+    if (entiteLabel === "FOURNISSEUR") ligne(`Pays : ${fournisseur.pays ?? "—"}`);
     y -= 14;
 
     section("DÉTAILS DE LA COMMANDE");
