@@ -976,6 +976,55 @@ ou supprimer une fiche. Ajouté :
   ligne a bien disparu** de `medicaments` (requête directe post-suppression : seuls Ceftriaxone 1g
   et Paracetamol Injectable — `actif: true` — subsistent pour cet établissement).
 
+**Point 4 — Historique des commandes fabricant (onglet, email, PDF, impression). ✅**
+
+Le bouton "Nouvelle commande fabricant" existait déjà mais était entièrement ad-hoc : le fabricant
+était ressaisi en texte libre à chaque commande (jamais persisté), tout le contenu (fabricant +
+lignes) était compressé dans `commandes.notes` en JSON au lieu de vraies lignes exploitables, et il
+n'existait aucun écran d'historique — impossible de retrouver une commande passée, son statut ou de
+la relancer. Reconstruit sur le modèle exact du couple Fournisseurs/Commandes de la Pharmacie :
+- Nouvelle table `fabricants` (migration `20260722b_fabricants_et_commandes_historique.sql`) : contact
+  externe (nom/email/téléphone/notes/actif), RLS scopée par `mes_etablissements()` comme
+  `fournisseurs` — jamais de compte MedOS associé, conformément à la consigne ("le fabricant est une
+  entité externe"). Colonne `commandes.fabricant_id` ajoutée en parallèle de `fournisseur_id`
+  existant — aucune modification des policies RLS de `commandes`/`commande_lignes` nécessaire
+  (déjà scopées génériquement par `etablissement_id`).
+- Trois nouveaux onglets sur `Entrepot.jsx` : **Stock** (existant), **Fabricants** (CRUD des contacts —
+  ajout/modification/désactivation-réactivation, mêmes composants que Fournisseurs.jsx en plus
+  simple), **Commandes** (historique filtrable par statut/référence, badge email envoyé/échoué,
+  actions de transition de statut envoyée→confirmée→en transit→reçue/annulée, historique de statut
+  dépliable, bouton "Voir le bon de commande").
+- `ModalCommandeFabricant` reconstruite : sélection d'un fabricant déjà enregistré (auto-remplissage)
+  ou saisie libre d'un nouveau (créé à la volée, réutilisable ensuite) ; panier multi-médicaments ;
+  à l'envoi, insertion réelle de `commande_lignes` (au lieu du JSON dans `notes`) ; génération d'un
+  PDF du bon de commande côté serveur (`generate-bon-commande-pdf`, paramètre `entiteLabel` ajouté
+  pour afficher "FABRICANT" au lieu de "FOURNISSEUR" — fonction redéployée) attaché à l'email envoyé
+  via `send-app-email` ; `email_statut`/`email_erreur` tracés sur la commande sans jamais bloquer
+  l'enregistrement si l'envoi échoue (même pattern que `CommandeModal` de Fournisseurs.jsx).
+- Marquer une commande "Reçue" incrémente désormais le stock de l'entrepôt du distributeur pour
+  chaque ligne (`incrementStock` par `medicament_id`) — un fabricant est un tiers externe, il n'existe
+  pas de flux `livraisons` côté client pour cette réception comme pour les clients MedOS.
+
+**Testé en conditions réelles (Poto-Poto), preuve complète de bout en bout :**
+- Fabricant "Sanofi Congo" créé via l'onglet Fabricants (email personnel de test pour vérifier la
+  réception réelle) → visible immédiatement dans la liste, badge "actif".
+- Nouvelle commande : sélection de "Sanofi Congo" dans le menu déroulant → auto-remplissage
+  nom/email/téléphone confirmé → panier à 2 médicaments (Ceftriaxone 1g × 50, Paracetamol Injectable
+  × 30) → "Envoyer le bon de commande" → commande `CMD-60228929` créée, statut "Envoyée", badge
+  "Envoyé" vert.
+- **Vérifié en base** : `commandes.fabricant_id` renseigné et jointure `fabricants` correcte,
+  `email_statut = "envoye"`, `email_erreur = null`, deux lignes dans `commande_lignes`
+  (Ceftriaxone × 50, Paracetamol Injectable × 30).
+- **Email réellement reçu dans Gmail** (recherche directe dans la boîte, pas une supposition) :
+  sujet "Bon de commande MedOS — 2 médicaments (80 unités)", corps HTML correct (tableau des 2
+  médicaments, total 80 unités), **pièce jointe `bon-de-commande-CMD-60228929.pdf` confirmée
+  présente** (`mimeType: application/pdf`) — preuve que la génération PDF serveur et l'attachement à
+  l'email fonctionnent bout en bout, pas seulement que l'appel à la fonction ne plante pas.
+- Cycle de statut complet testé dans l'onglet Commandes : "Marquer confirmée" → "Confirmée" ;
+  "Marquer en transit" → "En transit" ; "Marquer reçue" → "Reçue", toast "stock entrepôt mis à jour".
+- **Incrément de stock vérifié en base** après passage à "Reçue" : Ceftriaxone 1g 180→230 (+50 exact),
+  Paracetamol Injectable 125→155 (+30 exact) — correspond exactement aux quantités commandées.
+
 ## Module HÔPITAL
 
 Non commencé — en attente de validation complète du module Pharmacie.

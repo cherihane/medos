@@ -11,11 +11,12 @@ import { useState, useCallback, useEffect } from "react";
 import Layout from "../../components/Layout";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
-import { useMedicaments } from "../../hooks/useSupabaseData";
-import { insertLot, incrementStock, insertCommande, insertMedicament, updateMedicament, deleteMedicament } from "../../hooks/useMutations";
+import { useMedicaments, useFabricants, useFabricantsPaginated, useCommandesFabricantPaginated, useCommandeHistorique } from "../../hooks/useSupabaseData";
+import { insertLot, incrementStock, insertCommande, updateCommande, deleteCommande, insertCommandeLignes, insertFabricant, updateFabricant, insertMedicament, updateMedicament, deleteMedicament } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../supabaseClient";
 import { openDocument, tableHTML, infoGridHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
+import Pagination from "../../components/Pagination";
 
 function printBonCommandeFabricant({ header, lignes, etab }) {
   const dateFr = new Date().toLocaleDateString("fr-FR");
@@ -48,8 +49,28 @@ function printBonCommandeFabricant({ header, lignes, etab }) {
 
 // ── Email (via Edge Function sécurisée) ───────────────────────────────────────
 
+// Génère le PDF du bon de commande côté serveur (mêmes données que
+// printBonCommandeFabricant), pour l'attacher à l'email envoyé au fabricant.
+// Retourne null si la génération échoue — l'envoi continue sans pièce jointe.
+async function genererPieceJointeBonCommandeFabricant({ fabricantNom, emailFabricant, lignes, dateLivraison, notes, etabNom, reference }) {
+  try {
+    const { data, error } = await supabase.functions.invoke("generate-bon-commande-pdf", {
+      body: {
+        reference, etablissementNom: etabNom, entiteLabel: "FABRICANT",
+        fournisseur: { nom: fabricantNom, email: emailFabricant },
+        lignes: lignes.map((l) => ({ nom: l.medicamentNom, quantite: l.quantite })),
+        dateLivraison, notes,
+      },
+    });
+    if (error || !data?.pdfBase64) return null;
+    return { filename: data.filename, content: data.pdfBase64 };
+  } catch {
+    return null;
+  }
+}
+
 // lignes = [{ medicamentNom, quantite }]
-async function sendCommandeEmail({ emailFabricant, fabricant, lignes, dateLivraison, notes, distributeur }) {
+async function sendCommandeEmail({ emailFabricant, fabricant, lignes, dateLivraison, notes, distributeur, pieceJointe }) {
   const dateStr = dateLivraison
     ? new Date(dateLivraison).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })
     : "Non précisée";
@@ -114,13 +135,17 @@ async function sendCommandeEmail({ emailFabricant, fabricant, lignes, dateLivrai
   </div>
 </div>`;
 
-  await supabase.functions.invoke("send-app-email", {
+  const { error } = await supabase.functions.invoke("send-app-email", {
     body: {
       to:      emailFabricant,
       subject: `Bon de commande MedOS — ${lignes.length} médicament${lignes.length > 1 ? "s" : ""} (${totalQty.toLocaleString("fr-FR")} unités)`,
       html,
+      ...(pieceJointe ? { attachments: [pieceJointe] } : {}),
     },
   });
+  if (error) {
+    throw new Error(`L'email n'a pas pu être envoyé à ${emailFabricant} : ${error.message}`);
+  }
 }
 
 // ── Utilitaires ───────────────────────────────────────────────────────────────
@@ -358,12 +383,20 @@ function ModalReception({ medicaments, etablissement_id, onClose, onSuccess }) {
 const LIGNE_VIDE = () => ({ id: Date.now() + Math.random(), medicament_id: "", quantite: "" });
 
 function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id, auth, onClose, onSuccess }) {
-  const [header, setHeader] = useState({ email_fabricant: "", fabricant: "", date_livraison: "", notes: "" });
+  const { data: fabricants } = useFabricants();
+  const [fabricantSelectionId, setFabricantSelectionId] = useState("");
+  const [header, setHeader] = useState({ email_fabricant: "", fabricant: "", telephone: "", date_livraison: "", notes: "" });
   const [lignes, setLignes] = useState([LIGNE_VIDE()]);
   const [saving, setSaving] = useState(false);
   const [err, setErr]       = useState(null);
 
   const setH = (k, v) => setHeader((h) => ({ ...h, [k]: v }));
+
+  const selectFabricant = (id) => {
+    setFabricantSelectionId(id);
+    const f = fabricants.find((x) => x.id === id);
+    if (f) setHeader((h) => ({ ...h, fabricant: f.nom, email_fabricant: f.email || "", telephone: f.telephone || "" }));
+  };
 
   const setLigne = (id, k, v) =>
     setLignes((ls) => ls.map((l) => l.id === id ? { ...l, [k]: v } : l));
@@ -375,6 +408,7 @@ function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id
 
   const handleSubmit = async () => {
     setErr(null);
+    if (!header.fabricant.trim()) { setErr("Le nom du fabricant est obligatoire."); return; }
     if (!header.email_fabricant.trim() || !header.email_fabricant.includes("@")) {
       setErr("Email du fabricant invalide."); return;
     }
@@ -390,33 +424,76 @@ function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id
         return { medicament_id: l.medicament_id, medicamentNom: med?.nom ?? "", quantite: parseInt(l.quantite, 10) };
       });
 
-      const notesJSON = JSON.stringify({
-        fabricant:      header.fabricant.trim() || null,
-        email_fabricant: header.email_fabricant.trim(),
-        livraison:      header.date_livraison || null,
-        instructions:   header.notes.trim() || null,
-        lignes:         lignesPayload.map(({ medicamentNom, quantite }) => ({ medicamentNom, quantite })),
-      });
+      // Résout le fabricant : contact existant sélectionné (ou retrouvé par
+      // email), sinon nouvelle fiche créée à la volée — réutilisable pour les
+      // prochaines commandes, sans jamais créer de compte MedOS.
+      let fabricantId = fabricantSelectionId || null;
+      if (!fabricantId) {
+        const existant = fabricants.find((f) => f.email && f.email.toLowerCase() === header.email_fabricant.trim().toLowerCase());
+        if (existant) {
+          fabricantId = existant.id;
+        } else {
+          const nouveau = await insertFabricant({
+            nom: header.fabricant.trim(),
+            email: header.email_fabricant.trim(),
+            telephone: header.telephone.trim() || null,
+            actif: true,
+            ...(etablissement_id ? { etablissement_id } : {}),
+          });
+          fabricantId = nouveau.id;
+        }
+      }
 
-      await insertCommande({
+      const reference = "CMD-" + Date.now().toString().slice(-8);
+      const commande = await insertCommande({
+        reference,
+        fabricant_id:          fabricantId,
         statut:                "envoyee",
         date_commande:         new Date().toISOString(),
         date_livraison_prevue: header.date_livraison || null,
         montant_total:         0,
-        notes:                 notesJSON,
+        notes:                 header.notes.trim() || null,
         ...(etablissement_id ? { etablissement_id } : {}),
       });
 
-      await sendCommandeEmail({
-        emailFabricant: header.email_fabricant.trim(),
-        fabricant:      header.fabricant.trim(),
-        lignes:         lignesPayload,
-        dateLivraison:  header.date_livraison,
-        notes:          header.notes.trim(),
-        distributeur:   distributeurNom,
+      await insertCommandeLignes(lignesPayload.map((l) => ({
+        commande_id:      commande.id,
+        etablissement_id: etablissement_id ?? null,
+        medicament_id:    l.medicament_id,
+        medicament_nom:   l.medicamentNom,
+        quantite:         l.quantite,
+      })));
+
+      const etab = await fetchEtabFromAuth(auth);
+      const pieceJointe = await genererPieceJointeBonCommandeFabricant({
+        fabricantNom: header.fabricant.trim(), emailFabricant: header.email_fabricant.trim(),
+        lignes: lignesPayload, dateLivraison: header.date_livraison, notes: header.notes.trim(),
+        etabNom: etab.nom, reference,
       });
 
-      onSuccess(`Bon de commande envoyé à ${header.email_fabricant.trim()} — ${lignesPayload.length} médicament${lignesPayload.length > 1 ? "s" : ""}.`);
+      // L'email est une étape distincte de l'enregistrement de la commande :
+      // la commande reste valide même si l'envoi échoue, mais le statut réel
+      // est toujours tracé et remonté honnêtement à l'utilisateur.
+      let emailStatut = "non_envoye";
+      let emailErreur = null;
+      try {
+        await sendCommandeEmail({
+          emailFabricant: header.email_fabricant.trim(),
+          fabricant:      header.fabricant.trim(),
+          lignes:         lignesPayload,
+          dateLivraison:  header.date_livraison,
+          notes:          header.notes.trim(),
+          distributeur:   distributeurNom,
+          pieceJointe,
+        });
+        emailStatut = "envoye";
+      } catch (emailErr) {
+        emailStatut = "echec";
+        emailErreur = emailErr.message;
+      }
+      await updateCommande(commande.id, { email_statut: emailStatut, email_erreur: emailErreur });
+
+      onSuccess({ emailStatut, emailErreur, reference, fabricantNom: header.fabricant.trim(), nbLignes: lignesPayload.length });
     } catch (e) {
       setErr(e.message);
       setSaving(false);
@@ -437,24 +514,40 @@ function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id
             <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: colors.textMuted, lineHeight: 1, flexShrink: 0 }}>×</button>
           </div>
 
+          {/* Sélection d'un fabricant déjà enregistré (optionnel) */}
+          {fabricants.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <label style={labelStyle}>Fabricant enregistré</label>
+              <select value={fabricantSelectionId} onChange={(e) => selectFabricant(e.target.value)} style={{ ...inputStyle, backgroundColor: colors.bgCard }}>
+                <option value="">— Nouveau fabricant (saisie libre) —</option>
+                {fabricants.map((f) => <option key={f.id} value={f.id}>{f.nom}{f.email ? ` (${f.email})` : ""}</option>)}
+              </select>
+            </div>
+          )}
+
           {/* Champs en-tête */}
           <div className="form-row-2" style={{ marginBottom: 12 }}>
             <div>
+              <label style={labelStyle}>Nom du fabricant <span style={{ color: "#EF4444" }}>*</span></label>
+              <input value={header.fabricant} onChange={(e) => { setFabricantSelectionId(""); setH("fabricant", e.target.value); }}
+                placeholder="Ex : Sanofi, Pfizer…" style={inputStyle} />
+            </div>
+            <div>
               <label style={labelStyle}>Email du fabricant <span style={{ color: "#EF4444" }}>*</span></label>
-              <input type="email" value={header.email_fabricant} onChange={(e) => setH("email_fabricant", e.target.value)}
+              <input type="email" value={header.email_fabricant} onChange={(e) => { setFabricantSelectionId(""); setH("email_fabricant", e.target.value); }}
                 placeholder="commandes@fabricant.com" style={inputStyle} />
             </div>
             <div>
-              <label style={labelStyle}>Nom du fabricant</label>
-              <input value={header.fabricant} onChange={(e) => setH("fabricant", e.target.value)}
-                placeholder="Ex : Sanofi, Pfizer…" style={inputStyle} />
+              <label style={labelStyle}>Téléphone</label>
+              <input value={header.telephone} onChange={(e) => { setFabricantSelectionId(""); setH("telephone", e.target.value); }}
+                placeholder="Ex : +242 06 000 0000" style={inputStyle} />
             </div>
             <div>
               <label style={labelStyle}>Date de livraison souhaitée</label>
               <input type="date" value={header.date_livraison} onChange={(e) => setH("date_livraison", e.target.value)}
                 style={inputStyle} />
             </div>
-            <div>
+            <div style={{ gridColumn: "1 / -1" }}>
               <label style={labelStyle}>Instructions générales</label>
               <input value={header.notes} onChange={(e) => setH("notes", e.target.value)}
                 placeholder="Température, conditionnement…" style={inputStyle} />
@@ -874,11 +967,356 @@ function ModalDetailMedicament({ medicament, onClose, onEdit, onChanged }) {
   );
 }
 
+// ── Modal Fabricant (ajout + édition d'un contact externe) ─────────────────────
+function FabricantModal({ initial, etablissement_id, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    nom: initial?.nom || "", email: initial?.email || "",
+    telephone: initial?.telephone || "", notes: initial?.notes || "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(null);
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const isEdit = !!initial;
+
+  const handleSave = async () => {
+    if (!form.nom.trim()) { setErr("Le nom du fabricant est obligatoire."); return; }
+    setSaving(true);
+    setErr(null);
+    try {
+      if (isEdit) {
+        await updateFabricant(initial.id, form);
+      } else {
+        await insertFabricant({ ...form, actif: true, ...(etablissement_id ? { etablissement_id } : {}) });
+      }
+      onSaved();
+    } catch (e) {
+      setErr(e.message);
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ backgroundColor: colors.bgCard, borderRadius: 16, padding: 28, width: "100%", maxWidth: 460, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: colors.navy }}>{isEdit ? `Modifier — ${initial.nom}` : "Ajouter un fabricant"}</h3>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: colors.textMuted, lineHeight: 1 }}>×</button>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div>
+            <label style={labelStyle}>Nom du fabricant <span style={{ color: "#EF4444" }}>*</span></label>
+            <input value={form.nom} onChange={(e) => set("nom", e.target.value)} placeholder="Ex : Sanofi, Pfizer…" style={inputStyle} autoFocus />
+          </div>
+          <div className="form-row-2">
+            <div>
+              <label style={labelStyle}>Email</label>
+              <input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="commandes@fabricant.com" style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Téléphone</label>
+              <input value={form.telephone} onChange={(e) => set("telephone", e.target.value)} placeholder="Ex : +242 06 000 0000" style={inputStyle} />
+            </div>
+          </div>
+          <div>
+            <label style={labelStyle}>Notes</label>
+            <input value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="Informations complémentaires…" style={inputStyle} />
+          </div>
+        </div>
+        {err && <div style={{ marginTop: 14, padding: "8px 12px", backgroundColor: "#FEF2F2", borderRadius: 8, fontSize: 12, color: "#DC2626" }}>{err}</div>}
+        <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: "11px", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)", borderRadius: 10, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>Annuler</button>
+          <button onClick={handleSave} disabled={saving} style={{ flex: 2, padding: "11px", backgroundColor: saving ? "#E5E7EB" : ACCENT, color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer" }}>
+            {saving ? "Enregistrement…" : isEdit ? "Enregistrer" : "Ajouter le fabricant"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Onglet Fabricants (contacts externes du distributeur) ──────────────────────
+function FabricantsTab({ etablissement_id, success, toastError }) {
+  const [filtre, setFiltre] = useState("actifs");
+  const { data: liste, loading, total, refetch } = useFabricantsPaginated(filtre);
+  const [addModal, setAddModal]   = useState(false);
+  const [editModal, setEditModal] = useState(null);
+  const [toggling, setToggling]   = useState(null);
+
+  const handleToggleActif = async (f) => {
+    setToggling(f.id);
+    try {
+      await updateFabricant(f.id, { actif: !f.actif });
+      success(f.actif ? `${f.nom} désactivé` : `${f.nom} réactivé`);
+      refetch();
+    } catch (e) {
+      toastError("Erreur : " + e.message);
+    } finally {
+      setToggling(null);
+    }
+  };
+
+  const FILTRES = [{ key: "actifs", label: "Actifs" }, { key: "inactifs", label: "Inactifs" }, { key: "tous", label: "Tous" }];
+
+  return (
+    <div>
+      {addModal && (
+        <FabricantModal etablissement_id={etablissement_id} onClose={() => setAddModal(false)}
+          onSaved={() => { success("Fabricant ajouté avec succès"); refetch(); setAddModal(false); }} />
+      )}
+      {editModal && (
+        <FabricantModal initial={editModal} etablissement_id={etablissement_id} onClose={() => setEditModal(null)}
+          onSaved={() => { success(`${editModal.nom} mis à jour`); refetch(); setEditModal(null); }} />
+      )}
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ display: "flex", backgroundColor: colors.bgCard, borderRadius: 10, padding: 3, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", gap: 2 }}>
+            {FILTRES.map((f) => (
+              <button key={f.key} onClick={() => setFiltre(f.key)}
+                style={{ padding: "6px 14px", borderRadius: 8, border: "none", fontSize: 12, fontWeight: 600, cursor: "pointer", backgroundColor: filtre === f.key ? ACCENT : "transparent", color: filtre === f.key ? "white" : "#6B7280" }}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <div style={{ fontSize: 13, color: colors.textMuted }}>{loading ? "Chargement…" : `${total} fabricant${total !== 1 ? "s" : ""}`}</div>
+        </div>
+        <button onClick={() => setAddModal(true)} style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 18px", backgroundColor: ACCENT, color: "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Ajouter un fabricant
+        </button>
+      </div>
+
+      <div className="dash-grid-2">
+        {!loading && liste.length === 0 && (
+          <div style={{ gridColumn: "1/-1", textAlign: "center", padding: "60px 0", color: colors.textMuted, fontSize: 14 }}>
+            {filtre === "inactifs" ? "Aucun fabricant inactif." : "Aucun fabricant enregistré."}
+          </div>
+        )}
+        {!loading && liste.map((f) => {
+          const actif = f.actif !== false;
+          return (
+            <div key={f.id} style={{ backgroundColor: colors.bgCard, borderRadius: 16, padding: 24, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", opacity: actif ? 1 : 0.75 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+                <div style={{ fontWeight: 800, fontSize: 15, color: colors.navy }}>{f.nom}</div>
+                <span style={{ padding: "4px 12px", borderRadius: 12, fontSize: 11, fontWeight: 700, backgroundColor: actif ? "#DCFCE7" : "#F3F4F6", color: actif ? "#16A34A" : "#9CA3AF" }}>{actif ? "actif" : "inactif"}</span>
+              </div>
+              <div style={{ padding: "10px 12px", backgroundColor: colors.bgSurface, borderRadius: 10, marginBottom: 14 }}>
+                <div style={{ fontSize: 13, color: "#3B82F6" }}>{f.email || "—"}</div>
+                <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>{f.telephone || "—"}</div>
+                {f.notes && <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 6 }}>{f.notes}</div>}
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={() => setEditModal(f)} style={{ flex: 1, padding: "9px", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Modifier</button>
+                <button onClick={() => handleToggleActif(f)} disabled={toggling === f.id}
+                  style={{ padding: "9px 12px", backgroundColor: actif ? "#FEF2F2" : "#F0FDF4", color: actif ? "#DC2626" : "#16A34A", border: `1px solid ${actif ? "#FECACA" : "#BBF7D0"}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: toggling === f.id ? "wait" : "pointer", whiteSpace: "nowrap" }}>
+                  {toggling === f.id ? "…" : actif ? "Désactiver" : "Réactiver"}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Onglet Commandes fabricant (historique) ─────────────────────────────────────
+const STATUT_STYLE = {
+  brouillon:  { bg: "#F3F4F6", color: colors.textSecondary, label: "Brouillon" },
+  envoyee:    { bg: "#FEF9C3", color: "#A16207", label: "Envoyée" },
+  confirmee:  { bg: "#DBEAFE", color: "#2563EB", label: "Confirmée" },
+  en_transit: { bg: "#E0E7FF", color: "#4F46E5", label: "En transit" },
+  livree:     { bg: "#DCFCE7", color: "#16A34A", label: "Reçue" },
+  annulee:    { bg: "#FEF2F2", color: "#DC2626", label: "Annulée / refusée" },
+};
+const STATUT_ACTIONS = {
+  envoyee:    [{ label: "Marquer confirmée", next: "confirmee" }, { label: "Annuler", next: "annulee", danger: true }],
+  confirmee:  [{ label: "Marquer en transit", next: "en_transit" }, { label: "Annuler", next: "annulee", danger: true }],
+  en_transit: [{ label: "Marquer reçue", next: "livree" }, { label: "Annuler", next: "annulee", danger: true }],
+};
+const STATUT_LABEL_HISTORIQUE = {
+  brouillon: "Brouillon créé", envoyee: "Commande envoyée", confirmee: "Confirmée par le fabricant",
+  en_transit: "En transit", livree: "Reçue (stock entrepôt mis à jour)", annulee: "Annulée",
+};
+
+function CommandeFabricantHistoriqueInline({ commandeId }) {
+  const { data: historique, loading } = useCommandeHistorique(commandeId);
+  if (loading) return <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 10 }}>Chargement de l'historique…</div>;
+  if (historique.length === 0) return null;
+  return (
+    <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px dashed var(--border)" }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.4 }}>Historique du statut</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {historique.map((h) => (
+          <div key={h.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+            <span style={{ color: colors.text }}>{STATUT_LABEL_HISTORIQUE[h.statut] ?? h.statut}</span>
+            <span style={{ color: colors.textMuted }}>{new Date(h.changed_at).toLocaleString("fr-FR")}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CommandeFabricantCard({ commande, auth, success, toastError, onChanged }) {
+  const [expanded, setExpanded] = useState(false);
+  const [updating, setUpdating] = useState(false);
+  const s = STATUT_STYLE[commande.statut] || { bg: "#F3F4F6", color: colors.textSecondary, label: commande.statut };
+  const actions = STATUT_ACTIONS[commande.statut] || [];
+  const lignes = commande.commande_lignes ?? [];
+  const medicamentLabel = lignes.length === 1 ? `${lignes[0].medicament_nom} × ${lignes[0].quantite}` : `${lignes.length} produits`;
+
+  const handleStatutChange = async (next, label) => {
+    if (next === "annulee" && !window.confirm(`Confirmer l'annulation de la commande ${commande.reference ?? ""} ?`)) return;
+    setUpdating(true);
+    try {
+      // "Reçue" incrémente le stock de l'entrepôt pour chaque ligne — le
+      // fabricant est un tiers externe, il n'y a pas de flux `livraisons` côté
+      // client pour cette réception, contrairement aux clients MedOS.
+      if (next === "livree") {
+        for (const l of lignes) {
+          if (l.medicament_id) await incrementStock(l.medicament_id, l.quantite);
+        }
+      }
+      await updateCommande(commande.id, { statut: next });
+      success(`${commande.reference ?? "Commande"} — ${label.toLowerCase()}${next === "livree" ? " : stock entrepôt mis à jour" : ""}`);
+      onChanged();
+    } catch (e) {
+      toastError("Erreur : " + e.message);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!window.confirm(`Supprimer définitivement le brouillon ${commande.reference ?? ""} ? Cette action est irréversible.`)) return;
+    setUpdating(true);
+    try {
+      await deleteCommande(commande.id);
+      success(`${commande.reference ?? "Brouillon"} supprimé.`);
+      onChanged();
+    } catch (e) {
+      toastError("Erreur : " + e.message);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handlePrint = () => {
+    const header = { fabricant: commande.fabricants?.nom, email_fabricant: commande.fabricants?.email, date_livraison: commande.date_livraison_prevue, notes: commande.notes };
+    fetchEtabFromAuth(auth).then((etab) => printBonCommandeFabricant({ header, lignes: lignes.map((l) => ({ medicamentNom: l.medicament_nom, quantite: l.quantite })), etab }));
+  };
+
+  return (
+    <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "18px 20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 13, fontWeight: 800, color: colors.navy }}>{commande.reference || commande.id.slice(0, 8).toUpperCase()}</span>
+            <span style={{ fontSize: 10, fontWeight: 700, color: s.color, padding: "2px 8px", backgroundColor: s.bg, borderRadius: 8 }}>{s.label}</span>
+            {commande.email_statut === "envoye" && (
+              <span title="Email envoyé au fabricant" style={{ fontSize: 10, fontWeight: 700, color: "#16A34A", backgroundColor: "#DCFCE7", padding: "2px 8px", borderRadius: 8 }}>Envoyé</span>
+            )}
+            {commande.email_statut === "echec" && (
+              <span title={commande.email_erreur || "Échec de l'envoi"} style={{ fontSize: 10, fontWeight: 700, color: "#DC2626", backgroundColor: "#FEF2F2", padding: "2px 8px", borderRadius: 8 }}>Non envoyé</span>
+            )}
+          </div>
+          <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>
+            {commande.fabricants?.nom ?? "—"} · {medicamentLabel} · {new Date(commande.date_commande).toLocaleDateString("fr-FR")}
+          </div>
+        </div>
+      </div>
+
+      {lignes.length > 1 && (
+        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 3 }}>
+          {lignes.map((l) => (
+            <div key={l.id} style={{ fontSize: 12, color: colors.text, display: "flex", justifyContent: "space-between", padding: "4px 10px", backgroundColor: colors.bgSurface, borderRadius: 6 }}>
+              <span>{l.medicament_nom}</span>
+              <span style={{ fontWeight: 700 }}>× {l.quantite}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {commande.email_statut === "echec" && commande.email_erreur && (
+        <div style={{ marginTop: 8, fontSize: 12, color: "#DC2626", backgroundColor: "#FEF2F2", padding: "6px 10px", borderRadius: 8 }}>{commande.email_erreur}</div>
+      )}
+
+      <div style={{ display: "flex", gap: 6, marginTop: 12, flexWrap: "wrap" }}>
+        {actions.map((a) => (
+          <button key={a.next} disabled={updating} onClick={() => handleStatutChange(a.next, a.label)}
+            style={{ padding: "7px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: updating ? "wait" : "pointer", border: "none", backgroundColor: a.danger ? "#FEF2F2" : "#EFF6FF", color: a.danger ? "#DC2626" : "#2563EB" }}>
+            {a.label}
+          </button>
+        ))}
+        {commande.statut === "brouillon" && (
+          <button disabled={updating} onClick={handleDelete} style={{ padding: "7px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: updating ? "wait" : "pointer", border: "none", backgroundColor: "#FEF2F2", color: "#DC2626" }}>Supprimer</button>
+        )}
+        <button onClick={handlePrint} style={{ padding: "7px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)" }}>Voir le bon de commande</button>
+        <button onClick={() => setExpanded((e) => !e)} style={{ padding: "7px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", backgroundColor: "transparent", color: colors.textMuted, border: "none" }}>
+          {expanded ? "Masquer l'historique ▲" : "Historique ▾"}
+        </button>
+      </div>
+
+      {expanded && <CommandeFabricantHistoriqueInline commandeId={commande.id} />}
+    </div>
+  );
+}
+
+const STATUTS_FILTRE = [
+  { key: "",           label: "Tous" },
+  { key: "envoyee",    label: "Envoyée" },
+  { key: "confirmee",  label: "Confirmée" },
+  { key: "en_transit", label: "En transit" },
+  { key: "livree",     label: "Reçue" },
+  { key: "annulee",    label: "Annulée" },
+];
+
+function CommandesFabricantTab({ etablissement_id, auth, success, toastError }) {
+  const [filtreStatut, setFiltreStatut] = useState("");
+  const [search, setSearch] = useState("");
+  const { data: commandes, loading, error, total, page, setPage, totalPages, refetch } =
+    useCommandesFabricantPaginated(etablissement_id, 20, { statut: filtreStatut, search });
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 18, backgroundColor: colors.bgCard, padding: 14, borderRadius: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+        <input placeholder="Rechercher par référence…" value={search} onChange={(e) => setSearch(e.target.value)}
+          style={{ padding: "7px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 12, minWidth: 200 }} />
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+          {STATUTS_FILTRE.map((s) => (
+            <button key={s.key} onClick={() => setFiltreStatut(s.key)}
+              style={{ padding: "6px 12px", borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: "pointer", border: "none", backgroundColor: filtreStatut === s.key ? ACCENT : "#F3F4F6", color: filtreStatut === s.key ? "white" : "#6B7280" }}>
+              {s.label}
+            </button>
+          ))}
+        </div>
+        <div style={{ marginLeft: "auto", fontSize: 12, color: colors.textMuted }}>{loading ? "Chargement…" : `${total} commande${total !== 1 ? "s" : ""}`}</div>
+      </div>
+
+      {error && (
+        <div style={{ backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 12, padding: "14px 18px", marginBottom: 20, fontSize: 13, color: "#DC2626" }}>Une erreur s'est produite. Veuillez réessayer.</div>
+      )}
+      {loading && <div style={{ textAlign: "center", padding: "40px 0", color: colors.textMuted, fontSize: 13 }}>Chargement…</div>}
+      {!loading && commandes.length === 0 && (
+        <div style={{ textAlign: "center", padding: "60px 0", color: colors.textMuted, fontSize: 14 }}>Aucune commande fabricant trouvée.</div>
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {commandes.map((c) => <CommandeFabricantCard key={c.id} commande={c} auth={auth} success={success} toastError={toastError} onChanged={refetch} />)}
+      </div>
+
+      <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
+    </div>
+  );
+}
+
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function Entrepot() {
   const { auth } = useAuth();
   const { data: medicamentsAll, loading, refetch } = useMedicaments(auth?.etablissement_id);
   const { toasts, success, error: toastError } = useToast();
+  const [tab, setTab]                           = useState("stock"); // "stock" | "fabricants" | "commandes"
   const [showModal, setShowModal]               = useState(false);
   const [showCommande, setShowCommande]         = useState(false);
   const [recherche, setRecherche]               = useState("");
@@ -932,7 +1370,14 @@ export default function Entrepot() {
           etablissement_id={auth?.etablissement_id ?? null}
           auth={auth}
           onClose={() => setShowCommande(false)}
-          onSuccess={(msg) => { setShowCommande(false); success(msg); }}
+          onSuccess={({ emailStatut, emailErreur, reference, fabricantNom, nbLignes }) => {
+            setShowCommande(false);
+            if (emailStatut === "envoye") {
+              success(`Commande ${reference} envoyée à ${fabricantNom} — ${nbLignes} médicament${nbLignes > 1 ? "s" : ""}.`);
+            } else {
+              toastError(`Commande ${reference} enregistrée chez ${fabricantNom}, mais l'email n'a pas pu être envoyé : ${emailErreur}`);
+            }
+          }}
         />
       )}
       {detailModal && (
@@ -951,6 +1396,25 @@ export default function Entrepot() {
         />
       )}
 
+      {/* ── Onglets ── */}
+      <div style={{ display: "flex", gap: 2, backgroundColor: colors.bgCard, borderRadius: 10, padding: 3, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 20, width: "fit-content" }}>
+        {[
+          { key: "stock", label: "Stock" },
+          { key: "fabricants", label: "Fabricants" },
+          { key: "commandes", label: "Commandes" },
+        ].map((t) => (
+          <button key={t.key} onClick={() => setTab(t.key)}
+            style={{ padding: "8px 18px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer", backgroundColor: tab === t.key ? ACCENT : "transparent", color: tab === t.key ? "white" : "#6B7280" }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "fabricants" && <FabricantsTab etablissement_id={auth?.etablissement_id} success={success} toastError={toastError} />}
+      {tab === "commandes" && <CommandesFabricantTab etablissement_id={auth?.etablissement_id} auth={auth} success={success} toastError={toastError} />}
+
+      {tab === "stock" && (
+      <>
       {/* ── KPIs stock ── */}
       <div className="kpi-row" style={{ marginBottom: 20 }}>
         {[
@@ -1117,6 +1581,8 @@ export default function Entrepot() {
         <span style={{ fontFamily: "monospace", fontWeight: 700 }}>MEDOS-AAAA-DIST-XXXXX</span> qui est automatiquement enregistré dans la base MedOS.
         Ce lot sera reconnu comme <strong>certifié</strong> lors d'un scan dans le module Traçabilité, par n'importe quel pharmacien ou hôpital.
       </div>
+      </>
+      )}
     </Layout>
   );
 }
