@@ -759,6 +759,42 @@ Scanner Contrefaçons → **"Certifié MedOS — Lot enregistré par un distribu
 "Ceftriaxone 1g" correctement affiché. Preuve que la chaîne de confiance MedOS fonctionne
 effectivement entre les deux rôles, pas seulement en interne au distributeur.
 
+**2026-07-21 (session 8) — Étape 1, point 6 : traitement d'une livraison — 3 bugs trouvés et
+corrigés (dont une faille RLS transversale et un risque de double-décrément).**
+
+1. **Décrément entrepôt jamais implémenté.** Marquer une livraison "Livrée" incrémentait déjà le
+   stock du DESTINATAIRE (`receive_livraison`, existant) mais ne touchait jamais le stock ENTREPÔT
+   du distributeur qui expédie — son propre tableau Entrepôt restait figé indéfiniment, sans jamais
+   refléter les expéditions réelles. Ajouté `expedier_depuis_entrepot()` (RPC, même construction que
+   `receive_livraison` : recherche par nom insensible à la casse dans le catalogue du distributeur,
+   `SECURITY DEFINER`), appelée en miroir pour chaque ligne livrée.
+2. **`livraisons.lignes_livrees` n'a jamais existé en base** — bug pré-existant, jamais testé
+   jusqu'ici : marquer TOUTE livraison "Livrée" échouait à 100% (`PGRST204`). Colonne ajoutée.
+3. **Faille RLS transversale trouvée en creusant** : `mouvements_stock` n'avait AUCUNE isolation par
+   établissement (`mouvements_stock_insert`/`_select` ne vérifiaient que `auth.uid() IS NOT NULL`) —
+   n'importe quel compte authentifié (pharmacie, hôpital, distributeur, autorité) pouvait lire ET
+   écrire l'historique de mouvements de stock de n'importe quel autre établissement. Même famille que
+   la faille "10 tables permissives" du sprint Pharmacie, passée inaperçue pour cette table à
+   l'époque. Corrigé avec le même correctif standard (`etablissement_id = ANY(mes_etablissements())`).
+   Conséquence : l'écriture du mouvement pour le CLIENT (compte différent du distributeur) devait de
+   toute façon être faite par le distributeur — déplacée à l'intérieur de `receive_livraison`/
+   `expedier_depuis_entrepot` (SECURITY DEFINER, medicament_id résolu en interne) plutôt que par un
+   insert direct du frontend, qui utilisait de toute façon un nom de colonne inexistant
+   (`medicament_nom` au lieu de `medicament_id` — les deux inserts frontend échouaient silencieusement
+   depuis toujours, capturés par un `catch(_){}`).
+4. **Risque de double-décrément trouvé en testant l'échec du point 2** : avant correctif, la
+   première tentative (échec sur `lignes_livrees`) avait déjà exécuté les ajustements de stock
+   (RPC réception + expédition) AVANT l'écriture finale du statut qui, elle, échouait — un second
+   clic (retry naturel après une erreur affichée) rejouait tout depuis le début, décrémentant deux
+   fois le même stock. Réordonné : l'écriture du statut passe désormais en premier ; les RPC
+   d'ajustement de stock ne s'exécutent qu'après son succès confirmé, jamais rejouées sur un nouvel
+   essai après échec.
+
+**Revalidé en conditions réelles** : livraison LIV-44027392 (Poto-Poto → Pharmacie Mimi, Ceftriaxone
+1g × 30) marquée "Livrée" → stock entrepôt Poto-Poto vérifié en base 250 → 220 (exactement -30, pas
+de double-décrément) → mouvement `mouvements_stock` correct (`type: sortie, quantite: 30,
+medicament_id` correctement résolu, `etablissement_id` = Poto-Poto uniquement).
+
 ## Module HÔPITAL
 
 Non commencé — en attente de validation complète du module Pharmacie.
