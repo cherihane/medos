@@ -5,12 +5,15 @@
  */
 import { colors } from "../../theme";
 import { useState, useCallback, useEffect, useRef } from "react";
+import { Camera, Search, PackagePlus } from "lucide-react";
 import Layout from "../../components/Layout";
 import QrScanner from "../../components/QrScanner";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
-import { useVerificationLot } from "../../hooks/useVerificationLot";
-import { useLots } from "../../hooks/useSupabaseData";
+import { useVerificationLot, rechercherLotPourPrefill } from "../../hooks/useVerificationLot";
+import { useLots, useMedicaments } from "../../hooks/useSupabaseData";
+import { insertMedicament, insertLot, incrementStock } from "../../hooks/useMutations";
+import { useAuth } from "../../context/AuthContext";
 
 const STATUTS = {
   certifie: { label: "Certifié MedOS",          color: "#16A34A", bg: "#DCFCE7", border: "#86EFAC" },
@@ -23,15 +26,194 @@ function fmt(iso) {
   return new Date(iso).toLocaleDateString("fr-FR");
 }
 
+/** Génère MEDOS-AAAA-DIST-XXXXX — un numéro de lot par médicament reçu. */
+function genererNumeroLot(annee = new Date().getFullYear()) {
+  const suffix = Math.random().toString(36).toUpperCase().slice(2, 7);
+  return `MEDOS-${annee}-DIST-${suffix}`;
+}
+
+const inputStyle = {
+  width: "100%", padding: "9px 12px", border: "1.5px solid var(--border)",
+  borderRadius: 8, fontSize: 13, outline: "none", boxSizing: "border-box", color: colors.navy,
+};
+const labelStyle = { fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 5 };
+
+// ── Modal Scan-pour-enregistrer : réception directe dans l'entrepôt ────────────
+// Depuis un scan (ou une saisie manuelle) en Traçabilité, enregistre la
+// quantité reçue directement dans l'entrepôt du distributeur — sans repasser
+// par l'écran Entrepôt. Si le code scanné correspond à un lot déjà certifié
+// MedOS, les champs sont pré-remplis (même pattern que le "scan-pour-ajouter"
+// de l'Inventaire pharmacie, via rechercherLotPourPrefill). Un numéro de lot
+// MedOS est généré automatiquement, un par médicament reçu.
+function ModalScanEnregistrer({ nomInitial, codeScanne, medicaments, etablissement_id, onClose, onSuccess }) {
+  const [form, setForm] = useState({
+    nom: nomInitial || "", dosage: "", forme: "", fabricant: "",
+    quantite: "", date_fabrication: "", date_expiration: "",
+    prix_unitaire: "", prix_achat: "",
+  });
+  const [lotGenere, setLotGenere] = useState(genererNumeroLot());
+  const [prefillInfo, setPrefillInfo] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  useEffect(() => {
+    if (!codeScanne) return;
+    rechercherLotPourPrefill(codeScanne).then((infos) => {
+      if (!infos) return;
+      setForm((f) => ({
+        ...f,
+        nom: infos.nom || f.nom,
+        forme: infos.forme || f.forme,
+        fabricant: infos.fabricant || f.fabricant,
+        prix_achat: infos.prix_achat !== "" ? infos.prix_achat : f.prix_achat,
+        prix_unitaire: infos.prix_unitaire !== "" ? infos.prix_unitaire : f.prix_unitaire,
+        date_expiration: infos.date_peremption || f.date_expiration,
+      }));
+      setPrefillInfo(`Lot certifié MedOS reconnu — champs pré-remplis automatiquement (${infos.nom}).`);
+    }).catch(() => {});
+  }, [codeScanne]);
+
+  // Un produit déjà présent dans l'entrepôt réutilise sa fiche médicament
+  // (nom identique, insensible à la casse) — sinon une nouvelle fiche est
+  // créée, comme pour la réception classique depuis l'écran Entrepôt.
+  const existant = medicaments.find((m) => m.nom.trim().toLowerCase() === form.nom.trim().toLowerCase());
+
+  const handleSubmit = async () => {
+    if (!form.nom.trim() || !form.fabricant.trim() || !form.quantite) {
+      setErr("Remplissez le nom, le fabricant et la quantité.");
+      return;
+    }
+    const qty = parseInt(form.quantite, 10);
+    if (isNaN(qty) || qty <= 0) { setErr("Quantité invalide."); return; }
+
+    setSaving(true);
+    setErr(null);
+    try {
+      let medicamentId = existant?.id;
+      if (!medicamentId) {
+        const nouveau = await insertMedicament({
+          nom: form.nom.trim(),
+          dosage: form.dosage.trim() || null,
+          forme: form.forme.trim() || null,
+          fabricant: form.fabricant.trim(),
+          etablissement_id,
+          stock_actuel: 0,
+          stock_minimum: 10,
+          prix_unitaire: form.prix_unitaire ? Number(form.prix_unitaire) : null,
+          prix_achat: form.prix_achat ? Number(form.prix_achat) : null,
+        });
+        medicamentId = nouveau.id;
+      }
+      await insertLot({
+        numero_lot: lotGenere,
+        medicament_id: medicamentId,
+        fabricant: form.fabricant.trim(),
+        quantite_initiale: qty,
+        date_fabrication: form.date_fabrication || null,
+        date_expiration: form.date_expiration || null,
+        qr_code: JSON.stringify({ lot: lotGenere, medicament_id: medicamentId }),
+        ...(form.prix_achat ? { prix_achat: Number(form.prix_achat) } : {}),
+      });
+      await incrementStock(medicamentId, qty);
+      onSuccess(lotGenere, qty, form.nom.trim());
+    } catch (e) {
+      setErr(e.message);
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ backgroundColor: colors.bgCard, borderRadius: 16, padding: 28, width: "100%", maxWidth: 520, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: colors.navy }}>Enregistrer dans l'entrepôt</h3>
+            <p style={{ margin: "4px 0 0", fontSize: 12, color: colors.textSecondary }}>Un lot MedOS certifié sera généré automatiquement</p>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: colors.textMuted, lineHeight: 1 }}>×</button>
+        </div>
+
+        <div style={{ backgroundColor: "#FFFBEB", borderRadius: 10, padding: "12px 16px", marginBottom: 20, border: "1px solid #FDE68A", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <div style={{ fontSize: 11, color: "#92400E", fontWeight: 600, marginBottom: 2 }}>Numéro de lot MedOS généré</div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "#B45309", fontFamily: "monospace" }}>{lotGenere}</div>
+          </div>
+          <button onClick={() => setLotGenere(genererNumeroLot())} style={{ fontSize: 11, padding: "5px 10px", backgroundColor: colors.bgCard, border: "1px solid #FCD34D", borderRadius: 6, cursor: "pointer", color: "#B45309", fontWeight: 600 }}>
+            Regénérer
+          </button>
+        </div>
+
+        {prefillInfo && (
+          <div style={{ marginBottom: 16, padding: "8px 12px", backgroundColor: "#DCFCE7", color: "#16A34A", borderRadius: 8, fontSize: 12, fontWeight: 600 }}>
+            {prefillInfo}
+          </div>
+        )}
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div>
+            <label style={labelStyle}>Médicament <span style={{ color: "#EF4444" }}>*</span></label>
+            <input value={form.nom} onChange={(e) => set("nom", e.target.value)} placeholder="Nom du médicament" style={inputStyle} />
+            {form.nom.trim() && (
+              <div style={{ fontSize: 11, color: existant ? "#2563EB" : "#16A34A", marginTop: 4 }}>
+                {existant ? "Produit déjà dans votre catalogue — le stock sera incrémenté." : "Nouveau produit — une fiche sera créée dans votre catalogue."}
+              </div>
+            )}
+          </div>
+          <div className="form-row-2">
+            <div>
+              <label style={labelStyle}>Fabricant <span style={{ color: "#EF4444" }}>*</span></label>
+              <input value={form.fabricant} onChange={(e) => set("fabricant", e.target.value)} placeholder="Ex : Sanofi, Pfizer…" style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Quantité reçue <span style={{ color: "#EF4444" }}>*</span></label>
+              <input type="number" min="1" value={form.quantite} onChange={(e) => set("quantite", e.target.value)} placeholder="Ex : 100" style={inputStyle} />
+            </div>
+          </div>
+          <div className="form-row-2">
+            <div>
+              <label style={labelStyle}>Date de fabrication</label>
+              <input type="date" value={form.date_fabrication} onChange={(e) => set("date_fabrication", e.target.value)} style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Date d'expiration</label>
+              <input type="date" value={form.date_expiration} onChange={(e) => set("date_expiration", e.target.value)} style={inputStyle} />
+            </div>
+          </div>
+        </div>
+
+        {err && (
+          <div style={{ marginTop: 14, padding: "8px 12px", backgroundColor: "#FEF2F2", borderRadius: 8, fontSize: 12, color: "#DC2626" }}>{err}</div>
+        )}
+
+        <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: "11px", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)", borderRadius: 10, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>
+            Annuler
+          </button>
+          <button onClick={handleSubmit} disabled={saving}
+            style={{ flex: 2, padding: "11px", backgroundColor: saving ? "#E5E7EB" : "#F59E0B", color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+            {saving ? "Enregistrement…" : "Enregistrer et générer le lot"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Tracabilite() {
+  const { auth } = useAuth();
   const { loading, result, error, verifier, reset } = useVerificationLot();
   const { data: lotsDB, loading: lotsLoading } = useLots();
+  const { data: medicaments } = useMedicaments(auth?.etablissement_id);
   const { toasts, success, error: toastError } = useToast();
 
   const [nomMedicament, setNomMedicament] = useState("");
   const [numerolot, setNumerolot] = useState("");
   const [showCamera, setShowCamera] = useState(false);
   const [historique, setHistorique] = useState([]);
+  const [showReception, setShowReception] = useState(false);
+  const [dernierCodeScanne, setDernierCodeScanne] = useState("");
 
   const lastHandledResult = useRef(null);
   const scanContextRef = useRef({ nom: "", lot: "" });
@@ -67,6 +249,7 @@ export default function Tracabilite() {
 
   const handleQrScan = (text) => {
     setShowCamera(false);
+    setDernierCodeScanne(text.trim());
     try {
       const obj = JSON.parse(text);
       if (obj.lot) setNumerolot(obj.lot);
@@ -90,6 +273,20 @@ export default function Tracabilite() {
       `}</style>
       <Toast toasts={toasts} />
       {showCamera && <QrScanner onScan={handleQrScan} onClose={() => setShowCamera(false)} />}
+      {showReception && (
+        <ModalScanEnregistrer
+          nomInitial={nomMedicament}
+          codeScanne={dernierCodeScanne}
+          medicaments={medicaments}
+          etablissement_id={auth?.etablissement_id}
+          onClose={() => setShowReception(false)}
+          onSuccess={(lot, qty, nom) => {
+            setShowReception(false);
+            setDernierCodeScanne("");
+            success(`Lot ${lot} créé — ${qty} unités de ${nom} ajoutées à l'entrepôt`);
+          }}
+        />
+      )}
 
       <div className="dash-grid-2">
 
@@ -149,7 +346,20 @@ export default function Tracabilite() {
                 }}>
                 {loading
                   ? <><div style={{ width: 14, height: 14, border: "2px solid #9CA3AF", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />Vérification…</>
-                  : "🔍 Vérifier l'authenticité"}
+                  : <><Search size={14} />Vérifier l'authenticité</>}
+              </button>
+              <button
+                onClick={() => setShowReception(true)}
+                disabled={!nomMedicament.trim()}
+                style={{
+                  padding: "11px", borderRadius: 10, fontSize: 13, fontWeight: 700,
+                  cursor: nomMedicament.trim() ? "pointer" : "not-allowed",
+                  border: `1.5px solid ${nomMedicament.trim() ? "#F59E0B" : "var(--border)"}`,
+                  backgroundColor: colors.bgCard,
+                  color: nomMedicament.trim() ? "#B45309" : "#9CA3AF",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                }}>
+                <PackagePlus size={14} />Enregistrer dans l'entrepôt
               </button>
             </div>
             {error && <div style={{ marginTop: 10, padding: "8px 12px", backgroundColor: "#FEF2F2", borderRadius: 8, fontSize: 12, color: "#DC2626" }}>Erreur : {error}</div>}
