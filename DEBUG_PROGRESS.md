@@ -902,6 +902,39 @@ ce fichier) puis revalider une dernière fois en production, exactement comme fa
 **NE PAS commencer le module Hôpital sans validation explicite de l'utilisateur que le module
 Distributeur est bon** (règle de la mission).
 
+---
+
+## Module DISTRIBUTEUR — Session 9 (2026-07-22) : Livraisons, Entrepôt, Traçabilité
+
+**Points 1 et 2 — Panier multi-médicaments + décrément entrepôt bloquant. ✅**
+
+`Livraisons.jsx` ne permettait de créer une livraison qu'avec un destinataire/transporteur/dates —
+aucun médicament, donc aucun lien réel avec le contenu physique expédié. Ajouté :
+- Table `livraison_lignes` (même construction que `commande_lignes`), RLS scopée via
+  `livraisons.distributeur_id`/`etablissement_id`.
+- Panier multi-lignes dans la modale "Nouvelle livraison" (médicament + quantité, choisi dans
+  l'entrepôt du distributeur).
+- **Décrément entrepôt au moment de la création** (pas à la confirmation de réception par le
+  client, qui reste un événement distinct côté destinataire) : nouvelle RPC
+  `expedier_ligne_livraison()` (`SECURITY DEFINER`, verrou de ligne `FOR UPDATE`) qui vérifie le
+  stock et décrémente atomiquement, **bloque et ne modifie rien** si la quantité demandée dépasse
+  le stock disponible. Remplace l'ancienne `expedier_depuis_entrepot()` (recherche par nom,
+  jamais bloquante, plus utilisée : elle ne servait qu'au flux "livrée" que ce chantier redessine).
+- `StatutModal` (transition vers "Livrée") n'a plus de ressaisie manuelle des médicaments — utilise
+  directement les lignes fixées à la création pour incrémenter le stock du destinataire
+  (`receiveLivraison`, inchangée).
+
+**Testé en conditions réelles (Poto-Poto → Pharmacie Mimi)** :
+- Tentative avec 999 unités (stock dispo 220) → bloquée avant toute écriture, message clair,
+  vérifié en base qu'aucune mutation n'a eu lieu (stock resté à 220).
+- Livraison réelle à 2 produits (Ceftriaxone 1g × 40, Paracetamol Injectable × 25) → créée
+  (LIV-58156912, statut "Planifiée") → vérifié en base : `livraison_lignes` correctes,
+  `medicaments.stock_actuel` décrémenté exactement (220→180, 150→125), `mouvements_stock` "sortie"
+  loggés pour les deux lignes.
+- Transition vers "Livrée" → panier déjà fixé affiché (pas de ressaisie) → statut confirmé
+  "livree", `lignes_livrees`/`quantite_livree` (65) corrects en base, **stock entrepôt inchangé**
+  (180/125 — confirmé qu'il n'est pas décrémenté une seconde fois à cette étape).
+
 ## Module HÔPITAL
 
 Non commencé — en attente de validation complète du module Pharmacie.

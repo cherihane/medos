@@ -158,11 +158,26 @@ export function useLivraisonsPaginated(statut = "", pageSize = 20) {
     let q = supabase.from("livraisons").select(`
       id, statut, date_depart, date_arrivee_prevue, date_arrivee_reelle,
       transporteur, numero_suivi, etablissement_id, created_at,
-      etablissements!livraisons_etablissement_id_fkey ( nom, ville )
+      etablissements!livraisons_etablissement_id_fkey ( nom, ville ),
+      livraison_lignes ( id, medicament_id, medicament_nom, quantite )
     `, { count: "exact" }).order("created_at", { ascending: false });
     if (statut && statut !== "tous") q = q.eq("statut", statut);
     return q;
   }, [statut], pageSize);
+}
+
+// Lignes d'une livraison — utilisé quand on marque "Livrée" pour incrémenter
+// le stock du destinataire d'après le panier fixé à la création (plus de
+// re-saisie manuelle des médicaments à ce moment-là).
+export function useLivraisonLignes(livraison_id) {
+  return useQuery(() => {
+    if (!livraison_id) return Promise.resolve({ data: [], error: null });
+    return supabase
+      .from("livraison_lignes")
+      .select("id, medicament_id, medicament_nom, quantite")
+      .eq("livraison_id", livraison_id)
+      .order("created_at", { ascending: true });
+  }, [livraison_id]);
 }
 
 export function useAlertesPaginated(severite = "", pageSize = 20) {

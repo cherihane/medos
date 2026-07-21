@@ -4,9 +4,9 @@ import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
-import { useLivraisonsPaginated, useDistributeurClients } from "../../hooks/useSupabaseData";
+import { useLivraisonsPaginated, useDistributeurClients, useMedicaments, useLivraisonLignes } from "../../hooks/useSupabaseData";
 import Pagination from "../../components/Pagination";
-import { insertLivraison, updateLivraison, receiveLivraison, expedierDepuisEntrepot } from "../../hooks/useMutations";
+import { insertLivraison, insertLivraisonLignes, updateLivraison, receiveLivraison, expedierLigneLivraison } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
 
 const statusStyle = {
@@ -22,40 +22,127 @@ function fmt(iso) {
 }
 
 // ── Modal Nouvelle livraison ───────────────────────────────────────────────────
-function NouvelleModal({ clients, onClose, onSaved }) {
-  const { auth } = useAuth();
+// Le panier de médicaments est fixé ici, à la création — c'est le seul
+// moment où l'on décrémente le stock entrepôt du distributeur (l'expédition
+// réelle des produits), voir handleSave.
+function NouvelleModal({ clients, medicaments, distributeurId, onClose, onSaved }) {
   const [form, setForm] = useState({
     etablissement_id: "", transporteur: "",
     date_depart: new Date().toISOString().slice(0, 10), date_arrivee_prevue: "",
   });
+  const [cart, setCart] = useState([]);
+  const [medicamentId, setMedicamentId] = useState("");
+  const [quantite, setQuantite] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
+  const [partiel, setPartiel] = useState(null);
   const set = (k) => (e) => { setFormError(null); setForm((f) => ({ ...f, [k]: e.target.value })); };
+
+  const addToCart = () => {
+    if (!medicamentId) { setFormError("Choisissez un médicament."); return; }
+    const qty = parseInt(quantite, 10);
+    if (!qty || qty <= 0) { setFormError("Quantité invalide."); return; }
+    const med = medicaments.find((m) => m.id === medicamentId);
+    if (!med) return;
+    setFormError(null);
+    setCart((c) => {
+      const existing = c.find((it) => it.medicament_id === medicamentId);
+      if (existing) {
+        return c.map((it) => it.medicament_id === medicamentId ? { ...it, quantite: (Number(it.quantite) || 0) + qty } : it);
+      }
+      const nom = `${med.nom}${med.dosage ? ` ${med.dosage}` : ""}${med.forme ? ` (${med.forme})` : ""}`;
+      return [...c, { medicament_id: med.id, nom, quantite: qty, stock_disponible: med.stock_actuel ?? 0 }];
+    });
+    setMedicamentId("");
+    setQuantite("");
+  };
+
+  const updateCartQuantite = (medicament_id, val) => {
+    const n = parseInt(val, 10);
+    setCart((c) => c.map((it) => it.medicament_id === medicament_id ? { ...it, quantite: Number.isNaN(n) ? "" : n } : it));
+  };
+  const removeFromCart = (medicament_id) => setCart((c) => c.filter((it) => it.medicament_id !== medicament_id));
 
   const handleSave = async () => {
     if (!form.etablissement_id) { setFormError("Sélectionnez un établissement destinataire."); return; }
+    if (cart.length === 0) { setFormError("Ajoutez au moins un médicament à la livraison."); return; }
+    for (const it of cart) {
+      if (!it.quantite || it.quantite <= 0) { setFormError(`Quantité invalide pour "${it.nom}".`); return; }
+      if (it.quantite > it.stock_disponible) {
+        setFormError(`Stock entrepôt insuffisant pour "${it.nom}" (disponible : ${it.stock_disponible}, demandé : ${it.quantite}).`);
+        return;
+      }
+    }
     setSaving(true);
+    setFormError(null);
     try {
-      await insertLivraison({
+      const livraison = await insertLivraison({
         etablissement_id: form.etablissement_id,
-        distributeur_id: auth?.etablissement_id,
+        distributeur_id: distributeurId,
         statut: "planifiee",
         transporteur: form.transporteur || null,
         numero_suivi: "LIV-" + Date.now().toString().slice(-8),
         date_depart: form.date_depart || null,
         date_arrivee_prevue: form.date_arrivee_prevue || null,
       });
+
+      await insertLivraisonLignes(cart.map((it) => ({
+        livraison_id: livraison.id,
+        medicament_id: it.medicament_id,
+        medicament_nom: it.nom,
+        quantite: it.quantite,
+      })));
+
+      // Décrément entrepôt, ligne par ligne, vérifié et appliqué côté
+      // serveur (voir expedier_ligne_livraison). Si une ligne échoue après
+      // que d'autres ont déjà été décrémentées (rare, concurrence), la
+      // livraison existe déjà avec un état partiellement appliqué — on ne
+      // le cache pas, on l'affiche clairement plutôt que de prétendre un
+      // succès complet.
+      const echecs = [];
+      for (const it of cart) {
+        const res = await expedierLigneLivraison(it.medicament_id, it.quantite, distributeurId);
+        if (res !== "ok") echecs.push({ nom: it.nom, res });
+      }
+
+      if (echecs.length > 0) {
+        setPartiel({ numero_suivi: livraison.numero_suivi, echecs, total: cart.length });
+        setSaving(false);
+        return;
+      }
+
       onSaved();
       onClose();
     } catch (e) {
       setFormError("Erreur : " + e.message);
-    } finally {
       setSaving(false);
     }
   };
 
+  if (partiel) {
+    return (
+      <Modal title="Livraison créée avec une anomalie" onClose={() => { onSaved(); onClose(); }} width={480}>
+        <div style={{ padding: "10px 14px", backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, fontSize: 12, color: "#DC2626", marginBottom: 12 }}>
+          La livraison {partiel.numero_suivi} a été créée, mais le décrément du stock entrepôt a
+          échoué pour {partiel.echecs.length} produit{partiel.echecs.length > 1 ? "s" : ""} sur {partiel.total} —
+          vérifiez le stock manuellement dans Entrepôt.
+        </div>
+        {partiel.echecs.map((e, i) => (
+          <div key={i} style={{ padding: "8px 12px", backgroundColor: "#FFFBEB", borderRadius: 8, marginBottom: 6, fontSize: 12, color: "#92400E" }}>
+            {e.nom} — {e.res === "stock_insuffisant" ? "stock insuffisant" : "produit introuvable"}
+          </div>
+        ))}
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
+          <button onClick={() => { onSaved(); onClose(); }} style={{ padding: "8px 20px", backgroundColor: colors.bgSurface, border: `1px solid ${colors.border}`, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+            Fermer
+          </button>
+        </div>
+      </Modal>
+    );
+  }
+
   return (
-    <Modal title="Nouvelle livraison" onClose={onClose}>
+    <Modal title="Nouvelle livraison" onClose={onClose} width={520}>
       <Field label="Destinataire *">
         <select style={selectStyle} value={form.etablissement_id} onChange={set("etablissement_id")}>
           <option value="">— Sélectionner un client —</option>
@@ -78,6 +165,47 @@ function NouvelleModal({ clients, onClose, onSaved }) {
           <input style={inputStyle} type="date" value={form.date_arrivee_prevue} onChange={set("date_arrivee_prevue")} />
         </Field>
       </Row>
+
+      <Field label="Médicaments à expédier *">
+        <div style={{ display: "flex", gap: 8 }}>
+          <select style={{ ...selectStyle, flex: 2 }} value={medicamentId} onChange={(e) => setMedicamentId(e.target.value)}>
+            <option value="">— Médicament de l'entrepôt —</option>
+            {medicaments.map((m) => (
+              <option key={m.id} value={m.id}>{m.nom}{m.dosage ? ` ${m.dosage}` : ""} — stock {m.stock_actuel ?? 0}</option>
+            ))}
+          </select>
+          <input style={{ ...inputStyle, flex: 1 }} type="number" min="1" value={quantite} onChange={(e) => setQuantite(e.target.value)} placeholder="Qté" />
+          <button type="button" onClick={addToCart} style={{ padding: "0 14px", backgroundColor: "#F59E0B", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+            + Ajouter
+          </button>
+        </div>
+        {medicaments.length === 0 && (
+          <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 4 }}>
+            Aucun médicament dans votre entrepôt — réceptionnez-en d'abord depuis "Entrepôt".
+          </div>
+        )}
+      </Field>
+
+      {cart.length > 0 && (
+        <div style={{ border: "1px solid var(--border)", borderRadius: 8, overflow: "hidden", marginBottom: 14 }}>
+          {cart.map((it) => (
+            <div key={it.medicament_id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderBottom: "1px solid var(--border-light)" }}>
+              <div style={{ flex: 1, fontSize: 12, color: colors.navy, fontWeight: 600 }}>{it.nom}</div>
+              <input
+                type="number" min="1"
+                value={it.quantite}
+                onChange={(e) => updateCartQuantite(it.medicament_id, e.target.value)}
+                style={{ ...inputStyle, width: 70, padding: "6px 8px", fontSize: 12 }}
+              />
+              <span style={{ fontSize: 11, color: it.quantite > it.stock_disponible ? "#DC2626" : colors.textMuted }}>
+                / {it.stock_disponible} dispo
+              </span>
+              <button type="button" onClick={() => removeFromCart(it.medicament_id)} style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 16, fontWeight: 700 }}>×</button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {formError && (
         <div style={{ padding: "10px 14px", backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, fontSize: 13, color: "#DC2626" }}>
           {formError}
@@ -90,16 +218,11 @@ function NouvelleModal({ clients, onClose, onSaved }) {
 
 // ── Modal Update statut ───────────────────────────────────────────────────────
 function StatutModal({ livraison, onClose, onSaved }) {
-  const { auth } = useAuth();
+  const { data: lignes } = useLivraisonLignes(livraison.id);
   const [statut, setStatut] = useState(livraison.statut);
-  const [lignesLivraison, setLignesLivraison] = useState([{ nom: "", quantite: "" }]);
-  const [stockWarn, setStockWarn] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [stockWarn, setStockWarn] = useState(null);
   const [results, setResults] = useState(null);
-
-  function addLigneL() { setLignesLivraison((prev) => [...prev, { nom: "", quantite: "" }]); }
-  function updateLigneL(i, key, val) { setLignesLivraison((prev) => prev.map((l, idx) => idx === i ? { ...l, [key]: val } : l)); }
-  function removeLigneL(i) { setLignesLivraison((prev) => prev.filter((_, idx) => idx !== i)); }
 
   const handleSave = async () => {
     setSaving(true);
@@ -108,34 +231,18 @@ function StatutModal({ livraison, onClose, onSaved }) {
       const update = { statut };
       if (statut === "livree") {
         update.date_arrivee_reelle = new Date().toISOString();
-        const lignesValides = lignesLivraison.filter((l) => l.nom.trim() && parseInt(l.quantite) > 0);
-        update.lignes_livrees = JSON.stringify(lignesValides);
-        update.quantite_livree = lignesValides.reduce((s, l) => s + (parseInt(l.quantite) || 0), 0);
+        update.lignes_livrees = JSON.stringify(lignes.map((l) => ({ nom: l.medicament_nom, quantite: l.quantite })));
+        update.quantite_livree = lignes.reduce((s, l) => s + (l.quantite || 0), 0);
 
-        // L'écriture du statut passe en premier et seule : si elle échoue
-        // (colonne manquante, réseau...), aucun mouvement de stock n'a été
-        // appliqué et un nouvel essai reste sûr. Les ajustements de stock
-        // ci-dessous ne s'exécutent qu'une fois la livraison réellement
-        // marquée "livrée" — jamais rejoués si on reclique après un échec.
+        // L'écriture du statut passe en premier et seule : si elle échoue,
+        // aucun mouvement de stock n'a été appliqué et un nouvel essai
+        // reste sûr — jamais rejoué après un succès partiel.
         await updateLivraison(livraison.id, update);
 
-        // receive_livraison / expedier_depuis_entrepot journalisent elles-mêmes
-        // le mouvement de stock correspondant (medicament_id résolu en
-        // interne, SECURITY DEFINER) — pas d'insertMouvementStock séparé ici.
         const lignesResults = [];
-        for (const ligne of lignesValides) {
-          const res = await receiveLivraison(ligne.nom.trim(), parseInt(ligne.quantite), livraison.etablissement_id);
-          const status = res === "ok" ? "ok" : "introuvable";
-          lignesResults.push({ nom: ligne.nom.trim(), quantite: parseInt(ligne.quantite), status });
-
-          // Décrémente le stock ENTREPÔT du distributeur qui expédie — sans
-          // ça, "Entrepôt" ne reflète jamais les livraisons réellement
-          // parties, indépendamment de la réception côté client ci-dessus.
-          if (auth?.etablissement_id) {
-            try {
-              await expedierDepuisEntrepot(ligne.nom.trim(), parseInt(ligne.quantite), auth.etablissement_id);
-            } catch (_) {}
-          }
+        for (const ligne of lignes) {
+          const res = await receiveLivraison(ligne.medicament_nom, ligne.quantite, livraison.etablissement_id);
+          lignesResults.push({ nom: ligne.medicament_nom, quantite: ligne.quantite, status: res === "ok" ? "ok" : "introuvable" });
         }
 
         onSaved(statut);
@@ -202,36 +309,17 @@ function StatutModal({ livraison, onClose, onSaved }) {
       {statut === "livree" && (
         <div style={{ marginBottom: 14 }}>
           <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 8, padding: "8px 12px", backgroundColor: colors.bgSurface, borderRadius: 8 }}>
-            Renseignez les medicaments livres pour incrementer le stock du destinataire.
+            Le stock du destinataire sera incrémenté d'après le panier de cette livraison.
           </div>
-          {lignesLivraison.map((l, i) => (
-            <div key={i} style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "center" }}>
-              <input
-                value={l.nom}
-                onChange={(e) => updateLigneL(i, "nom", e.target.value)}
-                placeholder="Nom du medicament"
-                style={{ ...inputStyle, flex: 2 }}
-              />
-              <input
-                type="number"
-                min="1"
-                value={l.quantite}
-                onChange={(e) => updateLigneL(i, "quantite", e.target.value)}
-                placeholder="Qte"
-                style={{ ...inputStyle, width: 80, flex: "none" }}
-              />
-              {lignesLivraison.length > 1 && (
-                <button type="button" onClick={() => removeLigneL(i)}
-                  style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 18, fontWeight: 700, padding: "0 4px" }}>
-                  ×
-                </button>
-              )}
+          {lignes.length === 0 && (
+            <div style={{ fontSize: 12, color: "#DC2626" }}>Aucun médicament enregistré pour cette livraison.</div>
+          )}
+          {lignes.map((l) => (
+            <div key={l.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 13 }}>
+              <span style={{ color: colors.navy, fontWeight: 600 }}>{l.medicament_nom}</span>
+              <span style={{ color: colors.textSecondary }}>× {l.quantite}</span>
             </div>
           ))}
-          <button type="button" onClick={addLigneL}
-            style={{ fontSize: 11, padding: "4px 12px", borderRadius: 6, backgroundColor: "#FEF3C7", color: "#92400E", border: "1px solid #F59E0B", cursor: "pointer", fontWeight: 600, marginTop: 4 }}>
-            + Ajouter un medicament
-          </button>
           {stockWarn && (
             <div style={{ marginTop: 10, padding: "8px 12px", backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, fontSize: 12, color: "#DC2626" }}>
               {stockWarn}
@@ -283,10 +371,12 @@ function DetailModal({ livraison, onClose }) {
 }
 
 export default function Livraisons() {
+  const { auth } = useAuth();
   const [filter, setFilter] = useState("tous");
   const { data: livraisons, loading, error, total, page, setPage, totalPages, refetch } = useLivraisonsPaginated(filter);
   const { data: relations } = useDistributeurClients();
   const clients = relations.map((r) => r.client).filter(Boolean);
+  const { data: medicaments } = useMedicaments(auth?.etablissement_id);
   const { toasts, success, error: toastError } = useToast();
   const [showNouvelle, setShowNouvelle] = useState(false);
   const [statutModal, setStatutModal] = useState(null);
@@ -302,6 +392,8 @@ export default function Livraisons() {
       {showNouvelle && (
         <NouvelleModal
           clients={clients}
+          medicaments={medicaments}
+          distributeurId={auth?.etablissement_id}
           onClose={() => setShowNouvelle(false)}
           onSaved={() => { refetch(); success("Livraison créée avec succès"); }}
         />
@@ -364,7 +456,7 @@ export default function Livraisons() {
         <div className="table-scroll"><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr style={{ backgroundColor: colors.bgSurface }}>
-              {["N° Suivi", "Destinataire", "Transporteur", "Départ", "Arrivée prévue", "Statut", "Actions"].map((h) => (
+              {["N° Suivi", "Destinataire", "Produits", "Transporteur", "Départ", "Statut", "Actions"].map((h) => (
                 <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: 12, fontWeight: 700, color: colors.textSecondary, borderBottom: "1px solid var(--border)" }}>{h}</th>
               ))}
             </tr>
@@ -381,8 +473,9 @@ export default function Livraisons() {
               <tr><td colSpan={7} style={{ padding: 40, textAlign: "center", color: colors.textMuted, fontSize: 13 }}>Aucune livraison trouvée</td></tr>
             )}
             {!loading && filtered.map((l) => {
-              const s = statusStyle[l.statut] ?? statusStyle.preparation;
+              const s = statusStyle[l.statut] ?? statusStyle.planifiee;
               const dest = l.etablissements?.nom ?? "—";
+              const lignes = l.livraison_lignes ?? [];
               return (
                 <tr key={l.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
                   <td style={{ padding: "14px 16px", fontFamily: "monospace", color: colors.textSecondary, fontSize: 12 }}>{l.numero_suivi ?? "—"}</td>
@@ -390,9 +483,11 @@ export default function Livraisons() {
                     {dest}
                     {l.etablissements?.ville && <div style={{ fontSize: 11, color: colors.textMuted }}>{l.etablissements.ville}</div>}
                   </td>
+                  <td style={{ padding: "14px 16px", color: colors.textSecondary, fontSize: 12 }} title={lignes.map(x => `${x.medicament_nom} ×${x.quantite}`).join(", ")}>
+                    {lignes.length === 0 ? "—" : `${lignes.length} produit${lignes.length > 1 ? "s" : ""}`}
+                  </td>
                   <td style={{ padding: "14px 16px", color: colors.textSecondary }}>{l.transporteur ?? "—"}</td>
                   <td style={{ padding: "14px 16px", color: colors.textSecondary, fontSize: 12 }}>{fmt(l.date_depart)}</td>
-                  <td style={{ padding: "14px 16px", color: colors.textSecondary, fontSize: 12 }}>{fmt(l.date_arrivee_prevue)}</td>
                   <td style={{ padding: "14px 16px" }}>
                     <span style={{ padding: "3px 10px", backgroundColor: s.bg, color: s.color, borderRadius: 10, fontSize: 11, fontWeight: 700 }}>{s.label}</span>
                   </td>

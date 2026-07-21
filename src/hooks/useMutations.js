@@ -159,6 +159,12 @@ export async function updateLivraison(id, fields) {
   return run(supabase.from("livraisons").update(fields).eq("id", id).select().single());
 }
 
+// Lignes d'une livraison multi-produits (voir livraison_lignes).
+export async function insertLivraisonLignes(lignes) {
+  if (!lignes || lignes.length === 0) return [];
+  return run(supabase.from("livraison_lignes").insert(lignes).select());
+}
+
 // ─── Distributeur : "Mes Clients" (relation réelle) ────────────────────────────
 export async function insertDistributeurClient(fields) {
   return run(supabase.from("distributeur_clients").insert({ ...fields, source: "manuel" }).select().single());
@@ -224,16 +230,19 @@ export async function receiveLivraison(medicamentNom, quantite, etablissementDes
   return data; // "ok" | "medicament_introuvable"
 }
 
-// Miroir de receiveLivraison côté entrepôt du distributeur qui expédie —
-// décrémente son propre stock (jamais celui d'un autre établissement).
-export async function expedierDepuisEntrepot(medicamentNom, quantite, distributeurId) {
-  const { data, error } = await supabase.rpc("expedier_depuis_entrepot", {
-    p_medicament_nom:  medicamentNom,
+// Décrémente le stock ENTREPÔT du distributeur qui expédie une livraison —
+// bloquant : renvoie "stock_insuffisant" sans rien modifier si la quantité
+// demandée dépasse le stock actuel (vérifié et appliqué atomiquement côté
+// serveur, verrou de ligne inclus, pour rester correct en cas de double-clic
+// ou d'expéditions concurrentes du même produit).
+export async function expedierLigneLivraison(medicamentId, quantite, distributeurId) {
+  const { data, error } = await supabase.rpc("expedier_ligne_livraison", {
+    p_medicament_id:   medicamentId,
     p_quantite:        quantite,
     p_distributeur_id: distributeurId,
   });
-  if (error) throw new Error(`expedier_depuis_entrepot: ${error.message}`);
-  return data; // "ok" | "medicament_introuvable"
+  if (error) throw new Error(`expedier_ligne_livraison: ${error.message}`);
+  return data; // "ok" | "stock_insuffisant" | "medicament_introuvable"
 }
 
 // ─── Fond de caisse ───────────────────────────────────────────────────────────
