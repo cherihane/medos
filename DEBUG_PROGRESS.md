@@ -935,6 +935,47 @@ aucun médicament, donc aucun lien réel avec le contenu physique expédié. Ajo
   "livree", `lignes_livrees`/`quantite_livree` (65) corrects en base, **stock entrepôt inchangé**
   (180/125 — confirmé qu'il n'est pas décrémenté une seconde fois à cette étape).
 
+**Point 3 — CRUD complet Entrepôt (détail / modifier / supprimer avec archivage). ✅**
+
+`Entrepot.jsx` ne permettait que de lister les médicaments — aucun moyen de voir le détail, modifier,
+ou supprimer une fiche. Ajouté :
+- `ModalDetailMedicament` : détail complet (stock, seuil, DCI, catégorie, fabricant, prix), lots
+  enregistrés et historique des 10 derniers mouvements pour ce médicament (`lots`/`mouvements_stock`
+  filtrés par `medicament_id`), ouverte au clic sur une ligne du tableau.
+- `ModalEditMedicament` : formulaire d'édition complet (nom/dosage/forme/DCI/catégorie/fabricant/
+  stock actuel/seuil/prix d'achat/prix unitaire), `updateMedicament()`.
+- Suppression protégée : avant toute suppression, comptage des lignes liées dans 4 tables
+  (`lots`, `mouvements_stock`, `livraison_lignes`, `commande_lignes` par `medicament_id`). Si le
+  total est non nul, suppression bloquée avec le détail des comptages et suggestion d'archiver à la
+  place ; sinon confirmation inline puis suppression réelle (`deleteMedicament`).
+- Archivage (`medicaments.actif`, colonne ajoutée) comme alternative non destructive : bascule
+  `actif`/`inactif`, les médicaments archivés disparaissent de la liste active (et des KPI stock
+  faible/rupture/valeur, toujours calculés sur les seuls actifs) mais restent visibles via "Voir les
+  archivés (N)", avec badge "Archivé" et possibilité de réactiver.
+
+**Testé en conditions réelles (Poto-Poto)** :
+- Détail : ouverture sur "Paracetamol Injectable" → données correctes affichées, y compris le
+  mouvement réel "− 25 / Expédition — livraison créée" issu du test des points 1/2.
+- Modification : DCI/seuil minimum/prix unitaire modifiés → sauvegardés → vérifiés directement en
+  base (`dci: "Paracetamol", stock_minimum: 15, prix_unitaire: "550.00"` sur l'id
+  `5eeeb32d-4a91-47e7-8b66-7c521ce6b90b`).
+- Blocage de suppression : clic "Supprimer" sur "Paracetamol Injectable" (qui a 1 mouvement et 1
+  ligne de livraison liés) → message "Suppression impossible" avec comptage exact affiché
+  (0 lot, 1 mouvement, 1 ligne de livraison, 0 ligne de commande), bouton Supprimer masqué,
+  archivage proposé à la place.
+- Archivage réel : "Archiver" → toast "Paracetamol Injectable archivé." → disparu de la liste
+  active (Total références 2→1, Valeur du stock 541 500→504 000 FCFA), réapparaît sous
+  "Voir les archivés (1)" avec badge "Archivé".
+- Réactivation réelle : "Réactiver" sur la fiche archivée → toast "Paracetamol Injectable
+  réactivé." → revenu dans la liste active (Total références 1→2, Valeur du stock repassée à
+  541 500 FCFA).
+- Suppression définitive réelle sur un médicament sans aucune donnée liée : médicament test créé
+  directement en base (`MedTest Suppression`, 0 lot/mouvement/ligne) → visible immédiatement dans
+  l'UI après rechargement → "Supprimer" → confirmation inline ("Cette action est irréversible") →
+  "Supprimer définitivement" → toast "MedTest Suppression supprimé." → **vérifié en base que la
+  ligne a bien disparu** de `medicaments` (requête directe post-suppression : seuls Ceftriaxone 1g
+  et Paracetamol Injectable — `actif: true` — subsistent pour cet établissement).
+
 ## Module HÔPITAL
 
 Non commencé — en attente de validation complète du module Pharmacie.

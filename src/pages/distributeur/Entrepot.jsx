@@ -7,12 +7,12 @@
  *   l'insère dans la table `lots` (authentifié) et incrémente le stock
  */
 import { colors } from "../../theme";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import Layout from "../../components/Layout";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useMedicaments } from "../../hooks/useSupabaseData";
-import { insertLot, incrementStock, insertCommande, insertMedicament } from "../../hooks/useMutations";
+import { insertLot, incrementStock, insertCommande, insertMedicament, updateMedicament, deleteMedicament } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../supabaseClient";
 import { openDocument, tableHTML, infoGridHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
@@ -562,19 +562,340 @@ function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id
   );
 }
 
+// ── Modal Modifier un médicament ────────────────────────────────────────────
+function ModalEditMedicament({ medicament, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    nom: medicament.nom || "",
+    dosage: medicament.dosage || "",
+    forme: medicament.forme || "",
+    dci: medicament.dci || "",
+    categorie: medicament.categorie || "",
+    fabricant: medicament.fabricant || "",
+    stock_actuel: String(medicament.stock_actuel ?? 0),
+    stock_minimum: String(medicament.stock_minimum ?? 0),
+    prix_achat: medicament.prix_achat != null ? String(medicament.prix_achat) : "",
+    prix_unitaire: medicament.prix_unitaire != null ? String(medicament.prix_unitaire) : "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(null);
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const handleSubmit = async () => {
+    if (!form.nom.trim()) { setErr("Le nom est obligatoire."); return; }
+    setSaving(true);
+    setErr(null);
+    try {
+      await updateMedicament(medicament.id, {
+        nom: form.nom.trim(),
+        dosage: form.dosage.trim() || null,
+        forme: form.forme.trim() || null,
+        dci: form.dci.trim() || null,
+        categorie: form.categorie.trim() || null,
+        fabricant: form.fabricant.trim() || null,
+        stock_actuel: parseInt(form.stock_actuel, 10) || 0,
+        stock_minimum: parseInt(form.stock_minimum, 10) || 0,
+        prix_achat: form.prix_achat ? Number(form.prix_achat) : null,
+        prix_unitaire: form.prix_unitaire ? Number(form.prix_unitaire) : null,
+      });
+      onSaved();
+      onClose();
+    } catch (e) {
+      setErr(e.message);
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.45)", zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ backgroundColor: colors.bgCard, borderRadius: 16, padding: 28, width: "100%", maxWidth: 520, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: colors.navy }}>Modifier — {medicament.nom}</h3>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: colors.textMuted, lineHeight: 1 }}>×</button>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div>
+            <label style={labelStyle}>Nom <span style={{ color: "#EF4444" }}>*</span></label>
+            <input style={inputStyle} value={form.nom} onChange={(e) => set("nom", e.target.value)} />
+          </div>
+          <div className="form-row-2">
+            <div>
+              <label style={labelStyle}>Dosage</label>
+              <input style={inputStyle} value={form.dosage} onChange={(e) => set("dosage", e.target.value)} />
+            </div>
+            <div>
+              <label style={labelStyle}>Forme</label>
+              <input style={inputStyle} value={form.forme} onChange={(e) => set("forme", e.target.value)} />
+            </div>
+          </div>
+          <div className="form-row-2">
+            <div>
+              <label style={labelStyle}>DCI</label>
+              <input style={inputStyle} value={form.dci} onChange={(e) => set("dci", e.target.value)} />
+            </div>
+            <div>
+              <label style={labelStyle}>Catégorie</label>
+              <input style={inputStyle} value={form.categorie} onChange={(e) => set("categorie", e.target.value)} />
+            </div>
+          </div>
+          <div>
+            <label style={labelStyle}>Fabricant</label>
+            <input style={inputStyle} value={form.fabricant} onChange={(e) => set("fabricant", e.target.value)} />
+          </div>
+          <div className="form-row-2">
+            <div>
+              <label style={labelStyle}>Stock actuel</label>
+              <input style={inputStyle} type="number" min="0" value={form.stock_actuel} onChange={(e) => set("stock_actuel", e.target.value)} />
+            </div>
+            <div>
+              <label style={labelStyle}>Seuil minimum</label>
+              <input style={inputStyle} type="number" min="0" value={form.stock_minimum} onChange={(e) => set("stock_minimum", e.target.value)} />
+            </div>
+          </div>
+          <div className="form-row-2">
+            <div>
+              <label style={labelStyle}>Prix d'achat unitaire (FCFA)</label>
+              <input style={inputStyle} type="number" min="0" value={form.prix_achat} onChange={(e) => set("prix_achat", e.target.value)} />
+            </div>
+            <div>
+              <label style={labelStyle}>Prix unitaire grossiste (FCFA)</label>
+              <input style={inputStyle} type="number" min="0" value={form.prix_unitaire} onChange={(e) => set("prix_unitaire", e.target.value)} />
+            </div>
+          </div>
+        </div>
+        {err && (
+          <div style={{ marginTop: 14, padding: "8px 12px", backgroundColor: "#FEF2F2", borderRadius: 8, fontSize: 12, color: "#DC2626" }}>{err}</div>
+        )}
+        <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: "11px", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)", borderRadius: 10, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>
+            Annuler
+          </button>
+          <button onClick={handleSubmit} disabled={saving}
+            style={{ flex: 2, padding: "11px", backgroundColor: saving ? "#E5E7EB" : ACCENT, color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer" }}>
+            {saving ? "Enregistrement…" : "Enregistrer les modifications"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Modal Détail médicament (voir / modifier / supprimer / archiver) ───────────
+function ModalDetailMedicament({ medicament, onClose, onEdit, onChanged }) {
+  const [lots, setLots] = useState([]);
+  const [mouvements, setMouvements] = useState([]);
+  const [loadingRel, setLoadingRel] = useState(true);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [blocage, setBlocage] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  // Chargement des données liées (lots + mouvements récents) — sert aussi à
+  // déterminer si une suppression définitive est possible.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoadingRel(true);
+      const [lotsRes, mvtRes] = await Promise.all([
+        supabase.from("lots").select("id, numero_lot, quantite_initiale, date_expiration").eq("medicament_id", medicament.id).order("created_at", { ascending: false }),
+        supabase.from("mouvements_stock").select("id, type, quantite, motif, created_at").eq("medicament_id", medicament.id).order("created_at", { ascending: false }).limit(10),
+      ]);
+      if (cancelled) return;
+      setLots(lotsRes.data ?? []);
+      setMouvements(mvtRes.data ?? []);
+      setLoadingRel(false);
+    })();
+    return () => { cancelled = true; };
+  }, [medicament.id]);
+
+  const handleDeleteClick = async () => {
+    setErr(null);
+    setBusy(true);
+    try {
+      const [lotsCount, mvtCount, livrCount, cmdCount] = await Promise.all([
+        supabase.from("lots").select("id", { count: "exact", head: true }).eq("medicament_id", medicament.id),
+        supabase.from("mouvements_stock").select("id", { count: "exact", head: true }).eq("medicament_id", medicament.id),
+        supabase.from("livraison_lignes").select("id", { count: "exact", head: true }).eq("medicament_id", medicament.id),
+        supabase.from("commande_lignes").select("id", { count: "exact", head: true }).eq("medicament_id", medicament.id),
+      ]);
+      const total = (lotsCount.count ?? 0) + (mvtCount.count ?? 0) + (livrCount.count ?? 0) + (cmdCount.count ?? 0);
+      if (total > 0) {
+        setBlocage({
+          lots: lotsCount.count ?? 0, mouvements: mvtCount.count ?? 0,
+          livraisons: livrCount.count ?? 0, commandes: cmdCount.count ?? 0,
+        });
+      } else {
+        setConfirmDelete(true);
+      }
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await deleteMedicament(medicament.id);
+      onChanged(`${medicament.nom} supprimé.`);
+      onClose();
+    } catch (e) {
+      setErr(e.message);
+      setBusy(false);
+    }
+  };
+
+  const handleArchiveToggle = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const nextActif = medicament.actif === false;
+      await updateMedicament(medicament.id, { actif: nextActif });
+      onChanged(nextActif ? `${medicament.nom} réactivé.` : `${medicament.nom} archivé.`);
+      onClose();
+    } catch (e) {
+      setErr(e.message);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.45)", zIndex: 1100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ backgroundColor: colors.bgCard, borderRadius: 16, padding: 28, width: "100%", maxWidth: 560, maxHeight: "88vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: colors.navy }}>
+              {medicament.nom}
+              {medicament.actif === false && (
+                <span style={{ marginLeft: 8, fontSize: 11, padding: "2px 8px", borderRadius: 6, backgroundColor: "#F3F4F6", color: "#6B7280", fontWeight: 700 }}>Archivé</span>
+              )}
+            </h3>
+            <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+              {[medicament.dosage, medicament.forme].filter(Boolean).join(" · ") || "—"}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: colors.textMuted, lineHeight: 1 }}>×</button>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
+          {[
+            { label: "Stock actuel", value: `${medicament.stock_actuel ?? 0} unités` },
+            { label: "Seuil minimum", value: `${medicament.stock_minimum ?? 0} unités` },
+            { label: "DCI", value: medicament.dci || "—" },
+            { label: "Catégorie", value: medicament.categorie || "—" },
+            { label: "Fabricant", value: medicament.fabricant || "—" },
+            { label: "Prix d'achat", value: medicament.prix_achat ? `${medicament.prix_achat.toLocaleString("fr-FR")} FCFA` : "—" },
+          ].map((f) => (
+            <div key={f.label} style={{ padding: "10px 12px", backgroundColor: colors.bgSurface, borderRadius: 10 }}>
+              <div style={{ fontSize: 10, color: colors.textMuted, marginBottom: 2 }}>{f.label}</div>
+              <div style={{ fontWeight: 700, fontSize: 13, color: colors.navy }}>{f.value}</div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ fontSize: 12, fontWeight: 700, color: colors.textSecondary, textTransform: "uppercase", marginBottom: 8 }}>
+          Lots enregistrés ({loadingRel ? "…" : lots.length})
+        </div>
+        {!loadingRel && lots.length === 0 && (
+          <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 16 }}>Aucun lot pour ce médicament.</div>
+        )}
+        {lots.slice(0, 5).map((l) => (
+          <div key={l.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 12, borderBottom: "1px solid var(--border-light)" }}>
+            <span style={{ fontFamily: "monospace", color: colors.navy }}>{l.numero_lot}</span>
+            <span style={{ color: colors.textSecondary }}>{l.quantite_initiale} unités · exp. {l.date_expiration ? new Date(l.date_expiration).toLocaleDateString("fr-FR") : "—"}</span>
+          </div>
+        ))}
+
+        <div style={{ fontSize: 12, fontWeight: 700, color: colors.textSecondary, textTransform: "uppercase", margin: "16px 0 8px" }}>
+          Mouvements récents ({loadingRel ? "…" : mouvements.length})
+        </div>
+        {!loadingRel && mouvements.length === 0 && (
+          <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 8 }}>Aucun mouvement enregistré.</div>
+        )}
+        {mouvements.slice(0, 5).map((m) => (
+          <div key={m.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 12, borderBottom: "1px solid var(--border-light)" }}>
+            <span style={{ color: m.type === "entree" ? "#16A34A" : "#DC2626", fontWeight: 600 }}>{m.type === "entree" ? "+ " : "− "}{m.quantite}</span>
+            <span style={{ color: colors.textSecondary }}>{m.motif || "—"}</span>
+          </div>
+        ))}
+
+        {blocage && (
+          <div style={{ marginTop: 16, padding: "12px 14px", backgroundColor: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 10 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#92400E", marginBottom: 4 }}>
+              Suppression impossible — ce médicament est lié à des données existantes
+            </div>
+            <div style={{ fontSize: 11, color: "#92400E" }}>
+              {blocage.lots} lot(s), {blocage.mouvements} mouvement(s), {blocage.livraisons} ligne(s) de livraison,
+              {" "}{blocage.commandes} ligne(s) de commande.
+            </div>
+            <div style={{ fontSize: 11, color: "#92400E", marginTop: 6 }}>
+              Vous pouvez l'archiver à la place : il disparaîtra de la liste active sans perdre son historique.
+            </div>
+          </div>
+        )}
+
+        {confirmDelete && (
+          <div style={{ marginTop: 16, padding: "12px 14px", backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 10 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#DC2626", marginBottom: 8 }}>
+              Confirmer la suppression définitive de "{medicament.nom}" ? Cette action est irréversible.
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => setConfirmDelete(false)} style={{ padding: "6px 14px", backgroundColor: colors.bgCard, border: "1px solid var(--border)", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>Annuler</button>
+              <button onClick={handleConfirmDelete} disabled={busy} style={{ padding: "6px 14px", backgroundColor: "#DC2626", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: busy ? "wait" : "pointer" }}>
+                {busy ? "Suppression…" : "Supprimer définitivement"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {err && (
+          <div style={{ marginTop: 12, padding: "8px 12px", backgroundColor: "#FEF2F2", borderRadius: 8, fontSize: 12, color: "#DC2626" }}>{err}</div>
+        )}
+
+        <div style={{ display: "flex", gap: 10, marginTop: 22, flexWrap: "wrap" }}>
+          <button onClick={onClose} style={{ padding: "9px 16px", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)", borderRadius: 10, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>
+            Fermer
+          </button>
+          <button onClick={() => onEdit(medicament)} style={{ padding: "9px 16px", backgroundColor: "#EFF6FF", color: "#2563EB", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+            Modifier
+          </button>
+          <button onClick={handleArchiveToggle} disabled={busy} style={{ padding: "9px 16px", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: busy ? "wait" : "pointer" }}>
+            {medicament.actif === false ? "Réactiver" : "Archiver"}
+          </button>
+          {!confirmDelete && !blocage && (
+            <button onClick={handleDeleteClick} disabled={busy} style={{ padding: "9px 16px", backgroundColor: "#FEF2F2", color: "#DC2626", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: busy ? "wait" : "pointer" }}>
+              {busy ? "Vérification…" : "Supprimer"}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function Entrepot() {
   const { auth } = useAuth();
-  const { data: medicaments, loading, refetch } = useMedicaments(auth?.etablissement_id);
+  const { data: medicamentsAll, loading, refetch } = useMedicaments(auth?.etablissement_id);
   const { toasts, success, error: toastError } = useToast();
   const [showModal, setShowModal]               = useState(false);
   const [showCommande, setShowCommande]         = useState(false);
   const [recherche, setRecherche]               = useState("");
+  const [showArchives, setShowArchives]         = useState(false);
+  const [detailModal, setDetailModal]           = useState(null);
+  const [editModal, setEditModal]               = useState(null);
 
+  const medicaments = medicamentsAll.filter((m) => m.actif !== false);
+  const archivesCount = medicamentsAll.length - medicaments.length;
+  const affiches = showArchives ? medicamentsAll : medicaments;
+
+  // KPI toujours calculés sur le stock actif — un produit archivé ne doit
+  // jamais compter comme "en rupture" ni peser sur la valeur du stock.
   const stockFaible = medicaments.filter((m) => m.stock_actuel < m.stock_minimum);
   const enRupture   = medicaments.filter((m) => m.stock_actuel === 0);
 
-  const filtered = medicaments.filter((m) =>
+  const filtered = affiches.filter((m) =>
     m.nom.toLowerCase().includes(recherche.toLowerCase())
   );
 
@@ -612,6 +933,21 @@ export default function Entrepot() {
           auth={auth}
           onClose={() => setShowCommande(false)}
           onSuccess={(msg) => { setShowCommande(false); success(msg); }}
+        />
+      )}
+      {detailModal && (
+        <ModalDetailMedicament
+          medicament={detailModal}
+          onClose={() => setDetailModal(null)}
+          onEdit={(m) => { setDetailModal(null); setEditModal(m); }}
+          onChanged={(msg) => { refetch(); success(msg); }}
+        />
+      )}
+      {editModal && (
+        <ModalEditMedicament
+          medicament={editModal}
+          onClose={() => setEditModal(null)}
+          onSaved={() => { refetch(); success(`${editModal.nom} mis à jour.`); }}
         />
       )}
 
@@ -658,6 +994,13 @@ export default function Entrepot() {
           <span style={{ fontSize: 12, color: colors.textSecondary }}>
             {loading ? "Chargement…" : `${filtered.length} produit${filtered.length !== 1 ? "s" : ""}`}
           </span>
+          {archivesCount > 0 && (
+            <button
+              onClick={() => setShowArchives((v) => !v)}
+              style={{ padding: "8px 14px", backgroundColor: showArchives ? "#F3F4F6" : colors.bgCard, color: colors.textSecondary, border: "1px solid var(--border)", borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+              {showArchives ? "Masquer les archivés" : `Voir les archivés (${archivesCount})`}
+            </button>
+          )}
           <button
             onClick={() => setShowCommande(true)}
             style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 18px", backgroundColor: colors.bgCard, color: ACCENT, border: `1.5px solid ${ACCENT}`, borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
@@ -708,17 +1051,23 @@ export default function Entrepot() {
           const couleur = stockColor(m.stock_actuel, m.stock_minimum);
 
           return (
-            <div key={m.id} style={{
+            <div key={m.id} onClick={() => setDetailModal(m)} style={{
               display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1.5fr 1fr",
               gap: 0, padding: "14px 20px",
               borderBottom: i < filtered.length - 1 ? "1px solid var(--border-light)" : "none",
-              alignItems: "center",
-              backgroundColor: vide ? "#FFF5F5" : faible ? "#FFFBEB" : "white",
+              alignItems: "center", cursor: "pointer",
+              backgroundColor: m.actif === false ? "#F9FAFB" : vide ? "#FFF5F5" : faible ? "#FFFBEB" : "white",
+              opacity: m.actif === false ? 0.65 : 1,
               animation: "fadeIn 0.2s ease",
             }}>
               {/* Médicament */}
               <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: colors.navy }}>{m.nom}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: colors.navy, display: "flex", alignItems: "center", gap: 6 }}>
+                  {m.nom}
+                  {m.actif === false && (
+                    <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 5, backgroundColor: "#E5E7EB", color: "#6B7280", fontWeight: 700 }}>Archivé</span>
+                  )}
+                </div>
                 {m.code && <div style={{ fontSize: 11, color: colors.textMuted, fontFamily: "monospace" }}>{m.code}</div>}
               </div>
 

@@ -26,6 +26,10 @@ export async function updateMedicament(id, fields) {
   return run(supabase.from("medicaments").update(fields).eq("id", id).select().single());
 }
 
+export async function deleteMedicament(id) {
+  return run(supabase.from("medicaments").delete().eq("id", id).select().single());
+}
+
 export async function insertMedicament(fields) {
   return run(supabase.from("medicaments").insert(fields).select().single());
 }
