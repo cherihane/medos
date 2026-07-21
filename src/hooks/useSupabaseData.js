@@ -119,7 +119,7 @@ export function useCommandesPaginated(etablissement_id = null, pageSize = 20, fi
     let q = supabase.from("commandes").select(`
       id, reference, statut, date_commande, date_livraison_prevue, montant_total, notes,
       medicament_id, quantite, email_statut, email_erreur,
-      etablissements ( nom, ville ),
+      etablissements!commandes_etablissement_id_fkey ( nom, ville ),
       fournisseurs ( id, nom, telephone, email, pays ),
       medicaments ( nom, dosage, forme ),
       commande_lignes ( id, medicament_id, medicament_nom, quantite, prix_unitaire )
@@ -158,7 +158,7 @@ export function useLivraisonsPaginated(statut = "", pageSize = 20) {
     let q = supabase.from("livraisons").select(`
       id, statut, date_depart, date_arrivee_prevue, date_arrivee_reelle,
       transporteur, numero_suivi, etablissement_id, created_at,
-      etablissements ( nom, ville )
+      etablissements!livraisons_etablissement_id_fkey ( nom, ville )
     `, { count: "exact" }).order("created_at", { ascending: false });
     if (statut && statut !== "tous") q = q.eq("statut", statut);
     return q;
@@ -319,7 +319,7 @@ export function useCommandes(etablissement_id = null) {
       .from("commandes")
       .select(`
         id, reference, statut, date_commande, date_livraison_prevue, montant_total, notes,
-        etablissements ( nom, ville ),
+        etablissements!commandes_etablissement_id_fkey ( nom, ville ),
         fournisseurs ( nom )
       `)
       .order("date_commande", { ascending: false })
@@ -337,7 +337,7 @@ export function useLivraisons() {
       .select(`
         id, statut, date_depart, date_arrivee_prevue, date_arrivee_reelle,
         transporteur, numero_suivi, temperature_min, temperature_max, created_at,
-        etablissements ( nom, ville ),
+        etablissements!livraisons_etablissement_id_fkey ( nom, ville ),
         fournisseurs ( nom )
       `)
       .order("created_at", { ascending: false })
@@ -463,13 +463,13 @@ export function useKpiDistributeur() {
   useEffect(() => {
     Promise.all([
       supabase.from("commandes").select("id, statut, montant_total"),
-      supabase.from("etablissements").select("id, type").eq("actif", true),
+      supabase.from("distributeur_clients").select("id", { count: "exact", head: true }),
       supabase.from("livraisons").select("id, statut"),
-    ]).then(([cmds, etabs, livs]) => {
+    ]).then(([cmds, dc, livs]) => {
       const allCmds = cmds.data ?? [];
       const actives = allCmds.filter((c) => !["livree","annulee"].includes(c.statut)).length;
       const ca = allCmds.reduce((s, c) => s + (c.montant_total ?? 0), 0);
-      const clients = (etabs.data ?? []).filter((e) => e.type !== "distributeur").length;
+      const clients = dc.count ?? 0;
       const enTransit = (livs.data ?? []).filter((l) => l.statut === "en_transit").length;
       setState({
         data: { commandesActives: actives, clients, ca, livraisonsEnCours: enTransit },
@@ -520,7 +520,7 @@ export function useContrefacons() {
 // ─── commandes en temps réel (INSERT + UPDATE) ────────────────────────────────
 const COMMANDES_SELECT = `
   id, reference, statut, date_commande, date_livraison_prevue, montant_total, notes,
-  etablissements ( nom, ville ),
+  etablissements!commandes_etablissement_id_fkey ( nom, ville ),
   fournisseurs ( nom )
 `.trim();
 

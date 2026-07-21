@@ -650,11 +650,69 @@ trouvés (logique commerciale B2B), à l'inverse de la liste des pharmacies/hôp
 — pas de "cartographie" des établissements non-clients construite dans cette session (explicitement
 hors scope, demandé séparément).
 
-**Reste à tester (Étape 1, en cours)** : Dashboard (le panneau "Réseau établissements" utilise
-encore une autre requête, potentiellement à corriger — repéré en testant mais pas encore audité),
-Entrepôt, Traçabilité/QR, réception de commande dans l'UI temps réel (`MesCommandesPanel`/
-`CommandesTab`), traitement livraison, historique filtrable, alertes stock bas entrepôt, Prévisions
-IA, Rapports.
+**2026-07-21 (session 8) — Étape 1, point 1 : Dashboard distributeur — 5 bugs trouvés et corrigés.**
+
+Testé avec le compte réel "Poto-Poto" (`cherihaneadam123+distributeur@gmail.com`, mot de passe
+réinitialisé via l'API Admin Supabase pour ce test), en local contre la base de production.
+
+1. **FK ambiguë cassant tout affichage de `commandes`/`livraisons` avec établissement joint.**
+   Ajouter `commandes.distributeur_id`/`livraisons.distributeur_id` (étape 0) crée une DEUXIÈME
+   relation vers `etablissements`, en plus de `etablissement_id` déjà existante — PostgREST refuse
+   alors toute jointure `etablissements(...)` non désambiguïsée (`PGRST201`, "more than one
+   relationship found"). Le panneau "Commandes reçues (temps réel)" affichait silencieusement
+   "Aucune commande" (l'erreur était avalée par `data ?? []`) alors qu'une commande existait bien.
+   Corrigé dans les 5 requêtes concernées de
+   [useSupabaseData.js](src/hooks/useSupabaseData.js) : `etablissements!commandes_etablissement_id_fkey(...)`
+   / `etablissements!livraisons_etablissement_id_fkey(...)`.
+2. **Panneau "Réseau établissements" trompeur.** Utilisait `useEtablissements()` brut — affichait le
+   distributeur concurrent ("Distributeur Test Kela") comme s'il faisait partie du réseau, et le KPI
+   "Clients" comptait `type !== 'distributeur'` sur cette même liste brute (juste par coïncidence
+   correct une fois la policy d'étape 0 posée). Remplacé par `useDistributeurClients()` (même hook
+   que Réseau clients) ; KPI "Clients" recalculé honnêtement via `count` direct sur
+   `distributeur_clients`.
+3. **"CA total" affiché "0.0M FCFA"** pour un chiffre d'affaires de 15 000 FCFA (arrondi à 0 par la
+   division par 1M systématique). Ajouté `fmtFCFA()` : affichage en FCFA bruts sous 1M, en "M FCFA"
+   au-delà.
+4. **`supabase.from("alertes").insert(...).catch(() => {})` — `.catch` n'existe pas sur le query
+   builder Postgrest** (`@supabase/supabase-js` v2.106.2 : `PromiseLike`, pas `Promise` — pas de
+   `.catch`/`.finally`). Chaque clic sur "Valider"/"Expédier"/"Confirmer livraison" plantait avec une
+   erreur JS visible, **alors que la mise à jour du statut de la commande avait déjà réussi** —
+   source de confusion pour le distributeur (le statut change mais un message d'erreur s'affiche).
+   Remplacé par un vrai `try/await/catch`. Ce même anti-pattern existe ailleurs dans le code
+   (hôpital, quelques pages pharmacie) — hors scope de cette session (module hôpital non touché),
+   signalé pour une passe dédiée future.
+5. **Notification au client à chaque changement de statut : totalement cassée, deux causes
+   empilées.** Au-delà du bug n°4, la policy RLS `alertes_insert` (scope étape 0) n'autorisait
+   d'insérer une alerte QUE pour son propre établissement — un distributeur ne pouvait donc jamais
+   notifier un CLIENT (RLS `42501`). Diagnostic approfondi : même avec une policy INSERT
+   supplémentaire logiquement correcte (testée sous toutes les formes : condition directe, sous-
+   requête, fonction `SECURITY DEFINER` dédiée `est_client_de_distributeur()`, et même
+   `WITH CHECK (true)` sans aucune autre condition) combinée à la policy existante, l'insertion pour
+   un `etablissement_id` autre que le sien continuait à échouer de façon reproductible — alors que la
+   même condition fonctionne normalement en `SELECT`. Cause exacte non identifiée avec les outils
+   disponibles (grants, contraintes, policies restrictives, cache PostgREST tous écartés un par un).
+   **Solution robuste retenue** : la notification passe désormais par une fonction
+   `SECURITY DEFINER` dédiée, `notifier_client_distributeur()` (vérifie explicitement
+   `est_client_de_distributeur()` puis écrit elle-même, contournant proprement RLS au lieu d'en
+   dépendre) — testée et confirmée fonctionnelle. Au passage, `alertes.type` (NOT NULL, jamais fourni
+   par le code) aurait aussi fait échouer l'insert une fois le blocage RLS levé — corrigé aussi.
+6. **Realtime silencieux sur tout le projet.** `supabase_realtime` (publication Postgres utilisée par
+   `postgres_changes`) était **entièrement vide** — aucune table, nulle part. Le panneau "Commandes
+   reçues (TEMPS RÉEL)" ne se mettait donc jamais à jour après une action (statut changé en base,
+   confirmé, mais UI figée jusqu'à un rechargement manuel). Ajouté `commandes` et `alertes` à la
+   publication (`ALTER PUBLICATION supabase_realtime ADD TABLE ...`) — correctif d'infrastructure,
+   aucun code touché, bénéficie aussi à `useAlertesRealtime()` utilisé ailleurs dans l'app. Revalidé :
+   changement de statut par clic → mise à jour du badge dans l'UI **sans rechargement de page**.
+
+**Revalidé de bout en bout** : commande CMD-86532215 (Pharmacie Mimi → Poto-Poto, 15 000 FCFA)
+Envoyée → Confirmée → En transit → Livrée, chaque transition cliquée dans le Dashboard réel,
+propagée en temps réel sans reload, notification `alertes` confirmée en base pour Pharmacie Mimi
+("Commande livree — Ref. CMD-86532215").
+
+**Reste à tester (Étape 1, en cours)** : Entrepôt, Traçabilité/QR, réception de commande côté
+Fournisseurs.jsx pharmacie (`MesCommandesPanel`/`CommandesTab` — bénéficient probablement des mêmes
+correctifs FK/realtime, à revalider), traitement livraison (décrément stock entrepôt), historique
+filtrable, alertes stock bas entrepôt, Prévisions IA, Rapports.
 
 ## Module HÔPITAL
 
