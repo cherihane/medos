@@ -1162,3 +1162,10 @@ export async function fetchImageriePatient(patient_id) {
   const { data } = await supabase.from("imagerie").select("*").eq("patient_id", patient_id).order("date_demande", { ascending: false });
   return data ?? [];
 }
+
+// ─── Présence / heartbeat ───────────────────────────────────────────────────────
+// Pas de gestion d'erreur exposée : un heartbeat manqué ne doit jamais
+// perturber l'utilisateur, seulement retarder la mise à jour du statut "actif".
+export async function enregistrerConnexion() {
+  await supabase.rpc("enregistrer_connexion");
+}

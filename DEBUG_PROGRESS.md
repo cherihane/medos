@@ -1070,6 +1070,38 @@ ligne modifiée pour ajouter le bouton "Enregistrer dans l'entrepôt". Vérifié
 Unicode sur l'ensemble du fichier après coup : plus aucun émoji pictographique présent. Rendu visuel
 confirmé dans le navigateur — icônes caméra et loupe correctement affichées à la place des emojis.
 
+## Module DISTRIBUTEUR — Session 10 : Clients/Réseau Clients, Dashboard, Alertes stock bas
+
+**Point 2 — Widget "établissements actifs" du Dashboard. ✅**
+
+`Vos clients` sur `Dashboard.jsx` utilisait déjà `useDistributeurClients()` (relation réelle, pas un
+annuaire global — ce point-là était déjà correct). En revanche le badge "actif" était un point vert +
+libellé **statiques**, affichés inconditionnellement pour chaque client, sans lien avec une réelle
+activité récente. Corrigé par un mécanisme de présence complet :
+- Migration `20260722c_derniere_connexion_et_alertes_clients.sql` : colonne
+  `etablissements.derniere_connexion`, RPC `enregistrer_connexion()` (`SECURITY DEFINER`, met à jour
+  uniquement les établissements de l'appelant via `mes_etablissements()`).
+- Heartbeat applicatif dans `Layout.jsx` (composant partagé par tous les rôles, jamais touché
+  `AuthContext.jsx`) : appelle `enregistrer_connexion()` au montage puis toutes les 3 minutes tant que
+  `auth.etablissement_id` est défini — échec silencieux (`.catch(() => {})`), un heartbeat manqué ne
+  doit jamais perturber l'utilisateur.
+- `useDistributeurClients()` sélectionne désormais `derniere_connexion` ; nouvelle fonction
+  `estConnecteRecemment()` (seuil configurable, `CONNEXION_RECENTE_MINUTES = 15`) dérive le statut
+  affiché — jamais un flag stocké.
+
+**Testé en conditions réelles (Poto-Poto + Pharmacie Mimi, cliente réelle liée via
+`distributeur_clients`)** :
+- Avant toute connexion : `derniere_connexion` NULL pour Poto-Poto comme pour Pharmacie Mimi.
+- Reconnexion réelle de Poto-Poto (login complet) → **heartbeat confirmé en base**
+  (`derniere_connexion` horodaté à la seconde près après rechargement du Dashboard).
+- Widget "Vos clients" avant activité de Pharmacie Mimi : point gris, badge **"hors ligne"** —
+  correction du bug (avant : toujours "actif" quel que soit l'état réel).
+- `derniere_connexion` de Pharmacie Mimi mise à `now()` (connexion non simulable dans cette session,
+  compte séparé sans accès aux identifiants — vérifié directement en base à la place) → rechargement
+  du Dashboard → widget bascule immédiatement sur point vert, badge **"actif"** — la logique d'affichage
+  réagit correctement aux deux états.
+- Donnée de test remise à NULL après vérification (Pharmacie Mimi n'a pas réellement été connectée).
+
 ## Module HÔPITAL
 
 Non commencé — en attente de validation complète du module Pharmacie.
