@@ -12,7 +12,7 @@ import Layout from "../../components/Layout";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useMedicaments } from "../../hooks/useSupabaseData";
-import { insertLot, incrementStock, insertCommande } from "../../hooks/useMutations";
+import { insertLot, incrementStock, insertCommande, insertMedicament } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../supabaseClient";
 import { openDocument, tableHTML, infoGridHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
@@ -156,9 +156,11 @@ const inputStyle = {
 };
 const labelStyle = { fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 5 };
 
-function ModalReception({ medicaments, onClose, onSuccess }) {
+function ModalReception({ medicaments, etablissement_id, onClose, onSuccess }) {
   const [form, setForm] = useState({
-    medicament_id: "",
+    nom: "",
+    dosage: "",
+    forme: "",
     fabricant: "",
     quantite: "",
     date_fabrication: "",
@@ -172,8 +174,15 @@ function ModalReception({ medicaments, onClose, onSuccess }) {
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
+  // Un produit déjà réceptionné une première fois réutilise sa fiche
+  // médicament (nom identique, insensible à la casse) — sinon une nouvelle
+  // fiche est créée dans le catalogue du distributeur. Pas de contrainte à
+  // choisir depuis une liste figée : on peut toujours réceptionner un
+  // nouveau produit jamais vu, comme un vrai arrivage fabricant.
+  const existant = medicaments.find((m) => m.nom.trim().toLowerCase() === form.nom.trim().toLowerCase());
+
   const handleSubmit = useCallback(async () => {
-    if (!form.medicament_id || !form.fabricant || !form.quantite || !form.date_expiration) {
+    if (!form.nom.trim() || !form.fabricant || !form.quantite || !form.date_expiration) {
       setErr("Remplissez les champs obligatoires.");
       return;
     }
@@ -183,25 +192,40 @@ function ModalReception({ medicaments, onClose, onSuccess }) {
     setSaving(true);
     setErr(null);
     try {
+      let medicamentId = existant?.id;
+      if (!medicamentId) {
+        const nouveau = await insertMedicament({
+          nom: form.nom.trim(),
+          dosage: form.dosage.trim() || null,
+          forme: form.forme.trim() || null,
+          fabricant: form.fabricant.trim(),
+          etablissement_id,
+          stock_actuel: 0,
+          stock_minimum: 10,
+          prix_unitaire: form.prix_unitaire ? Number(form.prix_unitaire) : null,
+          prix_achat: form.prix_achat ? Number(form.prix_achat) : null,
+        });
+        medicamentId = nouveau.id;
+      }
       // 1. Insérer le lot dans Supabase → alimentera le scanner
       await insertLot({
         numero_lot: lotGenere,
-        medicament_id: form.medicament_id,
+        medicament_id: medicamentId,
         fabricant: form.fabricant,
         quantite_initiale: qty,
         date_fabrication: form.date_fabrication || null,
         date_expiration: form.date_expiration,
-        qr_code: JSON.stringify({ lot: lotGenere, medicament_id: form.medicament_id }),
+        qr_code: JSON.stringify({ lot: lotGenere, medicament_id: medicamentId }),
         ...(form.prix_achat ? { prix_achat: Number(form.prix_achat) } : {}),
       });
       // 2. Incrémenter le stock du médicament
-      await incrementStock(form.medicament_id, qty);
+      await incrementStock(medicamentId, qty);
       onSuccess(lotGenere, qty);
     } catch (e) {
       setErr(e.message);
       setSaving(false);
     }
-  }, [form, lotGenere, onSuccess]);
+  }, [form, lotGenere, onSuccess, existant, etablissement_id]);
 
   return (
     <div style={{
@@ -236,13 +260,34 @@ function ModalReception({ medicaments, onClose, onSuccess }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div>
             <label style={labelStyle}>Médicament <span style={{ color: "#EF4444" }}>*</span></label>
-            <select value={form.medicament_id} onChange={(e) => set("medicament_id", e.target.value)}
-              style={{ ...inputStyle, backgroundColor: colors.bgCard }}>
-              <option value="">— Sélectionner —</option>
-              {medicaments.map((m) => (
-                <option key={m.id} value={m.id}>{m.nom}</option>
-              ))}
-            </select>
+            <input
+              value={form.nom}
+              onChange={(e) => set("nom", e.target.value)}
+              placeholder="Ex: Amoxicilline 500mg — nouveau ou déjà reçu"
+              list="entrepot-medicaments-existants"
+              style={inputStyle}
+            />
+            <datalist id="entrepot-medicaments-existants">
+              {medicaments.map((m) => <option key={m.id} value={m.nom} />)}
+            </datalist>
+            {form.nom.trim() && (
+              <div style={{ fontSize: 11, color: existant ? "#2563EB" : "#16A34A", marginTop: 4 }}>
+                {existant ? "Produit déjà dans votre catalogue — le stock sera incrémenté." : "Nouveau produit — une fiche sera créée dans votre catalogue."}
+              </div>
+            )}
+          </div>
+
+          <div className="form-row-2">
+            <div>
+              <label style={labelStyle}>Dosage</label>
+              <input value={form.dosage} onChange={(e) => set("dosage", e.target.value)}
+                placeholder="Ex: 500mg" style={inputStyle} disabled={!!existant} />
+            </div>
+            <div>
+              <label style={labelStyle}>Forme</label>
+              <input value={form.forme} onChange={(e) => set("forme", e.target.value)}
+                placeholder="Ex: Comprimé, Gélule…" style={inputStyle} disabled={!!existant} />
+            </div>
           </div>
 
           <div className="form-row-2">
@@ -520,7 +565,7 @@ function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function Entrepot() {
   const { auth } = useAuth();
-  const { data: medicaments, loading, refetch } = useMedicaments();
+  const { data: medicaments, loading, refetch } = useMedicaments(auth?.etablissement_id);
   const { toasts, success, error: toastError } = useToast();
   const [showModal, setShowModal]               = useState(false);
   const [showCommande, setShowCommande]         = useState(false);
@@ -554,6 +599,7 @@ export default function Entrepot() {
       {showModal && (
         <ModalReception
           medicaments={medicaments}
+          etablissement_id={auth?.etablissement_id}
           onClose={() => setShowModal(false)}
           onSuccess={handleSuccess}
         />
