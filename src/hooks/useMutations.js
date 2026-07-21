@@ -224,6 +224,18 @@ export async function receiveLivraison(medicamentNom, quantite, etablissementDes
   return data; // "ok" | "medicament_introuvable"
 }
 
+// Miroir de receiveLivraison côté entrepôt du distributeur qui expédie —
+// décrémente son propre stock (jamais celui d'un autre établissement).
+export async function expedierDepuisEntrepot(medicamentNom, quantite, distributeurId) {
+  const { data, error } = await supabase.rpc("expedier_depuis_entrepot", {
+    p_medicament_nom:  medicamentNom,
+    p_quantite:        quantite,
+    p_distributeur_id: distributeurId,
+  });
+  if (error) throw new Error(`expedier_depuis_entrepot: ${error.message}`);
+  return data; // "ok" | "medicament_introuvable"
+}
+
 // ─── Fond de caisse ───────────────────────────────────────────────────────────
 export async function insertFondCaisse(fields) {
   return run(supabase.from("fond_caisse").insert(fields).select().single());

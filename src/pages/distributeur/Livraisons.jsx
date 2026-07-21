@@ -6,7 +6,7 @@ import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useLivraisonsPaginated, useDistributeurClients } from "../../hooks/useSupabaseData";
 import Pagination from "../../components/Pagination";
-import { insertLivraison, updateLivraison, receiveLivraison, insertMouvementStock } from "../../hooks/useMutations";
+import { insertLivraison, updateLivraison, receiveLivraison, expedierDepuisEntrepot } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
 
 const statusStyle = {
@@ -90,6 +90,7 @@ function NouvelleModal({ clients, onClose, onSaved }) {
 
 // ── Modal Update statut ───────────────────────────────────────────────────────
 function StatutModal({ livraison, onClose, onSaved }) {
+  const { auth } = useAuth();
   const [statut, setStatut] = useState(livraison.statut);
   const [lignesLivraison, setLignesLivraison] = useState([{ nom: "", quantite: "" }]);
   const [stockWarn, setStockWarn] = useState(null);
@@ -108,30 +109,35 @@ function StatutModal({ livraison, onClose, onSaved }) {
       if (statut === "livree") {
         update.date_arrivee_reelle = new Date().toISOString();
         const lignesValides = lignesLivraison.filter((l) => l.nom.trim() && parseInt(l.quantite) > 0);
-        const lignesResults = [];
+        update.lignes_livrees = JSON.stringify(lignesValides);
+        update.quantite_livree = lignesValides.reduce((s, l) => s + (parseInt(l.quantite) || 0), 0);
 
+        // L'écriture du statut passe en premier et seule : si elle échoue
+        // (colonne manquante, réseau...), aucun mouvement de stock n'a été
+        // appliqué et un nouvel essai reste sûr. Les ajustements de stock
+        // ci-dessous ne s'exécutent qu'une fois la livraison réellement
+        // marquée "livrée" — jamais rejoués si on reclique après un échec.
+        await updateLivraison(livraison.id, update);
+
+        // receive_livraison / expedier_depuis_entrepot journalisent elles-mêmes
+        // le mouvement de stock correspondant (medicament_id résolu en
+        // interne, SECURITY DEFINER) — pas d'insertMouvementStock séparé ici.
+        const lignesResults = [];
         for (const ligne of lignesValides) {
           const res = await receiveLivraison(ligne.nom.trim(), parseInt(ligne.quantite), livraison.etablissement_id);
           const status = res === "ok" ? "ok" : "introuvable";
           lignesResults.push({ nom: ligne.nom.trim(), quantite: parseInt(ligne.quantite), status });
 
-          if (status === "ok") {
+          // Décrémente le stock ENTREPÔT du distributeur qui expédie — sans
+          // ça, "Entrepôt" ne reflète jamais les livraisons réellement
+          // parties, indépendamment de la réception côté client ci-dessus.
+          if (auth?.etablissement_id) {
             try {
-              await insertMouvementStock({
-                etablissement_id: livraison.etablissement_id,
-                medicament_nom: ligne.nom.trim(),
-                type: "entree",
-                quantite: parseInt(ligne.quantite),
-                motif: "Livraison recue — N° " + livraison.numero_suivi,
-                created_at: new Date().toISOString(),
-              });
+              await expedierDepuisEntrepot(ligne.nom.trim(), parseInt(ligne.quantite), auth.etablissement_id);
             } catch (_) {}
           }
         }
 
-        update.lignes_livrees = JSON.stringify(lignesValides);
-        update.quantite_livree = lignesValides.reduce((s, l) => s + (parseInt(l.quantite) || 0), 0);
-        await updateLivraison(livraison.id, update);
         onSaved(statut);
         setResults(lignesResults);
       } else {
