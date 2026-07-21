@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
-import { useKpiDistributeur, useEtablissements, useCommandesRealtime } from "../../hooks/useSupabaseData";
+import { useKpiDistributeur, useDistributeurClients, useCommandesRealtime } from "../../hooks/useSupabaseData";
 import { updateCommande } from "../../hooks/useMutations";
 import { supabase } from "../../supabaseClient";
 import { colors, radius, shadow, font } from "../../theme";
@@ -34,6 +34,11 @@ function fmtChange(now, prev) {
 function fmt(iso) {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("fr-FR");
+}
+
+function fmtFCFA(ca) {
+  if (ca >= 1000000) return `${(ca / 1000000).toFixed(1)}M FCFA`;
+  return `${ca.toLocaleString("fr-FR")} FCFA`;
 }
 
 // Valeurs exactes du check constraint SQL :
@@ -119,13 +124,15 @@ function CommandesPanel() {
             livree:     "Commande livree",
             annulee:    "Commande annulee",
           };
-          await supabase.from("alertes").insert({
-            etablissement_id: row.etablissement_id,
-            titre: titres[statut] ?? "Commande mise a jour",
-            message: `Ref. ${cmd.reference ?? cmd.id?.slice(0, 8).toUpperCase()}`,
-            severite: statut === "annulee" ? "critique" : "info",
-            resolu: false,
-          }).catch(() => {});
+          try {
+            await supabase.rpc("notifier_client_distributeur", {
+              p_etablissement_id: row.etablissement_id,
+              p_type: "commande",
+              p_titre: titres[statut] ?? "Commande mise a jour",
+              p_message: `Ref. ${cmd.reference ?? cmd.id?.slice(0, 8).toUpperCase()}`,
+              p_severite: statut === "annulee" ? "critique" : "info",
+            });
+          } catch (_) {}
         }
       }
     } catch (e) {
@@ -260,7 +267,8 @@ function CommandesPanel() {
 // ── Dashboard principal ───────────────────────────────────────────────────────
 export default function DashboardDistributeur() {
   const { data: kpi, loading: loadKpi } = useKpiDistributeur();
-  const { data: etabs, loading: loadEtabs } = useEtablissements();
+  const { data: relations, loading: loadEtabs } = useDistributeurClients();
+  const etabs = relations.map((r) => r.client).filter(Boolean);
   const hier = useTendanceDistributeur();
   const navigate = useNavigate();
 
@@ -270,7 +278,7 @@ export default function DashboardDistributeur() {
   const kpis = [
     { label: "Commandes actives",   value: loadKpi ? "…" : commandesActives,                                        color: "#F59E0B", to: "/distributeur/livraisons", change: hier ? fmtChange(commandesActives, hier.commandesHier) : null },
     { label: "Clients",             value: loadKpi ? "…" : kpi?.clients ?? 0,                                       color: "#3B82F6", to: "/distributeur/clients",    change: null },
-    { label: "CA total",            value: loadKpi ? "…" : `${((kpi?.ca ?? 0) / 1000000).toFixed(1)}M FCFA`,        color: "#10B981", to: "/distributeur/livraisons", change: null },
+    { label: "CA total",            value: loadKpi ? "…" : fmtFCFA(kpi?.ca ?? 0),                                    color: "#10B981", to: "/distributeur/livraisons", change: null },
     { label: "Livraisons en cours", value: loadKpi ? "…" : livraisonsEnCours,                                       color: "#8B5CF6", to: "/distributeur/livraisons", change: hier ? fmtChange(livraisonsEnCours, hier.livraisonsHier) : null },
   ];
 
@@ -308,14 +316,19 @@ export default function DashboardDistributeur() {
       </div>
 
       <div className="dash-grid-2">
-        {/* Réseau établissements */}
+        {/* Vos clients */}
         <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
           <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: colors.navy }}>
-            Réseau établissements ({loadEtabs ? "…" : etabs.length})
+            Vos clients ({loadEtabs ? "…" : etabs.length})
           </h3>
           {loadEtabs && [1, 2, 3].map((i) => (
             <div key={i} style={{ height: 52, backgroundColor: colors.bgSurface, borderRadius: 10, marginBottom: 8, animation: "pulse 1.5s ease-in-out infinite" }} />
           ))}
+          {!loadEtabs && etabs.length === 0 && (
+            <div style={{ color: colors.textMuted, fontSize: 13, textAlign: "center", padding: 24 }}>
+              Aucun client pour l'instant.
+            </div>
+          )}
           {!loadEtabs && etabs.map((e) => (
             <div key={e.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 14px", backgroundColor: colors.bgSurface, borderRadius: 10, marginBottom: 8 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
