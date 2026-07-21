@@ -4,7 +4,8 @@ import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
-import { useEtablissements, useFournisseurs } from "../../hooks/useSupabaseData";
+import { useAuth } from "../../context/AuthContext";
+import { useDistributeurClients } from "../../hooks/useSupabaseData";
 import { insertLivraison } from "../../hooks/useMutations";
 
 // ── Modal Fiche client ─────────────────────────────────────────────────────────
@@ -35,6 +36,7 @@ function FicheModal({ client, onClose }) {
 
 // ── Modal Créer livraison ─────────────────────────────────────────────────────
 function LivraisonModal({ client, onClose, onSaved }) {
+  const { auth } = useAuth();
   const [form, setForm] = useState({
     transporteur: "",
     numero_suivi: "",
@@ -51,6 +53,7 @@ function LivraisonModal({ client, onClose, onSaved }) {
     try {
       await insertLivraison({
         etablissement_id: client.id,
+        distributeur_id: auth?.etablissement_id,
         statut: "planifiee",
         transporteur: form.transporteur || null,
         numero_suivi: form.numero_suivi || "LIV-" + Date.now().toString().slice(-8),
@@ -93,7 +96,8 @@ function LivraisonModal({ client, onClose, onSaved }) {
 }
 
 export default function Clients() {
-  const { data: etabs, loading, error } = useEtablissements();
+  const { data: relations, loading, error } = useDistributeurClients();
+  const etabs = relations.map((r) => r.client).filter(Boolean);
   const { toasts, success } = useToast();
   const [ficheModal, setFicheModal] = useState(null);
   const [livraisonModal, setLivraisonModal] = useState(null);
@@ -141,7 +145,7 @@ export default function Clients() {
               </tr>
             ))}
             {!loading && etabs.length === 0 && (
-              <tr><td colSpan={6} style={{ padding: 40, textAlign: "center", color: colors.textMuted, fontSize: 13 }}>Aucun établissement</td></tr>
+              <tr><td colSpan={6} style={{ padding: 40, textAlign: "center", color: colors.textMuted, fontSize: 13 }}>Aucun client pour l'instant</td></tr>
             )}
             {!loading && etabs.map((c) => (
               <tr key={c.id} style={{ borderBottom: "1px solid var(--border-light)" }}>

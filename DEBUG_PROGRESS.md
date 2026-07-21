@@ -544,7 +544,117 @@ perte de données.
 
 ## Module DISTRIBUTEUR
 
-Non commencé — en attente de validation complète du module Pharmacie.
+**2026-07-21 (session 8) — Étape 0, point 1 : faille RLS critique corrigée — un distributeur
+voyait TOUTES les commandes/livraisons de TOUS les établissements. ✅**
+
+**Cause.** `is_distributeur()` teste seulement "l'utilisateur appartient-il à UN établissement de
+type distributeur", sans distinction de LEQUEL. Utilisé en `OR is_distributeur()` dans les policies
+RLS de `commandes`, `commande_statut_historique`, `livraisons`, `commande_lignes` (héritage de
+[20240110000000_rls_by_etablissement.sql](supabase/migrations/20240110000000_rls_by_etablissement.sql),
+la faille était documentée dans le commentaire d'origine : "pas de FK fournisseurs → etablissements
+dans le schéma actuel" — jamais corrigée). Résultat : n'importe quel compte distributeur lisait/
+modifiait les commandes et livraisons de n'importe quel établissement MedOS.
+
+**Cause racine plus profonde** : aucune commande n'était jamais routée vers un distributeur MedOS
+précis. `commandes.fournisseur_id` référence `fournisseurs`, une table de contacts **par
+pharmacie** (email/téléphone libres), sans aucun lien vers un vrai compte distributeur MedOS — le
+mode "fournisseur MedOS temps réel" annoncé dans le sprint Fournisseurs (session 5) n'existait pas
+encore.
+
+**Corrigé** dans
+[20260721_distributeur_isolation_rls.sql](supabase/migrations/20260721_distributeur_isolation_rls.sql)
+et son complément
+[20260721b_distributeur_clients_etablissement_visibility.sql](supabase/migrations/20260721b_distributeur_clients_etablissement_visibility.sql) :
+1. `fournisseurs.distributeur_etablissement_id` (nullable) — permet à une pharmacie de lier un
+   contact fournisseur à un vrai compte distributeur MedOS (nouveau mode "Distributeur MedOS" dans
+   [Fournisseurs.jsx](src/pages/pharmacie/Fournisseurs.jsx), `FournisseurModal`).
+2. `commandes.distributeur_id` / `livraisons.distributeur_id` / `commande_statut_historique.distributeur_id`
+   — renseignés à la création (`CommandeModal` de Fournisseurs.jsx pour les commandes ; `ReseauClients.jsx`,
+   `Clients.jsx`, `Livraisons.jsx` côté distributeur pour les livraisons).
+3. Toutes les policies concernées (`cmd_select/insert/update/delete`, `csh_select/insert`,
+   `livr_select/insert/update/delete`, `cl_select`) remplacent `OR is_distributeur()` par
+   `OR distributeur_id = ANY(mes_etablissements())` — un distributeur ne voit/modifie que ce qui lui
+   est explicitement adressé. `cmd_insert` vérifie en plus que le `distributeur_id` déclaré pointe
+   vers un vrai établissement `type='distributeur' AND actif=true` (anti-usurpation : une pharmacie
+   ne peut pas rediriger une commande vers l'établissement d'une autre pharmacie). `livr_insert`
+   exige que le `distributeur_id` déclaré soit un des établissements du posteur (le distributeur ne
+   peut pas usurper un autre distributeur).
+4. Audit complet (`grep -rn "is_distributeur()" supabase/migrations/ diagnostic/migrations/`) : les 4
+   tables affectées (`commandes`, `commande_statut_historique`, `livraisons`, `commande_lignes`) sont
+   toutes corrigées. Aucune autre occurrence.
+
+**Preuve concrète (deux comptes distributeur réels, isolation vérifiée au niveau RLS, pas
+seulement dans l'UI)** :
+- Comptes : "Poto-Poto" (`cherihaneadam123+distributeur@gmail.com`, distributeur A) et
+  "Distributeur Test Kela" (`cherihaneadam123+distrib2@gmail.com`, distributeur B) — déjà existants
+  (créés lors du diagnostic n8n du 2026-07-20), mots de passe réinitialisés via l'API Admin Supabase
+  pour ce test.
+- Côté pharmacie ("Pharmacie Mimi") : fournisseur "Poto-Poto" ajouté en mode "Distributeur MedOS",
+  commande CMD-86532215 passée (Paracétamol 500mg × 30, 15 000 FCFA).
+- Vérifié en base : `commandes.distributeur_id` = Poto-Poto ; trigger `attacher_client_distributeur`
+  a bien créé la ligne `distributeur_clients` (source `"commande"`) reliant Poto-Poto → Pharmacie
+  Mimi, automatiquement, sans aucune action manuelle.
+- **Distributeur A (Poto-Poto)** connecté : "Réseau clients" affiche "Pharmacie Mimi" (1 client réel,
+  pas la liste brute de tous les établissements), fiche client avec ruptures/stock bas réels
+  (Oméprazole en rupture, Amoxicilline 2/20, Vitamine D3 5/10 — lus depuis `medicaments` du client
+  via la policy scopée `med_select_distributeur_clients`), et le drawer "Commandes" affiche bien
+  CMD-86532215.
+- **Distributeur B (Distributeur Test Kela)** connecté : "Réseau clients" affiche **0 client**.
+  Vérifié directement au niveau REST/RLS (pas juste l'UI) : requêtes `GET /commandes`,
+  `GET /livraisons`, `GET /commande_statut_historique` avec le token de ce compte → **tableaux vides
+  dans les 3 cas**, alors que la commande de Pharmacie Mimi existe bien en base.
+- Capture des deux comptes montrant des listes différentes : confirmée (Réseau clients à 1 pour A,
+  à 0 pour B, dans la même session de test, sans changement de données entre les deux).
+
+**Bug annexe trouvé et corrigé pendant ce test** : la jointure `client:client_etablissement_id(...)`
+utilisée par `useDistributeurClients()` renvoyait `null` pour l'établissement du client — la
+relation `distributeur_clients` existait bien, mais `etab_select` n'autorisait pas la lecture de la
+fiche établissement du client (PostgREST applique aussi le RLS aux lignes embarquées par jointure,
+pas seulement à la requête principale). "Mes Clients" affichait 0 alors que la relation était
+correcte en base. Corrigé par une policy `etab_select_distributeur_clients` symétrique à celle déjà
+posée sur `medicaments` (migration 20260721b).
+
+**2026-07-21 (session 8) — Étape 0, point 2 : vraie relation "Mes Clients" (au lieu de la liste
+brute de tous les établissements). ✅**
+
+Remplacé [ReseauClients.jsx](src/pages/distributeur/ReseauClients.jsx) : n'utilise plus
+`useEtablissements()` (liste brute RLS-restreinte à l'établissement du distributeur lui-même, donc
+en pratique quasi vide et sans rapport avec de vrais clients) mais `useDistributeurClients()`
+(nouveau hook, [useSupabaseData.js](src/hooks/useSupabaseData.js)) sur la nouvelle table
+`distributeur_clients`. Deux façons de devenir client, comme demandé :
+1. **Automatique** — première commande routée vers ce distributeur (trigger
+   `attacher_client_distributeur`, `SECURITY DEFINER`, `ON CONFLICT DO NOTHING` pour ne jamais
+   écraser une relation déjà `source='manuel'`).
+2. **Manuel explicite** — recherche par email exact (RPC `rechercher_client_par_email`,
+   `SECURITY DEFINER`, ne renvoie qu'un pharmacie/hôpital/clinique actif) : volontairement pas un
+   annuaire parcourable de tous les établissements MedOS (demandé explicitement hors scope pour
+   cette session).
+
+Fiche client détaillée : ruptures/stock bas du client (lecture `medicaments` scopée à la relation
+réelle via `med_select_distributeur_clients`), historique des commandes passées chez CE
+distributeur (`commandes` filtré par `etablissement_id`, RLS garantit déjà que seules les commandes
+`distributeur_id = soi-même` sont visibles), bouton créer une livraison, historique des livraisons.
+
+[Clients.jsx](src/pages/distributeur/Clients.jsx) (page redondante avec "Réseau clients", conservée
+telle quelle dans la nav) et [Livraisons.jsx](src/pages/distributeur/Livraisons.jsx) (sélecteur de
+destinataire à la création) branchés sur le même hook `useDistributeurClients()` pour rester
+cohérents — avant ce correctif, les deux affichaient aussi la liste brute et le formulaire de
+création de livraison aurait été cassé par le durcissement RLS (un distributeur ne peut plus créer
+de livraison pour n'importe quel `etablissement_id` sans que `distributeur_id` soit le sien).
+
+**Annuaire public des distributeurs** : nouvelle policy `etab_select_distributeurs_publics`
+(`type='distributeur' AND actif AND statut_inscription='validee'`) — permet à une pharmacie de
+choisir un distributeur MedOS comme fournisseur (`useEtablissements("distributeur")`, déjà
+utilisable tel quel). Choix assumé : les distributeurs sont des fournisseurs qui veulent être
+trouvés (logique commerciale B2B), à l'inverse de la liste des pharmacies/hôpitaux qui reste privée
+— pas de "cartographie" des établissements non-clients construite dans cette session (explicitement
+hors scope, demandé séparément).
+
+**Reste à tester (Étape 1, en cours)** : Dashboard (le panneau "Réseau établissements" utilise
+encore une autre requête, potentiellement à corriger — repéré en testant mais pas encore audité),
+Entrepôt, Traçabilité/QR, réception de commande dans l'UI temps réel (`MesCommandesPanel`/
+`CommandesTab`), traitement livraison, historique filtrable, alertes stock bas entrepôt, Prévisions
+IA, Rapports.
 
 ## Module HÔPITAL
 

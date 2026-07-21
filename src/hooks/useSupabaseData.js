@@ -268,6 +268,35 @@ export function useFournisseurs() {
   );
 }
 
+// ─── distributeur : "Mes Clients" (relation réelle, pas la liste brute des
+// établissements MedOS) — RLS scope automatiquement à distributeur_id = soi-même.
+export function useDistributeurClients() {
+  return useQuery(() =>
+    supabase
+      .from("distributeur_clients")
+      .select(`
+        id, source, created_at,
+        client:client_etablissement_id ( id, nom, ville, type, email, telephone, actif )
+      `)
+      .order("created_at", { ascending: false })
+  );
+}
+
+// Stock bas ("ruptures / besoins récents") d'un client réel — la policy
+// med_select_distributeur_clients n'autorise cette lecture que pour un
+// établissement réellement présent dans distributeur_clients.
+export function useClientStockBas(client_etablissement_id) {
+  return useQuery(() => {
+    if (!client_etablissement_id) return Promise.resolve({ data: [], error: null });
+    return supabase
+      .from("medicaments")
+      .select("id, nom, dosage, forme, stock_actuel, stock_minimum")
+      .eq("etablissement_id", client_etablissement_id)
+      .order("stock_actuel", { ascending: true })
+      .limit(200);
+  }, [client_etablissement_id]);
+}
+
 // ─── ordonnances ──────────────────────────────────────────────────────────────
 export function useOrdonnances() {
   return useQuery(() =>
