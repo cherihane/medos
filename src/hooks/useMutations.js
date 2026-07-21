@@ -159,6 +159,19 @@ export async function updateLivraison(id, fields) {
   return run(supabase.from("livraisons").update(fields).eq("id", id).select().single());
 }
 
+// ─── Distributeur : "Mes Clients" (relation réelle) ────────────────────────────
+export async function insertDistributeurClient(fields) {
+  return run(supabase.from("distributeur_clients").insert({ ...fields, source: "manuel" }).select().single());
+}
+
+// Recherche exacte par email (pas un annuaire parcourable) — ne renvoie un
+// résultat que pour un établissement pharmacie/hôpital/clinique existant.
+export async function rechercherClientParEmail(email) {
+  const { data, error } = await supabase.rpc("rechercher_client_par_email", { p_email: email });
+  if (error) throw new Error(error.message ?? "Une erreur inattendue est survenue.");
+  return data?.[0] ?? null;
+}
+
 // ─── Lots (entrepôt distributeur) ─────────────────────────────────────────────
 export async function insertLot(fields) {
   return run(supabase.from("lots").insert(fields).select().single());

@@ -4,9 +4,10 @@ import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
-import { useLivraisonsPaginated, useEtablissements } from "../../hooks/useSupabaseData";
+import { useLivraisonsPaginated, useDistributeurClients } from "../../hooks/useSupabaseData";
 import Pagination from "../../components/Pagination";
 import { insertLivraison, updateLivraison, receiveLivraison, insertMouvementStock } from "../../hooks/useMutations";
+import { useAuth } from "../../context/AuthContext";
 
 const statusStyle = {
   planifiee:   { bg: "#F3F4F6",  color: colors.textSecondary,  label: "Planifiée" },
@@ -21,7 +22,8 @@ function fmt(iso) {
 }
 
 // ── Modal Nouvelle livraison ───────────────────────────────────────────────────
-function NouvelleModal({ etablissements, onClose, onSaved }) {
+function NouvelleModal({ clients, onClose, onSaved }) {
+  const { auth } = useAuth();
   const [form, setForm] = useState({
     etablissement_id: "", transporteur: "",
     date_depart: new Date().toISOString().slice(0, 10), date_arrivee_prevue: "",
@@ -36,6 +38,7 @@ function NouvelleModal({ etablissements, onClose, onSaved }) {
     try {
       await insertLivraison({
         etablissement_id: form.etablissement_id,
+        distributeur_id: auth?.etablissement_id,
         statut: "planifiee",
         transporteur: form.transporteur || null,
         numero_suivi: "LIV-" + Date.now().toString().slice(-8),
@@ -55,9 +58,14 @@ function NouvelleModal({ etablissements, onClose, onSaved }) {
     <Modal title="Nouvelle livraison" onClose={onClose}>
       <Field label="Destinataire *">
         <select style={selectStyle} value={form.etablissement_id} onChange={set("etablissement_id")}>
-          <option value="">— Sélectionner un établissement —</option>
-          {etablissements.map((e) => <option key={e.id} value={e.id}>{e.nom} ({e.ville})</option>)}
+          <option value="">— Sélectionner un client —</option>
+          {clients.map((e) => <option key={e.id} value={e.id}>{e.nom} ({e.ville})</option>)}
         </select>
+        {clients.length === 0 && (
+          <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 4 }}>
+            Aucun client pour l'instant — ajoutez-en un depuis "Réseau clients".
+          </div>
+        )}
       </Field>
       <Field label="Transporteur">
         <input style={inputStyle} value={form.transporteur} onChange={set("transporteur")} placeholder="Ex: DHL, Transport Koné…" />
@@ -271,7 +279,8 @@ function DetailModal({ livraison, onClose }) {
 export default function Livraisons() {
   const [filter, setFilter] = useState("tous");
   const { data: livraisons, loading, error, total, page, setPage, totalPages, refetch } = useLivraisonsPaginated(filter);
-  const { data: etablissements } = useEtablissements();
+  const { data: relations } = useDistributeurClients();
+  const clients = relations.map((r) => r.client).filter(Boolean);
   const { toasts, success, error: toastError } = useToast();
   const [showNouvelle, setShowNouvelle] = useState(false);
   const [statutModal, setStatutModal] = useState(null);
@@ -286,7 +295,7 @@ export default function Livraisons() {
 
       {showNouvelle && (
         <NouvelleModal
-          etablissements={etablissements}
+          clients={clients}
           onClose={() => setShowNouvelle(false)}
           onSaved={() => { refetch(); success("Livraison créée avec succès"); }}
         />

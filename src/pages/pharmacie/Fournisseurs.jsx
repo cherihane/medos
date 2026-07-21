@@ -7,7 +7,7 @@ import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import {
   useFournisseursPaginated, useCommandesRealtime, useCommandesPaginated,
-  useCommandeHistorique, useMedicaments, useFournisseurs,
+  useCommandeHistorique, useMedicaments, useFournisseurs, useEtablissements,
 } from "../../hooks/useSupabaseData";
 import { insertCommande, updateCommande, deleteCommande, insertCommandeLignes, insertFournisseur, updateFournisseur } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
@@ -310,6 +310,9 @@ const EMPTY_FORM = {
 
 function FournisseurModal({ initial, onClose, onSaved }) {
   const { auth } = useAuth();
+  const { data: distributeurs, loading: loadingDistrib } = useEtablissements("distributeur");
+  const [mode, setMode] = useState("medos"); // "medos" | "externe" — non modifiable en édition
+  const [distributeurId, setDistributeurId] = useState("");
   const [form, setForm] = useState(initial
     ? {
         nom:                  initial.nom               || "",
@@ -328,14 +331,28 @@ function FournisseurModal({ initial, onClose, onSaved }) {
   const set = (k) => (e) => { setFormError(null); setForm((f) => ({ ...f, [k]: e.target.value })); };
   const isEdit = !!initial;
 
+  const selectDistributeur = (id) => {
+    setDistributeurId(id);
+    const d = distributeurs.find((e) => e.id === id);
+    if (d) {
+      setForm((f) => ({ ...f, nom: d.nom, pays: d.pays || f.pays, email: d.email || "", telephone: d.telephone || "" }));
+    }
+  };
+
   const handleSave = async () => {
     if (!form.nom.trim()) { setFormError("Le nom du fournisseur est obligatoire."); return; }
+    if (!isEdit && mode === "medos" && !distributeurId) { setFormError("Sélectionnez un distributeur MedOS."); return; }
     setSaving(true);
     try {
       if (isEdit) {
         await updateFournisseur(initial.id, form);
       } else {
-        await insertFournisseur({ ...form, actif: true, etablissement_id: auth?.etablissement_id ?? null });
+        await insertFournisseur({
+          ...form,
+          actif: true,
+          etablissement_id: auth?.etablissement_id ?? null,
+          distributeur_etablissement_id: mode === "medos" ? distributeurId : null,
+        });
       }
       onSaved();
       onClose();
@@ -348,9 +365,41 @@ function FournisseurModal({ initial, onClose, onSaved }) {
 
   return (
     <Modal title={isEdit ? `Modifier — ${initial.nom}` : "Ajouter un fournisseur"} onClose={onClose} width={520}>
-      <Field label="Nom du fournisseur *">
-        <input style={inputStyle} value={form.nom} onChange={set("nom")} placeholder="Ex: PharmaDistrib Congo" autoFocus />
-      </Field>
+      {!isEdit && (
+        <div style={{ display: "flex", gap: 4, marginBottom: 16, backgroundColor: colors.borderLight, borderRadius: 8, padding: 4 }}>
+          {[{ key: "medos", label: "Distributeur MedOS" }, { key: "externe", label: "Fournisseur externe" }].map((t) => (
+            <button key={t.key} type="button" onClick={() => { setMode(t.key); setFormError(null); }} style={{ flex: 1, padding: "7px", borderRadius: 6, border: "none", fontSize: 12, fontWeight: 600, cursor: "pointer", backgroundColor: mode === t.key ? "white" : "transparent", color: mode === t.key ? "#0A1628" : "#6B7280", boxShadow: mode === t.key ? "0 1px 3px rgba(0,0,0,0.08)" : "none" }}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {!isEdit && mode === "medos" ? (
+        <>
+          <Field label="Distributeur *">
+            {loadingDistrib ? (
+              <div style={{ fontSize: 12, color: colors.textMuted }}>Chargement…</div>
+            ) : distributeurs.length === 0 ? (
+              <div style={{ fontSize: 12, color: colors.textMuted }}>Aucun distributeur MedOS actif pour l'instant.</div>
+            ) : (
+              <select style={inputStyle} value={distributeurId} onChange={(e) => selectDistributeur(e.target.value)}>
+                <option value="">— Sélectionner un distributeur —</option>
+                {distributeurs.map((d) => <option key={d.id} value={d.id}>{d.nom} ({d.ville})</option>)}
+              </select>
+            )}
+          </Field>
+          {distributeurId && (
+            <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 12 }}>
+              Vos commandes chez ce fournisseur seront visibles en temps réel dans son espace
+              distributeur MedOS, en plus de l'email de confirmation.
+            </div>
+          )}
+        </>
+      ) : (
+        <Field label="Nom du fournisseur *">
+          <input style={inputStyle} value={form.nom} onChange={set("nom")} placeholder="Ex: PharmaDistrib Congo" autoFocus disabled={isEdit ? false : mode === "medos"} />
+        </Field>
+      )}
       <Row>
         <Field label="Pays">
           <input style={inputStyle} value={form.pays} onChange={set("pays")} placeholder="Ex: Congo, France…" />
@@ -451,6 +500,7 @@ function CommandeModal({ fournisseur, etablissement_id, auth, prefillLignes, onC
       const commande = await insertCommande({
         reference,
         fournisseur_id:        fournisseur.id,
+        distributeur_id:       fournisseur.distributeur_etablissement_id ?? null,
         statut:                "envoyee",
         date_commande:         new Date().toISOString(),
         date_livraison_prevue: dateLivraison || null,
@@ -1082,7 +1132,14 @@ export default function Fournisseurs() {
                     </svg>
                   </div>
                   <div>
-                    <div style={{ fontWeight: 800, fontSize: 15, color: colors.navy }}>{s.nom}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <div style={{ fontWeight: 800, fontSize: 15, color: colors.navy }}>{s.nom}</div>
+                      {s.distributeur_etablissement_id && (
+                        <span style={{ padding: "2px 8px", borderRadius: 8, fontSize: 10, fontWeight: 700, backgroundColor: "#EFF6FF", color: "#2563EB" }}>
+                          Distributeur MedOS
+                        </span>
+                      )}
+                    </div>
                     <div style={{ fontSize: 12, color: colors.textMuted }}>{s.pays || "—"}</div>
                   </div>
                 </div>
