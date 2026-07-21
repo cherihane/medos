@@ -1102,6 +1102,43 @@ activité récente. Corrigé par un mécanisme de présence complet :
   réagit correctement aux deux états.
 - Donnée de test remise à NULL après vérification (Pharmacie Mimi n'a pas réellement été connectée).
 
+**Point 1 — Clarification Clients vs Réseau Clients + distinction MedOS/non-MedOS. ✅**
+
+Vérification demandée explicitement par la mission : les deux écrans utilisaient-ils déjà la relation
+`distributeur_clients` réelle (pas un annuaire brut) ? **Oui, déjà correct avant cette session** —
+`Clients.jsx` et `ReseauClients.jsx` appelaient déjà `useDistributeurClients()`. Le vrai bug était
+ailleurs : les deux écrans se chevauchaient (bouton "Créer livraison" dupliqué dans les deux), et
+`ReseauClients.jsx` ne distinguait jamais un client qui utilise réellement MedOS d'un client rattaché
+mais jamais connecté — le panneau "Ruptures & besoins récents" affichait le même message vide
+("Aucune rupture...") dans les deux cas, ce qui aurait donné une fausse impression de "tout va bien"
+pour un client qui n'a en réalité aucune donnée de stock disponible.
+
+Corrections :
+- `Clients.jsx` recentré sur son rôle de répertoire simple (fiches/coordonnées) : bouton "Livraison"
+  retiré (action désormais uniquement dans Réseau clients et Livraisons), colonne "Statut" (le flag
+  `actif` toujours vrai, même limite que le bug du point 2) remplacée par "MedOS" basée sur
+  `derniere_connexion`.
+- `ReseauClients.jsx` : "utilise MedOS" = a émis au moins un heartbeat de connexion
+  (`client.derniere_connexion` non nul — même infrastructure que le point 2, pas de nouveau concept).
+  Si oui : panneau "Alertes de stock bas" (mêmes seuils critique/alerte que `Alertes.jsx` côté
+  pharmacie) + "Historique d'achat détaillé". Si non : uniquement l'historique d'achat, précédé du
+  message exact demandé : *"Ce client n'utilise pas encore MedOS — visibilité limitée à l'historique
+  de commandes."* Le drawer séparé "Commandes" (redondant) a été supprimé, son contenu fusionné dans
+  le panneau fiche unique. KPI "Clients actifs" (basé sur `actif`) renommé "Utilisent MedOS" (basé sur
+  `derniere_connexion`) pour rester cohérent avec le reste de la page.
+
+**Testé en conditions réelles (Poto-Poto → Pharmacie Mimi)** :
+- Pharmacie Mimi jamais connectée (`derniere_connexion` NULL) → fiche affiche "Utilise MedOS : Non",
+  message de visibilité limitée affiché, section stock bas absente, historique d'achat visible
+  (commande réelle CMD-86532215, livrée, 15 000 FCFA).
+- `derniere_connexion` de Pharmacie Mimi simulée à `now()` (mêmes limites d'accès qu'au point 2) →
+  fiche bascule sur "Utilise MedOS : Oui" → **section "Alertes de stock bas" alimentée avec les
+  vraies données de production de ce client** : Oméprazole 20mg Critique 0/15, Amoxicilline 500mg
+  Critique 2/20, Vitamine D3 1000UI Alerte 5/10 — données réelles pré-existantes en base, pas
+  fabriquées pour le test. Confirme au passage que la RLS `med_select_distributeur_clients` /
+  `est_client_de_distributeur()` (déjà en place depuis l'étape 0) autorise bien cette lecture scopée.
+- Donnée de test remise à NULL après vérification.
+
 ## Module HÔPITAL
 
 Non commencé — en attente de validation complète du module Pharmacie.

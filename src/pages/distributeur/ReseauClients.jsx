@@ -252,11 +252,79 @@ function HistoriqueClientModal({ client, onClose }) {
   );
 }
 
-// ─── Panneau fiche client détaillée (ruptures, besoins, historique) ───────────
+// Mêmes seuils que Alertes.jsx côté pharmacie — pour que ce que voit le
+// distributeur ici corresponde exactement à ce que le client verrait sur son
+// propre écran d'alertes.
+function statutStock(m) {
+  if (!m.stock_minimum || m.stock_minimum === 0) return "normal";
+  const ratio = m.stock_actuel / m.stock_minimum;
+  if (ratio <= 0.2) return "critique";
+  if (ratio <= 0.5) return "alerte";
+  return "normal";
+}
+
+const STATUT_CMD_STYLE = {
+  brouillon:  { bg: "#F3F4F6", color: "#6B7280" },
+  envoyee:    { bg: "#FEF9C3", color: "#A16207" },
+  confirmee:  { bg: "#DBEAFE", color: "#2563EB" },
+  en_transit: { bg: "#E0E7FF", color: "#4F46E5" },
+  livree:     { bg: "#DCFCE7", color: "#16A34A" },
+  annulee:    { bg: "#FEF2F2", color: "#DC2626" },
+};
+
+// ─── Historique d'achat du client chez ce distributeur (toujours affiché) ─────
+function HistoriqueAchat({ client }) {
+  const [commandes, setCommandes] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    supabase
+      .from("commandes")
+      .select("id, reference, statut, created_at, notes, montant_total")
+      .eq("etablissement_id", client.id)
+      .order("created_at", { ascending: false })
+      .limit(20)
+      .then(({ data }) => { if (!cancelled) { setCommandes(data ?? []); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, [client.id]);
+
+  if (loading) return <div style={{ fontSize: 12, color: colors.textMuted }}>Chargement…</div>;
+  if (commandes.length === 0) return <div style={{ fontSize: 12, color: colors.textMuted }}>Aucune commande enregistrée pour ce client.</div>;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      {commandes.map((cmd) => {
+        const lignes = (() => { try { const p = JSON.parse(cmd.notes ?? "{}"); return Array.isArray(p.lignes) ? p.lignes : []; } catch { return []; } })();
+        const st = STATUT_CMD_STYLE[cmd.statut] ?? { bg: "#F3F4F6", color: "#6B7280" };
+        return (
+          <div key={cmd.id} style={{ backgroundColor: colors.bgSurface, borderRadius: 8, padding: "8px 10px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: colors.navy }}>{cmd.reference ?? cmd.id?.slice(0, 8).toUpperCase()}</span>
+              <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 6, fontWeight: 700, backgroundColor: st.bg, color: st.color }}>{cmd.statut}</span>
+            </div>
+            <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>
+              {cmd.created_at ? new Date(cmd.created_at).toLocaleDateString("fr-FR") : "—"}
+              {cmd.montant_total ? ` · ${Number(cmd.montant_total).toLocaleString("fr-FR")} FCFA` : ""}
+              {lignes.length > 0 && ` · ${lignes.length} produit${lignes.length > 1 ? "s" : ""}`}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Panneau fiche client détaillée (stock bas si MedOS, historique sinon) ────
+// "Utilise MedOS" = a déjà émis au moins un heartbeat de connexion
+// (derniere_connexion non nul, voir Layout.jsx) — un client simplement
+// rattaché par email mais qui ne s'est jamais connecté n'a par définition
+// aucune donnée de stock fiable à afficher.
 function FicheClient({ client, onCommande, onHistorique }) {
-  const { data: stock, loading: loadingStock } = useClientStockBas(client.id);
-  const ruptures = stock.filter((m) => m.stock_actuel <= 0);
-  const stockBas = stock.filter((m) => m.stock_actuel > 0 && m.stock_actuel < m.stock_minimum);
+  const usesMedOS = !!client.derniere_connexion;
+  const { data: stock, loading: loadingStock } = useClientStockBas(usesMedOS ? client.id : null);
+  const alertesStock = stock.map((m) => ({ ...m, statut: statutStock(m) })).filter((m) => m.statut !== "normal");
 
   return (
     <>
@@ -271,7 +339,7 @@ function FicheClient({ client, onCommande, onHistorique }) {
       {[
         { label: "Email",     value: client.email ?? "—" },
         { label: "Téléphone", value: client.telephone ?? "—" },
-        { label: "Statut",    value: client.actif ? "Actif" : "Inactif" },
+        { label: "Utilise MedOS", value: usesMedOS ? "Oui" : "Non" },
       ].map((f) => (
         <div key={f.label} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid var(--border-light)" }}>
           <span style={{ fontSize: 13, color: colors.textSecondary }}>{f.label}</span>
@@ -279,22 +347,37 @@ function FicheClient({ client, onCommande, onHistorique }) {
         </div>
       ))}
 
+      {!usesMedOS && (
+        <div style={{ marginTop: 14, padding: "10px 12px", backgroundColor: "#F3F4F6", borderRadius: 10, fontSize: 12, color: colors.textSecondary }}>
+          Ce client n'utilise pas encore MedOS — visibilité limitée à l'historique de commandes.
+        </div>
+      )}
+
+      {usesMedOS && (
+        <div style={{ marginTop: 18 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: colors.navy, textTransform: "uppercase", marginBottom: 8 }}>
+            Alertes de stock bas
+          </div>
+          {loadingStock && <div style={{ fontSize: 12, color: colors.textMuted }}>Chargement…</div>}
+          {!loadingStock && alertesStock.length === 0 && (
+            <div style={{ fontSize: 12, color: colors.textMuted }}>Aucune alerte de stock chez ce client.</div>
+          )}
+          {!loadingStock && alertesStock.slice(0, 8).map((m) => (
+            <div key={m.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 12 }}>
+              <span style={{ color: colors.text }}>{m.nom}{m.dosage ? ` ${m.dosage}` : ""}</span>
+              <span style={{ fontWeight: 700, color: m.statut === "critique" ? "#DC2626" : "#D97706" }}>
+                {m.statut === "critique" ? "Critique" : "Alerte"} · {m.stock_actuel}/{m.stock_minimum}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div style={{ marginTop: 18 }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: colors.navy, textTransform: "uppercase", marginBottom: 8 }}>
-          Ruptures &amp; besoins récents
+          Historique d'achat {usesMedOS ? "détaillé" : ""}
         </div>
-        {loadingStock && <div style={{ fontSize: 12, color: colors.textMuted }}>Chargement…</div>}
-        {!loadingStock && ruptures.length === 0 && stockBas.length === 0 && (
-          <div style={{ fontSize: 12, color: colors.textMuted }}>Aucune rupture ni stock bas signalé.</div>
-        )}
-        {!loadingStock && [...ruptures, ...stockBas].slice(0, 8).map((m) => (
-          <div key={m.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 12 }}>
-            <span style={{ color: colors.text }}>{m.nom}{m.dosage ? ` ${m.dosage}` : ""}</span>
-            <span style={{ fontWeight: 700, color: m.stock_actuel <= 0 ? "#DC2626" : "#D97706" }}>
-              {m.stock_actuel <= 0 ? "Rupture" : `${m.stock_actuel}/${m.stock_minimum}`}
-            </span>
-          </div>
-        ))}
+        <HistoriqueAchat client={client} />
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 20 }}>
@@ -317,94 +400,14 @@ export default function ReseauClients() {
   const [historiqueModal, setHistoriqueModal] = useState(null);
   const [toast, setToast] = useState(null);
 
-  // Drawer commandes client
-  const [clientCommandeDrawer, setClientCommandeDrawer] = useState(null);
-  const [commandesClient, setCommandesClient] = useState([]);
-  const [loadingCommandes, setLoadingCommandes] = useState(false);
-
-  async function voirCommandesClient(client) {
-    setClientCommandeDrawer(client);
-    setLoadingCommandes(true);
-    // RLS scope automatiquement aux commandes routées vers CE distributeur.
-    const { data } = await supabase
-      .from("commandes")
-      .select("id, reference, statut, created_at, notes, montant_total")
-      .eq("etablissement_id", client.id)
-      .order("created_at", { ascending: false })
-      .limit(20);
-    setCommandesClient(data ?? []);
-    setLoadingCommandes(false);
-  }
-
   const showToast = (msg) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3500);
   };
 
-  const STATUT_CMD = {
-    brouillon:  { bg: "#F3F4F6", color: "#6B7280" },
-    envoyee:    { bg: "#FEF9C3", color: "#A16207" },
-    confirmee:  { bg: "#DBEAFE", color: "#2563EB" },
-    en_transit: { bg: "#E0E7FF", color: "#4F46E5" },
-    livree:     { bg: "#DCFCE7", color: "#16A34A" },
-    annulee:    { bg: "#FEF2F2", color: "#DC2626" },
-  };
-
   return (
-    <Layout title="Réseau Clients" subtitle="Vos clients réels — première commande ou ajout manuel">
+    <Layout title="Réseau Clients" subtitle="Vue enrichie de vos clients réels — activité MedOS et historique">
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
-
-      {/* Drawer historique commandes */}
-      {clientCommandeDrawer && (
-        <div style={{ position: "fixed", right: 0, top: 0, bottom: 0, width: 420, backgroundColor: colors.bgCard, boxShadow: "-4px 0 20px rgba(0,0,0,0.1)", zIndex: 500, overflowY: "auto", padding: 24 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-            <div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: colors.navy }}>{clientCommandeDrawer.nom}</div>
-              <div style={{ fontSize: 12, color: colors.textMuted }}>{clientCommandeDrawer.ville} · {clientCommandeDrawer.type}</div>
-            </div>
-            <button onClick={() => setClientCommandeDrawer(null)} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: colors.textMuted }}>×</button>
-          </div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: colors.navy, marginBottom: 12 }}>Historique des commandes chez vous</div>
-          {loadingCommandes ? (
-            <div style={{ color: colors.textMuted, fontSize: 13 }}>Chargement...</div>
-          ) : commandesClient.length === 0 ? (
-            <div style={{ color: colors.textMuted, fontSize: 13, textAlign: "center", padding: "30px 0" }}>
-              Aucune commande enregistree pour ce client.
-            </div>
-          ) : (
-            commandesClient.map((cmd) => {
-              const lignes = (() => { try { const p = JSON.parse(cmd.notes ?? "{}"); return Array.isArray(p.lignes) ? p.lignes : []; } catch { return []; } })();
-              const st = STATUT_CMD[cmd.statut] ?? { bg: "#F3F4F6", color: "#6B7280" };
-              return (
-                <div key={cmd.id} style={{ backgroundColor: colors.bgSurface, borderRadius: 10, padding: "12px 14px", marginBottom: 10, border: `1px solid ${colors.border ?? "var(--border)"}` }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: colors.navy }}>
-                      {cmd.reference ?? cmd.id?.slice(0, 8).toUpperCase()}
-                    </div>
-                    <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 6, fontWeight: 700, backgroundColor: st.bg, color: st.color }}>
-                      {cmd.statut}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: 11, color: colors.textMuted, marginBottom: 6 }}>
-                    {cmd.created_at ? new Date(cmd.created_at).toLocaleDateString("fr-FR") : "—"}
-                    {cmd.montant_total ? ` · ${Number(cmd.montant_total).toLocaleString("fr-FR")} FCFA` : ""}
-                  </div>
-                  {lignes.length > 0 && (
-                    <div style={{ fontSize: 11, color: colors.text }}>
-                      {lignes.slice(0, 2).map((l, i) => (
-                        <span key={i} style={{ marginRight: 8 }}>
-                          {l.medicament_nom ?? l.medicamentNom ?? l.nom ?? "—"} ×{l.quantite ?? "?"}
-                        </span>
-                      ))}
-                      {lignes.length > 2 && <span style={{ color: colors.textMuted }}>+{lignes.length - 2} autres</span>}
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          )}
-        </div>
-      )}
 
       {toast && (
         <div style={{ position: "fixed", top: 20, right: 20, backgroundColor: "#10B981", color: "white", padding: "12px 20px", borderRadius: 10, fontWeight: 600, fontSize: 13, zIndex: 2000, boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}>
@@ -434,7 +437,7 @@ export default function ReseauClients() {
 
       <div className="kpi-row">
         {[
-          { label: "Clients actifs",  value: loading ? "…" : etabs.filter(e => e.actif).length, color: "#F59E0B" },
+          { label: "Utilisent MedOS", value: loading ? "…" : etabs.filter(e => e.derniere_connexion).length, color: "#F59E0B" },
           { label: "Hôpitaux",        value: loading ? "…" : etabs.filter(e => e.type === "hopital").length, color: "#10B981" },
           { label: "Pharmacies",      value: loading ? "…" : etabs.filter(e => e.type === "pharmacie").length, color: "#3B82F6" },
           { label: "Total",           value: loading ? "…" : etabs.length, color: "#8B5CF6" },
@@ -481,9 +484,9 @@ export default function ReseauClients() {
                   <div style={{ fontSize: 11, color: colors.textMuted }}>{c.type} · {c.ville}</div>
                 </div>
               </div>
-              <button onClick={(e) => { e.stopPropagation(); voirCommandesClient(c); }} style={{ padding: "5px 10px", backgroundColor: "#EFF6FF", color: "#2563EB", border: "1px solid #BFDBFE", borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
-                Commandes
-              </button>
+              <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 8, fontWeight: 700, backgroundColor: c.derniere_connexion ? "#DCFCE7" : "#F3F4F6", color: c.derniere_connexion ? "#16A34A" : "#9CA3AF" }}>
+                {c.derniere_connexion ? "MedOS" : "hors MedOS"}
+              </span>
             </div>
           ))}
         </div>

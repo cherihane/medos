@@ -1,12 +1,8 @@
 import { colors } from "../../theme";
 import { useState } from "react";
 import Layout from "../../components/Layout";
-import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
-import Toast from "../../components/Toast";
-import { useToast } from "../../hooks/useToast";
-import { useAuth } from "../../context/AuthContext";
+import Modal from "../../components/Modal";
 import { useDistributeurClients } from "../../hooks/useSupabaseData";
-import { insertLivraison } from "../../hooks/useMutations";
 
 // ── Modal Fiche client ─────────────────────────────────────────────────────────
 function FicheModal({ client, onClose }) {
@@ -14,12 +10,12 @@ function FicheModal({ client, onClose }) {
     <Modal title={client.nom} onClose={onClose} width={460}>
       <div className="form-row-2">
         {[
-          { label: "Type",      value: client.type || "—" },
-          { label: "Ville",     value: client.ville || "—" },
-          { label: "Statut",    value: client.actif ? "Actif" : "Inactif" },
-          { label: "Téléphone", value: client.telephone || "—" },
-          { label: "Email",     value: client.email || "—" },
-          { label: "Adresse",   value: client.adresse || "—" },
+          { label: "Type",          value: client.type || "—" },
+          { label: "Ville",         value: client.ville || "—" },
+          { label: "Utilise MedOS", value: client.derniere_connexion ? "Oui" : "Non" },
+          { label: "Téléphone",     value: client.telephone || "—" },
+          { label: "Email",         value: client.email || "—" },
+          { label: "Adresse",       value: client.adresse || "—" },
         ].map((item) => (
           <div key={item.label} style={{ padding: "10px 14px", backgroundColor: colors.bgSurface, borderRadius: 10 }}>
             <div style={{ fontSize: 11, color: colors.textMuted, marginBottom: 3 }}>{item.label}</div>
@@ -34,87 +30,20 @@ function FicheModal({ client, onClose }) {
   );
 }
 
-// ── Modal Créer livraison ─────────────────────────────────────────────────────
-function LivraisonModal({ client, onClose, onSaved }) {
-  const { auth } = useAuth();
-  const [form, setForm] = useState({
-    transporteur: "",
-    numero_suivi: "",
-    date_depart: new Date().toISOString().slice(0, 10),
-    date_arrivee_prevue: "",
-    notes: "",
-  });
-  const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState(null);
-  const set = (k) => (e) => { setFormError(null); setForm((f) => ({ ...f, [k]: e.target.value })); };
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await insertLivraison({
-        etablissement_id: client.id,
-        distributeur_id: auth?.etablissement_id,
-        statut: "planifiee",
-        transporteur: form.transporteur || null,
-        numero_suivi: form.numero_suivi || "LIV-" + Date.now().toString().slice(-8),
-        date_depart: form.date_depart || null,
-        date_arrivee_prevue: form.date_arrivee_prevue || null,
-      });
-      onSaved();
-      onClose();
-    } catch (e) {
-      setFormError("Erreur : " + e.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Modal title={`Nouvelle livraison → ${client.nom}`} onClose={onClose}>
-      <Field label="Transporteur">
-        <input style={inputStyle} value={form.transporteur} onChange={set("transporteur")} placeholder="Ex: DHL, Transport Koné…" />
-      </Field>
-      <Field label="Numéro de suivi">
-        <input style={inputStyle} value={form.numero_suivi} onChange={set("numero_suivi")} placeholder="Généré auto si vide" />
-      </Field>
-      <Row>
-        <Field label="Date de départ">
-          <input style={inputStyle} type="date" value={form.date_depart} onChange={set("date_depart")} />
-        </Field>
-        <Field label="Arrivée prévue">
-          <input style={inputStyle} type="date" value={form.date_arrivee_prevue} onChange={set("date_arrivee_prevue")} />
-        </Field>
-      </Row>
-      {formError && (
-        <div style={{ padding: "10px 14px", backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, fontSize: 13, color: "#DC2626" }}>
-          {formError}
-        </div>
-      )}
-      <ModalFooter onCancel={onClose} onSubmit={handleSave} submitLabel="Créer la livraison" saving={saving} />
-    </Modal>
-  );
-}
-
+// Répertoire simple des clients réels (relation distributeur_clients — jamais
+// un annuaire de tous les établissements MedOS). La vue enrichie avec
+// alertes de stock et historique d'achat détaillé vit dans Réseau clients ;
+// cet écran reste volontairement un simple répertoire de fiches.
 export default function Clients() {
   const { data: relations, loading, error } = useDistributeurClients();
   const etabs = relations.map((r) => r.client).filter(Boolean);
-  const { toasts, success } = useToast();
   const [ficheModal, setFicheModal] = useState(null);
-  const [livraisonModal, setLivraisonModal] = useState(null);
 
   return (
-    <Layout title="Clients" subtitle="Gestion et suivi des comptes clients">
+    <Layout title="Clients" subtitle="Répertoire de vos clients réels — fiches et coordonnées">
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
-      <Toast toasts={toasts} />
 
       {ficheModal && <FicheModal client={ficheModal} onClose={() => setFicheModal(null)} />}
-      {livraisonModal && (
-        <LivraisonModal
-          client={livraisonModal}
-          onClose={() => setLivraisonModal(null)}
-          onSaved={() => success(`Livraison créée pour ${livraisonModal.nom}`)}
-        />
-      )}
 
       {error && (
         <div style={{ backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 12, padding: "14px 18px", marginBottom: 16, fontSize: 13, color: "#DC2626" }}>
@@ -131,7 +60,7 @@ export default function Clients() {
         <div className="table-scroll"><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr style={{ backgroundColor: colors.bgSurface }}>
-              {["Client", "Ville", "Type", "Email", "Statut", "Actions"].map((h) => (
+              {["Client", "Ville", "Type", "Email", "MedOS", "Actions"].map((h) => (
                 <th key={h} style={{ padding: "12px 18px", textAlign: "left", fontSize: 12, fontWeight: 700, color: colors.textSecondary, borderBottom: "1px solid var(--border)" }}>{h}</th>
               ))}
             </tr>
@@ -155,23 +84,16 @@ export default function Clients() {
                 <td style={{ padding: "14px 18px", color: colors.textSecondary, fontSize: 12 }}>{c.email ?? "—"}</td>
                 <td style={{ padding: "14px 18px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <div style={{ width: 7, height: 7, borderRadius: "50%", backgroundColor: c.actif ? "#10B981" : "#9CA3AF" }} />
-                    <span style={{ fontSize: 12, color: c.actif ? "#16A34A" : "#9CA3AF", fontWeight: 600 }}>{c.actif ? "actif" : "inactif"}</span>
+                    <div style={{ width: 7, height: 7, borderRadius: "50%", backgroundColor: c.derniere_connexion ? "#10B981" : "#9CA3AF" }} />
+                    <span style={{ fontSize: 12, color: c.derniere_connexion ? "#16A34A" : "#9CA3AF", fontWeight: 600 }}>{c.derniere_connexion ? "oui" : "non"}</span>
                   </div>
                 </td>
                 <td style={{ padding: "14px 18px" }}>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button
-                      onClick={() => setLivraisonModal(c)}
-                      style={{ padding: "4px 12px", backgroundColor: "#FFFBEB", color: "#D97706", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>
-                      Livraison
-                    </button>
-                    <button
-                      onClick={() => setFicheModal(c)}
-                      style={{ padding: "4px 12px", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
-                      Fiche
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => setFicheModal(c)}
+                    style={{ padding: "4px 12px", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
+                    Fiche
+                  </button>
                 </td>
               </tr>
             ))}
