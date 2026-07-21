@@ -1059,6 +1059,17 @@ pharmacie :
 - Données de test nettoyées après validation (lots et médicament de test supprimés, stock de
   Ceftriaxone 1g ramené à 180).
 
+**Point 6 — Retirer les émojis de Tracabilite.jsx. ✅**
+
+Deux émojis pictographiques restants (règle du projet : jamais d'emoji dans l'UI) : le placeholder
+caméra (📷) et le placeholder "en attente de scan" (🔍). Remplacés par des icônes `lucide-react`
+(`Camera`, `Search`, déjà présent dans `package.json` mais jamais utilisé ailleurs dans le code —
+première introduction dans le projet). Un troisième emoji (🔍 dans le libellé du bouton "Vérifier
+l'authenticité") avait déjà été retiré au passage lors de l'implémentation du point 5, sur la même
+ligne modifiée pour ajouter le bouton "Enregistrer dans l'entrepôt". Vérifié par recherche regex
+Unicode sur l'ensemble du fichier après coup : plus aucun émoji pictographique présent. Rendu visuel
+confirmé dans le navigateur — icônes caméra et loupe correctement affichées à la place des emojis.
+
 ## Module HÔPITAL
 
 Non commencé — en attente de validation complète du module Pharmacie.
