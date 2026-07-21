@@ -2,6 +2,7 @@ import { colors } from "../../theme";
 import { useState, useEffect, useMemo } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
 import Layout from "../../components/Layout";
+import PredictionsIA from "../../components/PredictionsIA";
 import { useKpiDistributeur, useCommandes, useMedicamentsCritiques } from "../../hooks/useSupabaseData";
 import { insertCommande } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
@@ -9,6 +10,11 @@ import { supabase } from "../../supabaseClient";
 import { openDocument, tableHTML, infoGridHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
 
 const MOIS_LABELS = ["Jan", "Fev", "Mar", "Avr", "Mai", "Jun", "Jul", "Aou", "Sep", "Oct", "Nov", "Dec"];
+
+function fmtFCFA(ca) {
+  if (ca >= 1000000) return `${(ca / 1000000).toFixed(1)}M FCFA`;
+  return `${ca.toLocaleString("fr-FR")} FCFA`;
+}
 
 const inputStyle = {
   width: "100%", padding: "9px 13px", border: "1.5px solid var(--border)",
@@ -324,16 +330,19 @@ function AnalyseCommandesDistributeur() {
     mois.setDate(1);
     mois.setHours(0, 0, 0, 0);
 
+    // etablissement_id sur commandes/livraisons désigne l'ÉMETTEUR (le client),
+    // jamais le distributeur — les commandes/livraisons qui le concernent
+    // portent distributeur_id = son propre établissement (voir étape 0).
     Promise.all([
       supabase.from("commandes").select("id, statut, notes", { count: "exact" })
-        .eq("etablissement_id", auth.etablissement_id)
+        .eq("distributeur_id", auth.etablissement_id)
         .gte("created_at", mois.toISOString()),
       supabase.from("livraisons").select("id", { count: "exact" })
-        .eq("etablissement_id", auth.etablissement_id)
+        .eq("distributeur_id", auth.etablissement_id)
         .eq("statut", "livree")
         .gte("created_at", mois.toISOString()),
       supabase.from("commandes").select("id", { count: "exact" })
-        .eq("etablissement_id", auth.etablissement_id)
+        .eq("distributeur_id", auth.etablissement_id)
         .in("statut", ["envoyee", "confirmee"]),
     ]).then(([cmdRes, livRes, attRes]) => {
       const commandes = cmdRes.data ?? [];
@@ -413,7 +422,7 @@ export default function Previsions() {
   const { auth } = useAuth();
   const { data: kpi, loading: loadKpi } = useKpiDistributeur();
   const { data: commandes, loading: loadCmd } = useCommandes();
-  const { data: critiques, loading: loadCrit } = useMedicamentsCritiques(5);
+  const { data: critiques, loading: loadCrit } = useMedicamentsCritiques(5, auth?.etablissement_id ?? null);
   const [agirAction, setAgirAction] = useState(null);
   const [toast, setToast] = useState(null);
 
@@ -459,7 +468,7 @@ export default function Previsions() {
   );
 
   const kpiCards = [
-    { label: "Chiffre d'affaires total", value: loadKpi ? "…" : `${((kpi?.ca ?? 0) / 1000000).toFixed(1)}M FCFA`, color: "#F59E0B" },
+    { label: "Chiffre d'affaires total", value: loadKpi ? "…" : fmtFCFA(kpi?.ca ?? 0),                          color: "#F59E0B" },
     { label: "Commandes actives",         value: loadKpi ? "…" : kpi?.commandesActives ?? 0,                        color: "#10B981" },
     { label: "Clients actifs",            value: loadKpi ? "…" : kpi?.clients ?? 0,                                 color: "#3B82F6" },
     { label: "Livraisons en cours",       value: loadKpi ? "…" : kpi?.livraisonsEnCours ?? 0,                       color: "#8B5CF6" },
@@ -514,6 +523,10 @@ export default function Previsions() {
       </div>
 
       <AnalyseCommandesDistributeur />
+
+      <div style={{ marginBottom: 20 }}>
+        <PredictionsIA etablissementId={auth?.etablissement_id ?? null} />
+      </div>
 
       <div className="dash-grid-2">
         <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", minWidth: 0 }}>

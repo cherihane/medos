@@ -223,8 +223,8 @@ export function useMedicaments(etablissement_id = null) {
   }, [etablissement_id]);
 }
 
-export function useMedicamentsCritiques(limit = 8) {
-  const all = useMedicaments();
+export function useMedicamentsCritiques(limit = 8, etablissement_id = null) {
+  const all = useMedicaments(etablissement_id);
   return {
     ...all,
     data: all.data
