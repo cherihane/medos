@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
-import { useKpiDistributeur, useDistributeurClients, useCommandesRealtime } from "../../hooks/useSupabaseData";
+import { useKpiDistributeur, useDistributeurClients, useCommandesRealtime, estConnecteRecemment } from "../../hooks/useSupabaseData";
 import { updateCommande } from "../../hooks/useMutations";
 import { supabase } from "../../supabaseClient";
 import { colors, radius, shadow, font } from "../../theme";
@@ -329,18 +329,23 @@ export default function DashboardDistributeur() {
               Aucun client pour l'instant.
             </div>
           )}
-          {!loadEtabs && etabs.map((e) => (
-            <div key={e.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 14px", backgroundColor: colors.bgSurface, borderRadius: 10, marginBottom: 8 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "#10B981" }} />
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 13, color: colors.navy }}>{e.nom}</div>
-                  <div style={{ fontSize: 11, color: colors.textMuted }}>{e.type} · {e.ville}</div>
+          {!loadEtabs && etabs.map((e) => {
+            const connecte = estConnecteRecemment(e.derniere_connexion);
+            return (
+              <div key={e.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 14px", backgroundColor: colors.bgSurface, borderRadius: 10, marginBottom: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: connecte ? "#10B981" : "#D1D5DB" }} />
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: colors.navy }}>{e.nom}</div>
+                    <div style={{ fontSize: 11, color: colors.textMuted }}>{e.type} · {e.ville}</div>
+                  </div>
                 </div>
+                <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 8, backgroundColor: connecte ? "#DCFCE7" : "#F3F4F6", color: connecte ? "#16A34A" : "#9CA3AF", fontWeight: 600 }}>
+                  {connecte ? "actif" : "hors ligne"}
+                </span>
               </div>
-              <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 8, backgroundColor: "#DCFCE7", color: "#16A34A", fontWeight: 600 }}>actif</span>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Commandes temps réel */}

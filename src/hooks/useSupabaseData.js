@@ -333,10 +333,19 @@ export function useDistributeurClients() {
       .from("distributeur_clients")
       .select(`
         id, source, created_at,
-        client:client_etablissement_id ( id, nom, ville, type, email, telephone, actif )
+        client:client_etablissement_id ( id, nom, ville, type, email, telephone, actif, derniere_connexion )
       `)
       .order("created_at", { ascending: false })
   );
+}
+
+// Un client est considéré "actif" (connecté récemment) s'il a émis un
+// heartbeat (voir Layout.jsx / enregistrerConnexion) dans les X dernières
+// minutes — jamais un flag statique.
+export const CONNEXION_RECENTE_MINUTES = 15;
+export function estConnecteRecemment(derniere_connexion) {
+  if (!derniere_connexion) return false;
+  return Date.now() - new Date(derniere_connexion).getTime() < CONNEXION_RECENTE_MINUTES * 60 * 1000;
 }
 
 // Stock bas ("ruptures / besoins récents") d'un client réel — la policy

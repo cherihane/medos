@@ -1,17 +1,32 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Sidebar from "./Sidebar";
 import { useIsMobile } from "../hooks/useWindowSize";
 import { colors, sidebar, spacing } from "../theme";
 import { useNotifications } from "../context/NotificationsContext";
 import { useAuth } from "../context/AuthContext";
+import { enregistrerConnexion } from "../hooks/useMutations";
 
 const SIDEBAR_WIDTH = sidebar.width;
+const HEARTBEAT_INTERVAL_MS = 3 * 60 * 1000;
 
 export default function Layout({ children, title, subtitle }) {
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { auth } = useAuth();
   const { lastNotif, dismissLast } = useNotifications();
+
+  // Heartbeat de présence — alimente le statut "actif" affiché aux
+  // distributeurs pour leurs clients réels (Dashboard, Réseau clients).
+  // Ne touche jamais AuthContext.jsx : ne fait que consommer `auth` déjà
+  // chargé par ailleurs.
+  useEffect(() => {
+    if (!auth?.etablissement_id) return;
+    enregistrerConnexion().catch(() => {});
+    const interval = setInterval(() => {
+      enregistrerConnexion().catch(() => {});
+    }, HEARTBEAT_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [auth?.etablissement_id]);
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", backgroundColor: colors.bg }}>
