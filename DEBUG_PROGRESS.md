@@ -795,6 +795,41 @@ corrigés (dont une faille RLS transversale et un risque de double-décrément).
 de double-décrément) → mouvement `mouvements_stock` correct (`type: sortie, quantite: 30,
 medicament_id` correctement résolu, `etablissement_id` = Poto-Poto uniquement).
 
+**2026-07-21 (session 8) — Étape 1, point 9 : Prévisions IA — fonctionnalité absente, ajoutée et
+validée avec un vrai appel Groq (pas une erreur silencieuse).**
+
+`Previsions.jsx` (distributeur) n'appelait jamais Groq — page entièrement basée sur une heuristique
+côté client (`stock_actuel < stock_minimum`), contrairement aux dashboards Pharmacie et Hôpital qui
+utilisent déjà `<PredictionsIA />` (le commentaire du composant partagé dit explicitement "affiché
+dans les 3 dashboards" — jamais fait pour le distributeur). Ajouté à la page Prévisions du
+distributeur, avec 2 corrections nécessaires pour que ce soit fiable :
+
+1. `usePredictionsIA()`/`fetchStockData()` interrogeaient `medicaments` sans filtre — pour un
+   distributeur, cela aurait mélangé son propre stock entrepôt avec celui de ses clients réels dans
+   le prompt envoyé à Groq. Ajouté un filtre `etablissement_id` optionnel (même pattern que
+   `useMedicaments`), rétrocompatible pour pharmacie/hôpital qui ne le passent pas.
+2. **Bug trouvé en testant, indépendant de Groq** : `AnalyseCommandesDistributeur` (widget "Analyse
+   du mois en cours", déjà présent) filtrait `commandes`/`livraisons` par
+   `etablissement_id = auth.etablissement_id` — mais ce champ désigne toujours l'ÉMETTEUR (le
+   client), jamais le distributeur. Ce widget affichait donc 0 partout pour absolument tout
+   distributeur depuis sa création. Corrigé sur `distributeur_id` (étape 0). Même bug de formatage
+   CA que le Dashboard ("0.0M FCFA" pour de petits montants) corrigé au passage.
+3. **Bug annexe trouvé en vérifiant les résultats** : `useMedicamentsCritiques()` (widget "Stock
+   actuel vs minimum" + "Actions recommandées", déjà présent) souffrait du même défaut de filtrage
+   que Entrepot.jsx (point 2) — affichait les produits critiques des CLIENTS du distributeur
+   (Oméprazole, Amoxicilline, Vitamine D3 de Pharmacie Mimi) comme s'il s'agissait de son propre
+   stock à réapprovisionner. Même correctif (filtre `etablissement_id` optionnel, propagé depuis
+   Previsions.jsx).
+
+**Revalidé en conditions réelles** : clic sur "Lancer l'analyse IA" → vrai appel réseau vers l'API
+Groq (`llama-3.3-70b-versatile`) → réponse JSON valide reçue et affichée : résumé
+("La situation du stock est globalement stable, avec un seul médicament en stock et aucun risque de
+rupture immédiate"), onglets Ruptures/Saisonnier/Commandes peuplés — pas d'erreur silencieuse, pas de
+placeholder qui ne se charge jamais. KPI "Chiffre d'affaires total" (15 000 FCFA), "Commandes reçues"
+(1), "Livraisons effectuées" (2) tous corrects après le fix `distributeur_id`. "Stock actuel vs
+minimum" et "Actions recommandées" vérifiés vides ("Aucun médicament critique") après le fix — normal,
+le seul produit de Poto-Poto (Ceftriaxone 1g, 220/10) n'est pas sous son seuil.
+
 ## Module HÔPITAL
 
 Non commencé — en attente de validation complète du module Pharmacie.

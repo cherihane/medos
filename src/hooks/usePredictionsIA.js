@@ -9,11 +9,16 @@ import { supabase } from "../supabaseClient";
 const GROQ_MODEL = "llama-3.3-70b-versatile";
 const GROQ_API = "https://api.groq.com/openai/v1/chat/completions";
 
-async function fetchStockData() {
-  const { data, error } = await supabase
+// etablissement_id : filtre explicite optionnel. Sans lui, un distributeur
+// verrait aussi le stock de ses clients réels dans l'analyse (visible pour
+// la fiche client, pas pour "mon" propre entrepôt — voir Entrepot.jsx).
+async function fetchStockData(etablissement_id = null) {
+  let q = supabase
     .from("medicaments")
     .select("id, nom, categorie, stock_actuel, stock_minimum, unite, prix_unitaire")
     .order("nom");
+  if (etablissement_id) q = q.eq("etablissement_id", etablissement_id);
+  const { data, error } = await q;
   if (error) throw new Error("Erreur Supabase medicaments : " + error.message);
   return data || [];
 }
@@ -147,7 +152,7 @@ Maximum 6 ruptures, 3 alertes saisonnières, 8 commandes.
  * Hook principal
  * Usage : const { predictions, loading, error, analyser } = usePredictionsIA();
  */
-export function usePredictionsIA() {
+export function usePredictionsIA(etablissement_id = null) {
   const [predictions, setPredictions] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -157,7 +162,7 @@ export function usePredictionsIA() {
     setError(null);
     try {
       const [medicaments, alertes] = await Promise.all([
-        fetchStockData(),
+        fetchStockData(etablissement_id),
         fetchAlertesData(),
       ]);
 
@@ -179,7 +184,7 @@ export function usePredictionsIA() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [etablissement_id]);
 
   return { predictions, loading, error, analyser };
 }

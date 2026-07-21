@@ -183,8 +183,8 @@ function SectionCommandes({ commandes }) {
 }
 
 // ── Composant principal ───────────────────────────────────────────────────────
-export default function PredictionsIA() {
-  const { predictions, loading, error, analyser } = usePredictionsIA();
+export default function PredictionsIA({ etablissementId = null } = {}) {
+  const { predictions, loading, error, analyser } = usePredictionsIA(etablissementId);
   const [tab, setTab] = useState("ruptures");
 
   const tabs = [
