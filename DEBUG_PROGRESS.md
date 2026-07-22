@@ -1756,3 +1756,68 @@ solution proposée (`enrichWithEtablissement()` résolvant `etablissement_id` de
 de scénario 1a/1b) et le point 4 (empêcher `Inscription.jsx` de créer un second établissement sur un
 email déjà utilisé) restent non appliqués — seule la résolution du rôle a été corrigée, comme
 demandé explicitement ("modifie le minimum nécessaire").
+
+---
+
+## CORRECTIF — point 4 : email déjà utilisé bloqué à l'inscription (2026-07-23)
+
+**Cause éliminée à la source.** [Inscription.jsx](src/pages/Inscription.jsx) (`handleSoumettre`) ne
+vérifiait jamais si l'email saisi correspondait déjà à un établissement existant avant de créer le
+compte Supabase Auth puis la ligne `etablissements` — c'était le seul chemin identifié dans le
+diagnostic pour créer le scénario 1a ("deux comptes principaux avec le même email"). Corrigé : un
+appel bloque désormais explicitement la soumission si l'email est déjà associé à un établissement,
+quel que soit son statut (`en_attente`, `validee`, peu importe le type).
+
+**Problème d'accès résolu.** La page d'inscription est visitée par un utilisateur anonyme (pas encore
+authentifié), et `etab_select` (RLS sur `etablissements`) est réservée au rôle `authenticated` — un
+anonyme ne peut donc pas lire directement la table pour vérifier l'unicité. Ajouté une fonction
+`SECURITY DEFINER` dédiée,
+[`email_etablissement_deja_utilise(p_email)`](supabase/migrations/20260723_email_etablissement_deja_utilise_rpc.sql)
+(même schéma que `rechercher_client_par_email()` du module Distributeur) : accessible à `anon`,
+compare les emails normalisés (`lower(trim(...))`, cohérent avec la normalisation posée le
+2026-07-20), et **ne renvoie qu'un booléen** — jamais les données de l'établissement trouvé, pour ne
+pas transformer ce garde-fou en annuaire d'établissements consultable.
+
+[`Inscription.jsx`](src/pages/Inscription.jsx#L388-L401) (`handleSoumettre`) : appelle ce RPC juste
+avant `supabase.auth.signUp()` ; si l'email est déjà utilisé, affiche
+**"Cet email est déjà associé à un autre établissement MedOS."** et arrête la soumission avant toute
+création de compte ou d'établissement (donc avant que le bug de rôle partagé puisse même se
+produire).
+
+**Testé (RPC en conditions réelles, requête anonyme directe sans clé authentifiée)** :
+- `cherihaneadam123@gmail.com` (établissement réel existant) → `true`.
+- Même email avec casse et espaces différents (`"  CheriHaneAdam123@Gmail.com  "`) → `true` (la
+  normalisation fonctionne).
+- Email jamais vu (`jamais-vu-avant-2026-test@example.com`) → `false`.
+
+**Testé (React, `Inscription.test.js`, Jest + RTL)** — mêmes précautions que pour
+`AuthContext.test.js` : pas de mot de passe tapé dans un vrai navigateur (le formulaire d'inscription
+en contient un, donc même contrainte), le composant réel `<Inscription />` est monté en jsdom, la
+soumission complète du formulaire (rôle → informations → "Soumettre la demande") est simulée avec
+`fireEvent`, seule la couche réseau Supabase est mockée.
+- Email marqué "déjà utilisé" (RPC mocké à `true`) → message d'erreur affiché tel quel, **et
+  `supabase.auth.signUp` jamais appelé** (preuve qu'aucun compte n'est créé avant le blocage).
+- Email inédit (RPC mocké à `false`) → `signUp` appelé, écran de confirmation "Demande envoyée avec
+  succès" affiché, aucun message d'erreur.
+- **Validité du test vérifiée** : en revenant temporairement au code d'avant ce correctif (`git
+  stash` sur `Inscription.jsx` seul), le test "email déjà utilisé bloque la soumission" échoue bien
+  (le message n'apparaît jamais, puisque rien ne l'empêchait avant) — pas un test vacant. Restauré,
+  les 2 tests passent, `9 passed, 9 total` sur la suite complète, `npm run build` revalidé.
+
+**`enrichWithEtablissement()` n'a plus besoin de gérer l'ambiguïté multi-établissement (point 3,
+devenu sans objet).** Le scénario qui rendait `.eq("email", user.email).maybeSingle()` ambigu
+(§"d) Effet secondaire aggravant" ci-dessus) reposait entièrement sur la possibilité qu'un même email
+soit réutilisé comme email principal de DEUX lignes `etablissements` — désormais bloqué à la racine
+par ce correctif. Le cas légitime restant (1b, un membre du personnel réel sur deux établissements
+via `membres_personnel`) ne passe jamais par `enrichWithEtablissement()`'s requête `etablissements`
+(qui ne cherche que le compte PRINCIPAL, pas les rattachements personnel) — non concerné. **Aucune
+modification apportée à `enrichWithEtablissement()`** : elle n'avait pas besoin de changer, seulement
+sa nécessité de gérer ce cas d'ambiguïté disparaît. Documenté ici pour toute session future qui
+relirait le diagnostic ci-dessus et se demanderait si le point "d)" reste un risque actif — ce n'est
+plus le cas.
+
+**Correctif sessionStorage conservé tel quel.** Aucun risque à le garder même si le scénario qu'il
+corrige devient impossible à créer pour de nouveaux comptes : il protège aussi les comptes existants
+créés avant ce correctif (si un cas 1a existait déjà en base, ce qui n'est pas le cas actuellement —
+vérifié par requête directe, 0 doublon) et n'a aucun effet de bord sur le fonctionnement normal
+(scénario 1, testé et validé).

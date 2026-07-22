@@ -386,6 +386,21 @@ export default function Inscription() {
     if (!validerEtape1()) return;
     setSaving(true);
     try {
+      // 0. Un même email ne doit jamais être associé à deux établissements
+      // (c'est ce qui permettait le bug de changement de rôle involontaire au
+      // rafraîchissement — voir DEBUG_PROGRESS.md). etablissements.email n'a
+      // pas de contrainte unique en base, donc c'est vérifié ici avant toute
+      // création de compte.
+      const { data: dejaUtilise, error: emailCheckError } = await supabase.rpc(
+        "email_etablissement_deja_utilise",
+        { p_email: form.email.trim() },
+      );
+      if (emailCheckError) throw new Error(emailCheckError.message);
+      if (dejaUtilise) {
+        setErreur("Cet email est déjà associé à un autre établissement MedOS.");
+        return;
+      }
+
       // 1. Créer le compte Supabase Auth puis déconnecter immédiatement.
       // signUp() crée une session active qui déclencherait onAuthStateChange
       // dans AuthContext et redirigerait l'utilisateur vers le dashboard avant
