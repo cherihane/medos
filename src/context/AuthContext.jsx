@@ -3,6 +3,22 @@ import { supabase } from "../supabaseClient";
 
 const AuthContext = createContext(null);
 
+// Rôle "actif" de CET onglet — sessionStorage n'est jamais partagé entre onglets
+// (contrairement à localStorage), donc prioritaire sur user_metadata.role qui, lui,
+// est un champ unique partagé par tout le compte Supabase Auth et peut être écrasé
+// par une connexion faite dans un AUTRE onglet/session (voir DEBUG_PROGRESS.md,
+// "changement de rôle involontaire au rafraîchissement").
+const ROLE_SESSION_KEY = "medos_role_actif";
+function lireRoleSession() {
+  try { return window.sessionStorage.getItem(ROLE_SESSION_KEY); } catch { return null; }
+}
+function ecrireRoleSession(role) {
+  try { window.sessionStorage.setItem(ROLE_SESSION_KEY, role); } catch { /* ignore */ }
+}
+function effacerRoleSession() {
+  try { window.sessionStorage.removeItem(ROLE_SESSION_KEY); } catch { /* ignore */ }
+}
+
 // Chemins autorisés par role_interne. Absent = compte principal → tout est visible.
 // /parametres est toujours inclus pour tous les rôles internes.
 const NAV_INTERNE = {
@@ -317,8 +333,10 @@ export function AuthProvider({ children }) {
 
   // Étape 1 — auth de base depuis user_metadata (synchrone, pas de réseau)
   const buildAuthBase = (user) => {
-    const role = user?.user_metadata?.role;
+    const roleSession = lireRoleSession();
+    const role = (roleSession && roleConfig[roleSession]) ? roleSession : user?.user_metadata?.role;
     if (!role || !roleConfig[role]) return null;
+    if (!roleSession) ecrireRoleSession(role); // première résolution pour cet onglet — la fige
     const role_interne = user?.user_metadata?.role_interne ?? null;
     const config = roleConfig[role];
 
@@ -513,6 +531,9 @@ export function AuthProvider({ children }) {
       }
     }
 
+    // Le rôle choisi explicitement dans ce formulaire fait toujours foi pour CET
+    // onglet, quel que soit ce que porte encore user_metadata.role (voir buildAuthBase).
+    ecrireRoleSession(role);
     const base = buildAuthBase(user);
     setAuth(base);
     if (base) enrichWithEtablissement(user, { current: true });
@@ -521,6 +542,7 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     await supabase.auth.signOut();
+    effacerRoleSession();
     setAuth(null);
   };
 
