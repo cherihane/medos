@@ -2,7 +2,7 @@ import { colors } from "../../theme";
 import { useState, useEffect, useMemo } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
 import Layout from "../../components/Layout";
-import PredictionsIA from "../../components/PredictionsIA";
+import TendancesDistributeur from "../../components/TendancesDistributeur";
 import { useKpiDistributeur, useCommandes, useMedicamentsCritiques } from "../../hooks/useSupabaseData";
 import { insertCommande } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
@@ -524,9 +524,7 @@ export default function Previsions() {
 
       <AnalyseCommandesDistributeur />
 
-      <div style={{ marginBottom: 20 }}>
-        <PredictionsIA etablissementId={auth?.etablissement_id ?? null} />
-      </div>
+      <TendancesDistributeur etablissementId={auth?.etablissement_id ?? null} />
 
       <div className="dash-grid-2">
         <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", minWidth: 0 }}>
