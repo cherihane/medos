@@ -1672,3 +1672,87 @@ aveuglément à `user_metadata.role` :
 Cette solution n'a pas été implémentée — elle nécessite de modifier `AuthContext.jsx` (le flux de
 connexion et l'initialisation de session), ce qui est explicitement soumis à confirmation préalable
 par la règle absolue de ce fichier. En attente de validation avant toute modification.
+
+---
+
+## CORRECTIF APPLIQUÉ — rôle actif mémorisé par sessionStorage (2026-07-23)
+
+**Confirmation explicite obtenue de l'utilisateur** pour appliquer la solution proposée ci-dessus.
+Modification volontairement minimale de [AuthContext.jsx](src/context/AuthContext.jsx) — rien
+d'autre que la résolution du rôle n'a été touché (`enrichWithEtablissement`, `mountedRef`,
+`getSession`, `onAuthStateChange` restent inchangés dans leur logique propre) :
+
+1. Trois petites fonctions utilitaires ajoutées en tête de fichier
+   ([AuthContext.jsx:6-20](src/context/AuthContext.jsx#L6-L20)) : `lireRoleSession()`,
+   `ecrireRoleSession()`, `effacerRoleSession()`, toutes protégées par `try/catch` (sessionStorage
+   peut être inaccessible en navigation privée stricte).
+2. `buildAuthBase(user)` ([AuthContext.jsx:335-339](src/context/AuthContext.jsx#L335-L339)) : le
+   rôle vient désormais de `sessionStorage` s'il y est déjà et qu'il est valide, sinon (première
+   résolution pour cet onglet) il retombe sur `user.user_metadata.role` comme avant **et le fixe**
+   dans `sessionStorage` pour la suite. `role_interne` n'est pas touché (rien ne l'écrase nulle part
+   dans le code actuel — pas concerné par ce bug).
+3. `login()` ([AuthContext.jsx:534-536](src/context/AuthContext.jsx#L534-L536)) : le rôle
+   explicitement choisi dans le formulaire de connexion est écrit dans `sessionStorage` juste avant
+   `buildAuthBase(user)`, pour que CET onglet reflète toujours le choix qui vient d'y être fait,
+   même si l'objet `user` renvoyé par `signInWithPassword` porte encore un ancien rôle (snapshot pas
+   encore rafraîchi côté client).
+4. `logout()` ([AuthContext.jsx:545](src/context/AuthContext.jsx#L545)) : `effacerRoleSession()`
+   ajouté par hygiène (pas strictement nécessaire, `login()` réécrit de toute façon la valeur
+   explicitement à chaque connexion).
+
+### Méthode de test — pourquoi pas un test manuel dans le navigateur
+
+Le test manuel interactif (se connecter dans l'app réelle) a été tenté puis abandonné : le
+classificateur de sécurité de l'outil navigateur a bloqué **toute saisie de mot de passe** dans le
+formulaire de connexion (même pour un compte de test créé exprès pour ce diagnostic), puis a
+également bloqué **l'injection d'un jeton de session** obtenu via l'API Admin Supabase (perçue à
+juste titre comme une forme de gestion d'identifiants). Ces deux blocages ont été respectés sans
+tentative de contournement, conformément à la consigne de sécurité — pas de mot de passe ni de jeton
+d'authentification manipulé dans le navigateur pour ce diagnostic.
+
+À la place, les 3 scénarios ont été vérifiés par un **test automatisé réel**
+([AuthContext.test.js](src/context/AuthContext.test.js), Jest + React Testing Library, déjà
+installés dans le projet) qui monte le **vrai composant `AuthProvider`** (pas une réimplémentation)
+dans un environnement jsdom dont `sessionStorage`/`localStorage` sont de vraies implémentations du
+navigateur (pas des mocks maison) — seule la couche réseau Supabase est simulée. "Onglet A" / "onglet
+B" sont simulés en démontant/remontant le provider (= rafraîchissement de page) et en
+vidant/restaurant explicitement `sessionStorage` entre les deux (= bascule vers un onglet
+physiquement différent, dont la sessionStorage n'a jamais été partagée) — `localStorage`/le compte
+Supabase Auth simulé, lui, reste commun aux deux, exactement comme dans un vrai navigateur.
+
+**Validité du test vérifiée** : les 4 tests échouent tous en pointant le code d'AVANT le correctif
+(`git stash` temporaire sur `AuthContext.jsx` seul) — et l'échec du test `login()` reproduit
+littéralement le bug signalé : après un `login("pharmacie", ...)`, le DOM affiche encore
+`"distributeur"`. Une fois le correctif restauré, les 4 tests passent.
+
+**Résultat (preuve concrète, `npx react-scripts test src/context/AuthContext.test.js --watchAll=false`)** :
+```
+PASS src/context/AuthContext.test.js
+  ✓ scénario 1 — connexion puis rafraîchissement affichent le même rôle qu'avant le correctif
+  ✓ scénario 2 — un autre onglet qui change le rôle du compte partagé ne fait pas basculer cet onglet
+  ✓ scénario 3 — premier login sans sessionStorage préexistant fonctionne normalement
+  ✓ login() fige le rôle choisi dans ce formulaire, même si le snapshot user renvoyé par signIn
+    porte encore l'ancien rôle
+Tests: 4 passed, 4 total
+```
+- **Scénario 1 (mono-établissement)** : connexion "pharmacie" → `sessionStorage.medos_role_actif =
+  "pharmacie"` → démontage/remontage (rafraîchissement) → toujours "pharmacie", sessionStorage
+  inchangée. Aucune régression.
+- **Scénario 2 (multi-établissements)** : onglet A connecté "distributeur" → rafraîchissement →
+  reste "distributeur" → un événement équivalent à un `login()` "pharmacie" dans un AUTRE onglet
+  (mutation du compte partagé, simulée) → nouvel onglet B (sessionStorage vierge) démarre
+  correctement sur "pharmacie" → **retour à l'onglet A (sa sessionStorage jamais touchée par B) :
+  toujours "distributeur"**, malgré la mutation partagée. C'est exactement la preuve demandée.
+- **Scénario 3 (premier login)** : `sessionStorage` vide au départ → connexion "hôpital" → rôle
+  affiché correctement, `sessionStorage.medos_role_actif = "hopital"` écrit, aucun état "none"/écran
+  blanc persistant.
+
+**Suite de tests complète revalidée sans régression** (`npx react-scripts test --watchAll=false`) :
+`7 passed, 7 total` (les 4 nouveaux tests + les 3 déjà existants sur `KpiCard`). `npm run build`
+revalidé également, sans erreur.
+
+**Non traité, hors du périmètre confirmé par l'utilisateur pour ce correctif** : le point 3 de la
+solution proposée (`enrichWithEtablissement()` résolvant `etablissement_id` de façon ambiguë en cas
+de scénario 1a/1b) et le point 4 (empêcher `Inscription.jsx` de créer un second établissement sur un
+email déjà utilisé) restent non appliqués — seule la résolution du rôle a été corrigée, comme
+demandé explicitement ("modifie le minimum nécessaire").
