@@ -8,6 +8,7 @@
  */
 import { colors } from "../../theme";
 import { useState, useCallback, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
@@ -382,11 +383,15 @@ function ModalReception({ medicaments, etablissement_id, onClose, onSuccess }) {
 // ── Modal Nouvelle commande fabricant (bon de commande multi-médicaments) ──────
 const LIGNE_VIDE = () => ({ id: Date.now() + Math.random(), medicament_id: "", quantite: "" });
 
-function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id, auth, onClose, onSuccess }) {
+function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id, auth, prefillLignes, onClose, onSuccess }) {
   const { data: fabricants } = useFabricants();
   const [fabricantSelectionId, setFabricantSelectionId] = useState("");
   const [header, setHeader] = useState({ email_fabricant: "", fabricant: "", telephone: "", date_livraison: "", notes: "" });
-  const [lignes, setLignes] = useState([LIGNE_VIDE()]);
+  const [lignes, setLignes] = useState(() =>
+    prefillLignes && prefillLignes.length > 0
+      ? prefillLignes.map((l) => ({ id: Date.now() + Math.random(), medicament_id: l.medicament_id, quantite: String(l.quantite) }))
+      : [LIGNE_VIDE()]
+  );
   const [saving, setSaving] = useState(false);
   const [err, setErr]       = useState(null);
 
@@ -513,6 +518,12 @@ function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id
             </div>
             <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: colors.textMuted, lineHeight: 1, flexShrink: 0 }}>×</button>
           </div>
+
+          {prefillLignes && prefillLignes.length > 0 && (
+            <div style={{ marginBottom: 12, padding: "8px 12px", backgroundColor: "#EFF6FF", color: "#2563EB", borderRadius: 8, fontSize: 12, fontWeight: 600 }}>
+              {prefillLignes.length > 1 ? `${prefillLignes.length} médicaments pré-remplis depuis les alertes de stock bas.` : "Médicament pré-rempli depuis une alerte de stock bas."}
+            </div>
+          )}
 
           {/* Sélection d'un fabricant déjà enregistré (optionnel) */}
           {fabricants.length > 0 && (
@@ -1314,6 +1325,8 @@ function CommandesFabricantTab({ etablissement_id, auth, success, toastError }) 
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function Entrepot() {
   const { auth } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const { data: medicamentsAll, loading, refetch } = useMedicaments(auth?.etablissement_id);
   const { toasts, success, error: toastError } = useToast();
   const [tab, setTab]                           = useState("stock"); // "stock" | "fabricants" | "commandes"
@@ -1323,6 +1336,21 @@ export default function Entrepot() {
   const [showArchives, setShowArchives]         = useState(false);
   const [detailModal, setDetailModal]           = useState(null);
   const [editModal, setEditModal]               = useState(null);
+
+  // Médicaments pré-remplis venant de l'écran Alertes ("Commander" sur une ou
+  // plusieurs alertes de stock bas entrepôt) — ouvre directement le bon de
+  // commande fabricant avec le panier déjà rempli. Consommé une seule fois :
+  // l'état de navigation est vidé tout de suite pour qu'un rafraîchissement
+  // de page ne le redéclenche pas.
+  const [prefillLignes, setPrefillLignes] = useState(null);
+  useEffect(() => {
+    if (location.state?.prefillLignes) {
+      setPrefillLignes(location.state.prefillLignes);
+      setShowCommande(true);
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const medicaments = medicamentsAll.filter((m) => m.actif !== false);
   const archivesCount = medicamentsAll.length - medicaments.length;
@@ -1369,9 +1397,11 @@ export default function Entrepot() {
           distributeurNom={auth?.structure ?? "MedDistrib International"}
           etablissement_id={auth?.etablissement_id ?? null}
           auth={auth}
-          onClose={() => setShowCommande(false)}
+          prefillLignes={prefillLignes}
+          onClose={() => { setShowCommande(false); setPrefillLignes(null); }}
           onSuccess={({ emailStatut, emailErreur, reference, fabricantNom, nbLignes }) => {
             setShowCommande(false);
+            setPrefillLignes(null);
             if (emailStatut === "envoye") {
               success(`Commande ${reference} envoyée à ${fabricantNom} — ${nbLignes} médicament${nbLignes > 1 ? "s" : ""}.`);
             } else {

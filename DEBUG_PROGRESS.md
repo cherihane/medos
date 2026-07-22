@@ -1139,6 +1139,46 @@ Corrections :
   `est_client_de_distributeur()` (déjà en place depuis l'étape 0) autorise bien cette lecture scopée.
 - Donnée de test remise à NULL après vérification.
 
+**Point 3 — Alertes de stock bas : entrepôt + clients MedOS, bouton Commander. ✅**
+
+`Alertes.jsx` n'affichait qu'un historique générique de la table `alertes` (contrefaçons, notifications
+de commandes) — aucune alerte de stock bas, ni sur l'entrepôt du distributeur lui-même, ni sur ses
+clients. Reconstruit en trois onglets, sur le modèle exact de `Alertes.jsx` côté pharmacie (mêmes
+seuils : ratio stock_actuel/stock_minimum ≤ 0.2 = critique, ≤ 0.5 = alerte) :
+- **Stock entrepôt** : `useMedicaments(auth.etablissement_id)` filtré/trié par gravité, sélection
+  multiple, bouton "Commander" (par ligne ou en masse) qui `navigate("/distributeur/entrepot",
+  {state:{prefillLignes}})` — `Entrepot.jsx` consomme ce `location.state` (même pattern que
+  `pendingPrefill` de Fournisseurs.jsx côté pharmacie) et ouvre directement `ModalCommandeFabricant`
+  avec le panier déjà rempli (quantité suggérée = `max(seuil×2 - stock_actuel, seuil)`).
+- **Stock clients** : une carte par client utilisant MedOS (`derniere_connexion` non nul, même
+  définition qu'au point 1) avec ses médicaments sous seuil, via `useClientStockBas(client.id)` —
+  autorisé uniquement parce que la policy `med_select_distributeur_clients` /
+  `est_client_de_distributeur()` (déjà en place depuis l'étape 0) scope la lecture à la relation
+  `distributeur_clients` réelle du distributeur connecté, jamais un accès large.
+- Onglet "Notifications" existant conservé tel quel (historique générique `alertes`).
+
+**Testé en conditions réelles, y compris isolation avec un second compte distributeur créé pour
+l'occasion (pas de mot de passe disponible pour l'ancien compte de test "Distributeur Test Kela") :**
+- Stock entrepôt (Poto-Poto) : stock de Paracetamol Injectable abaissé à 2 (seuil 15, ratio 0.13,
+  critique) → alerte affichée correctement → **"Commander" cliqué → navigation vers Entrepôt →
+  `ModalCommandeFabricant` ouvert avec le panier pré-rempli** ("Paracetamol Injectable 1g", quantité
+  28 = `max(15×2-2, 15)`, bandeau "Médicament pré-rempli depuis une alerte de stock bas.") — flux
+  bout en bout confirmé, commande non envoyée (test), stock remis à 125 après vérification.
+- Stock clients (Poto-Poto → Pharmacie Mimi) : `derniere_connexion` simulée à `now()` → onglet
+  "Stock clients" affiche la carte "Pharmacie Mimi" avec ses 3 vraies alertes de production
+  (Oméprazole Critique 0/15, Amoxicilline Critique 2/20, Vitamine D3 Alerte 5/10) — mêmes données que
+  la fiche client du point 1, cohérence confirmée entre les deux écrans.
+- **Isolation testée avec un second compte distributeur réel et distinct** : inscription complète
+  d'un nouveau compte ("Distributeur B Test", `cherihaneadam123+distribB@gmail.com`) via le vrai
+  formulaire `/inscription`, validé directement en base (`statut_inscription='validee', actif=true`
+  — équivalent du workflow n8n déjà testé dans une session précédente), connexion réelle réussie.
+  Sous ce second compte : Dashboard "Vos clients (0)", Entrepôt "0 produits", onglet "Stock entrepôt"
+  vide, **onglet "Stock clients" affiche "Aucun de vos clients n'utilise MedOS pour l'instant" — les
+  alertes réelles de Pharmacie Mimi (rattachée à Poto-Poto, pas à Distributeur B) ne fuitent à aucun
+  moment.** Reconnexion à Poto-Poto ensuite : ses données (Pharmacie Mimi, historique) intactes et
+  toujours correctement scopées.
+- Donnée de test (`derniere_connexion` de Pharmacie Mimi) remise à NULL après vérification.
+
 ## Module HÔPITAL
 
 Non commencé — en attente de validation complète du module Pharmacie.
