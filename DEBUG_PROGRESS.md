@@ -1534,3 +1534,141 @@ confirmé via `n8n_get_workflow(mode="active")`, `activeVersionId` mis à jour) 
   établissement "Distributeur Test Kela" visible et actif dans "Réseau établissements (1)" — preuve
   que le compte est pleinement utilisable de bout en bout, pas seulement que le statut a changé en
   base.
+
+---
+
+## DIAGNOSTIC — changement de rôle/établissement involontaire au rafraîchissement (compte multi-établissement)
+
+**2026-07-22 — Diagnostic seul, AuthContext.jsx non modifié (règle absolue respectée).**
+
+Symptôme signalé : un compte lié à plusieurs établissements (même email utilisé pour un compte
+pharmacie et un compte distributeur) se reconnecte parfois automatiquement sur le mauvais
+établissement après un simple rafraîchissement de page.
+
+### 1. Comment un même utilisateur peut être lié à deux établissements
+
+Deux mécanismes distincts existent dans le schéma, tous les deux sans aucun garde-fou :
+
+**a) Deux comptes "principaux" (deux lignes `etablissements`) avec le même email.**
+[`etablissements`](supabase/migrations/20240101000000_medos_schema.sql#L7-L18) n'a **aucune
+contrainte unique sur `email`** — seul `medicaments.code` et quelques autres colonnes ont un
+`unique` dans ce schéma, pas `etablissements.email`. Rien n'empêche qu'une pharmacie et un
+distributeur existent avec le même email de contact.
+[`Inscription.jsx`](src/pages/Inscription.jsx#L395-L401) (`handleSoumettre`) ne vérifie jamais si
+l'email saisi correspond déjà à un établissement existant avant d'appeler `supabase.auth.signUp()`
+puis d'insérer une nouvelle ligne `etablissements` — un même email peut donc s'inscrire une seconde
+fois avec un rôle différent (ex : pharmacie puis distributeur) sans blocage ni avertissement.
+Vérifié en base (`SELECT email, count(*) ... GROUP BY email HAVING count(*) > 1` sur
+`etablissements`) : **aucun doublon actuellement en production** — le mécanisme n'a donc pas
+(encore) été déclenché avec les comptes actuels, mais rien dans le code ne l'empêche.
+
+**b) Un membre du personnel (`membres_personnel`) rattaché à deux établissements différents.**
+[`membres_personnel`](supabase/migrations/20240107000000_membres_personnel.sql#L1-L9) a la
+contrainte `unique (etablissement_id, email)` — **volontairement pas `unique(email)`** — ce qui
+autorise explicitement, par conception, le même email comme membre actif de deux établissements
+différents (ex : "commercial" chez un distributeur ET "pharmacien" dans une pharmacie). Vérifié en
+base : aucun cas actuel non plus, mais le schéma le permet nommément.
+
+Dans les deux cas, la cause profonde est la même : **Supabase Auth ne connaît qu'UN seul compte
+(`auth.users`) par adresse email**, avec un unique `user_metadata` partagé — la couche MedOS
+(établissement, rôle) est entièrement résolue à partir de cet email au moment de la connexion,
+sans aucune notion de "quel établissement pour cette session précise".
+
+### 2. Quelle logique décide de l'établissement affiché au rafraîchissement
+
+Trois mécanismes s'enchaînent dans [`AuthContext.jsx`](src/context/AuthContext.jsx), tous
+consultés mais non modifiés :
+
+**a) Le rôle est un champ unique, partagé, écrasé à chaque connexion.**
+`buildAuthBase()` lit `user.user_metadata.role`
+([AuthContext.jsx:320](src/context/AuthContext.jsx#L320)) — un seul champ pour tout le compte
+Supabase Auth, pas par établissement. [`Login.jsx`](src/pages/Login.jsx#L57) propose un sélecteur
+"Type de structure" (`form.role`, défaut `"pharmacie"`) totalement libre — rien ne vérifie qu'il
+correspond au compte réellement associé à l'email saisi — passé tel quel à
+`login(form.role, form.email, form.password)` ([Login.jsx:76](src/pages/Login.jsx#L76)). Dans
+`login()`, si `signInWithPassword` réussit (ce qu'il fait à chaque fois pour ce compte partagé, quel
+que soit le rôle sélectionné dans le menu), le code exécute :
+```js
+// User exists — update role in metadata in case they switch roles
+await supabase.auth.updateUser({ data: { role } });
+```
+([AuthContext.jsx:485-488](src/context/AuthContext.jsx#L485-L488)) — **ceci écrase
+`user_metadata.role` du compte Supabase Auth partagé**, immédiatement, pour TOUTES les sessions
+existantes de ce compte, pas seulement l'onglet/l'appareil qui vient de se connecter. Ce n'est donc
+pas un ordre arbitraire de lecture en base : c'est une mutation active et globale à chaque connexion.
+
+**b) La session est stockée dans `localStorage`, partagée entre tous les onglets du même
+navigateur, et diffusée en direct entre onglets.** Le client Supabase
+([supabaseClient.js](src/supabaseClient.js)) utilise la configuration par défaut de
+`@supabase/supabase-js` 2.106.2 (`persistSession: true`, stockage `localStorage`). Vérifié dans le
+code source installé
+([node_modules/@supabase/auth-js/dist/main/GoTrueClient.js:206-219](node_modules/@supabase/auth-js/dist/main/GoTrueClient.js#L206-L219)) :
+dès qu'une session est persistée, un `BroadcastChannel` est ouvert sur la clé de stockage, et **tout
+événement d'authentification (connexion, `updateUser`, etc.) est diffusé à tous les autres
+onglets/fenêtres du même navigateur**, qui appellent alors leurs propres abonnés
+`onAuthStateChange` — exactement celui enregistré dans
+[AuthContext.jsx:429-436](src/context/AuthContext.jsx#L429-L436). Concrètement : si un onglet A est
+ouvert sur le dashboard distributeur et qu'un onglet B (même navigateur) se connecte ensuite avec le
+même email en sélectionnant "Pharmacie", l'onglet A peut basculer tout seul vers le rôle pharmacie
+— en direct, ou au prochain rafraîchissement si le message a été manqué (onglet en veille, etc.).
+
+**c) Au rafraîchissement, `getSession()` relit simplement l'état partagé — sans aucune notion de
+"quel établissement était affiché avant".** Le `useEffect` d'initialisation
+([AuthContext.jsx:412-426](src/context/AuthContext.jsx#L412-L426)) appelle
+`supabase.auth.getSession()`, qui renvoie la session actuellement stockée dans `localStorage` —
+donc le `user_metadata.role` tel qu'il a été écrasé en dernier par N'IMPORTE QUELLE connexion
+récente sur ce compte partagé, sur ce navigateur. Il n'existe **aucun stockage explicite de
+"l'établissement choisi pour cette session"** distinct du `user_metadata.role` partagé — c'est
+l'hypothèse b) posée dans la mission, confirmée.
+
+**d) Effet secondaire aggravant : `enrichWithEtablissement()` échouerait silencieusement si le
+mécanisme a) se produit.** [AuthContext.jsx:363-410](src/context/AuthContext.jsx#L363-L410) résout
+`etablissement_id` via `.from("etablissements").eq("email", user.email).maybeSingle()`
+([AuthContext.jsx:366-370](src/context/AuthContext.jsx#L366-L370)) et le personnel via
+`.from("membres_personnel").eq("email", user.email).eq("actif", true).maybeSingle()`
+([AuthContext.jsx:371-376](src/context/AuthContext.jsx#L371-L376)) — sans `ORDER BY`, donc sans
+aucune règle de désambiguïsation si deux lignes correspondent (scénarios 1a/1b). `.maybeSingle()`
+échoue avec une erreur PostgREST si plus d'une ligne correspond ; comme les deux requêtes sont
+lancées avec `Promise.all` et que toute l'opération est enveloppée dans un `try/catch` qui avale
+l'erreur ("réseau indisponible — on continue sans enrichissement",
+[AuthContext.jsx:407-409](src/context/AuthContext.jsx#L407-L409)), le vrai symptôme dans ce cas
+serait `etablissement_id` qui reste bloqué à `null` après le rafraîchissement plutôt qu'un message
+d'erreur visible — un bug distinct mais dans la même zone, à surveiller si les scénarios 1a/1b se
+produisent un jour.
+
+### Résumé de la cause exacte
+
+Ce n'est **pas** un ordre arbitraire de lecture en base (hypothèse a) — c'est une **mutation active
+et partagée** : `login()` écrase `user_metadata.role` du compte Supabase Auth commun à chaque
+connexion ([AuthContext.jsx:487](src/context/AuthContext.jsx#L487)), sans jamais vérifier que le
+rôle choisi correspond à l'établissement réellement associé à cet email ; cette mutation se propage
+instantanément à tous les onglets du même navigateur via le `BroadcastChannel` de `supabase-js`, et
+se lit telle quelle à chaque `getSession()` au montage/rafraîchissement — rendant l'établissement
+affiché dépendant de la dernière connexion effectuée n'importe où avec cet email, pas de l'historique
+de navigation de l'onglet courant.
+
+### Solution proposée (NON appliquée — attend confirmation explicite avant de toucher à
+AuthContext.jsx ou tout fichier lié à l'authentification)
+
+Mémoriser explicitement, côté client, le dernier établissement/rôle choisi **pour cette session de
+navigateur précise** (ex : `sessionStorage`, qui n'est jamais partagé entre onglets, contrairement à
+`localStorage`), et le restaurer en priorité à l'initialisation plutôt que de faire confiance
+aveuglément à `user_metadata.role` :
+1. À la connexion réussie (`login()`), écrire `sessionStorage.setItem("medos_role_actif", role)` en
+   plus de l'`updateUser` existant.
+2. Au montage (`useEffect` d'initialisation) et dans `onAuthStateChange`, si
+   `sessionStorage.getItem("medos_role_actif")` existe et diffère de `user.user_metadata.role`,
+   privilégier la valeur de `sessionStorage` pour construire `buildAuthBase()` (ou, plus robuste :
+   ignorer l'événement `onAuthStateChange` diffusé par un AUTRE onglet quand il ne correspond pas au
+   rôle actif de cette session, au lieu de basculer automatiquement).
+3. Effet de bord à traiter : `enrichWithEtablissement()` devrait aussi résoudre `etablissement_id`
+   en tenant compte du rôle actif de session plutôt que du premier/unique résultat de
+   `.eq("email", ...)`, pour rester cohérent avec 1.
+4. Corollaire indépendant mais recommandé : empêcher `Inscription.jsx` de créer un second
+   établissement sur un email déjà utilisé (vérification préalable avant `signUp`), ce qui
+   n'empêcherait pas le cas légitime "membre du personnel sur deux établissements" (1b) mais
+   éliminerait le cas 1a à la source.
+
+Cette solution n'a pas été implémentée — elle nécessite de modifier `AuthContext.jsx` (le flux de
+connexion et l'initialisation de session), ce qui est explicitement soumis à confirmation préalable
+par la règle absolue de ce fichier. En attente de validation avant toute modification.
