@@ -405,32 +405,95 @@ function StatutModal({ livraison, auth, onClose, onSaved }) {
 }
 
 // ── Modal Détail livraison livrée ─────────────────────────────────────────────
-function DetailModal({ livraison, onClose }) {
-  const lignes = (() => {
-    try { return JSON.parse(livraison.lignes_livrees); } catch { return []; }
-  })();
+// ── Modal Détail complet d'une livraison ──────────────────────────────────────
+// Disponible pour N'IMPORTE QUEL statut (avant, cette vue n'existait que pour
+// "livree" et se basait sur un instantané JSON figé) : statut/dates, la
+// commande d'origine si elle a été liée à la création, les médicaments en
+// direct depuis livraison_lignes (fiable même avant livraison, RLS empêche
+// toute modification une fois livrée), et le bon de livraison consultable
+// directement — pas seulement recevable par email.
+function DetailModal({ livraison, destinataireNom, auth, onClose }) {
+  const { data: lignes } = useLivraisonLignes(livraison.id);
+  const [commande, setCommande] = useState(undefined); // undefined = chargement, null = aucune
+
+  useEffect(() => {
+    if (!livraison.commande_id) { setCommande(null); return; }
+    let cancelled = false;
+    supabase
+      .from("commandes")
+      .select("id, reference, date_commande, montant_total, statut, statut_paiement")
+      .eq("id", livraison.commande_id)
+      .maybeSingle()
+      .then(({ data }) => { if (!cancelled) setCommande(data ?? null); });
+    return () => { cancelled = true; };
+  }, [livraison.commande_id]);
+
   return (
-    <Modal title={`Detail — ${livraison.numero_suivi}`} onClose={onClose} width={480}>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14, fontSize: 13 }}>
-        <span style={{ color: colors.textSecondary }}>Date d'arrivee reelle</span>
-        <span style={{ fontWeight: 600, color: colors.navy }}>{fmt(livraison.date_arrivee_reelle)}</span>
+    <Modal title={`Détail — ${livraison.numero_suivi ?? ""}`} onClose={onClose} width={520}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 18 }}>
+        {[
+          { label: "Destinataire", value: destinataireNom },
+          { label: "Statut", value: statusStyle[livraison.statut]?.label ?? livraison.statut },
+          { label: "Date de départ", value: fmt(livraison.date_depart) },
+          { label: "Arrivée prévue", value: fmt(livraison.date_arrivee_prevue) },
+          { label: "Arrivée réelle", value: fmt(livraison.date_arrivee_reelle) },
+          { label: "Transporteur", value: livraison.transporteur ?? "—" },
+        ].map((f) => (
+          <div key={f.label} style={{ padding: "8px 10px", backgroundColor: colors.bgSurface, borderRadius: 8 }}>
+            <div style={{ fontSize: 10, color: colors.textMuted, marginBottom: 2 }}>{f.label}</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: colors.navy }}>{f.value}</div>
+          </div>
+        ))}
       </div>
+
       <div style={{ fontSize: 12, fontWeight: 700, color: colors.textSecondary, textTransform: "uppercase", marginBottom: 8 }}>
-        Medicaments livres
+        Commande d'origine
+      </div>
+      {commande === undefined && <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 16 }}>Chargement…</div>}
+      {commande === null && (
+        <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 16 }}>
+          Aucune — cette livraison a été créée directement, sans commande liée.
+        </div>
+      )}
+      {commande && (
+        <div style={{ padding: "10px 14px", backgroundColor: "#EFF6FF", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, color: colors.navy, marginBottom: 4 }}>
+            <span>{commande.reference ?? commande.id.slice(0, 8).toUpperCase()}</span>
+            <span>{(commande.montant_total ?? 0).toLocaleString("fr-FR")} FCFA</span>
+          </div>
+          <div style={{ fontSize: 11, color: colors.textSecondary }}>
+            Commandée le {fmt(commande.date_commande)} — statut {commande.statut} — paiement {commande.statut_paiement ?? "en_attente"}
+          </div>
+        </div>
+      )}
+
+      <div style={{ fontSize: 12, fontWeight: 700, color: colors.textSecondary, textTransform: "uppercase", marginBottom: 8 }}>
+        Médicaments
       </div>
       {lignes.length === 0 && (
-        <div style={{ fontSize: 13, color: colors.textMuted, padding: "12px 0" }}>Aucun detail disponible.</div>
+        <div style={{ fontSize: 13, color: colors.textMuted, padding: "12px 0" }}>Aucun médicament sur cette livraison.</div>
       )}
-      {lignes.map((l, i) => (
-        <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid var(--border-light)", fontSize: 13 }}>
-          <span style={{ fontWeight: 600, color: colors.navy }}>{l.nom}</span>
-          <span style={{ color: colors.textSecondary }}>x {l.quantite}</span>
+      {lignes.map((l) => (
+        <div key={l.id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid var(--border-light)", fontSize: 13 }}>
+          <span style={{ fontWeight: 600, color: colors.navy }}>
+            {l.medicament_nom}
+            {l.disponible === false && <span style={{ marginLeft: 6, fontSize: 10, color: "#DC2626", fontWeight: 700 }}>EN RUPTURE</span>}
+          </span>
+          <span style={{ color: colors.textSecondary }}>× {l.quantite}</span>
         </div>
       ))}
-      <div style={{ marginTop: 12, fontSize: 13, color: colors.textSecondary }}>
-        Quantite totale : <strong style={{ color: colors.navy }}>{livraison.quantite_livree ?? 0}</strong>
-      </div>
-      <div style={{ marginTop: 20, display: "flex", justifyContent: "flex-end" }}>
+
+      <div style={{ marginTop: 20, display: "flex", justifyContent: "space-between" }}>
+        {lignes.length > 0 ? (
+          <button
+            onClick={async () => {
+              const etab = await fetchEtabFromAuth(auth);
+              printBonLivraison({ numeroSuivi: livraison.numero_suivi, destinataireNom, lignes, dateDepart: livraison.date_depart, etab });
+            }}
+            style={{ padding: "8px 16px", backgroundColor: "#FFFBEB", color: "#D97706", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+            Voir le bon de livraison
+          </button>
+        ) : <span />}
         <button
           onClick={onClose}
           style={{ padding: "8px 20px", backgroundColor: colors.bgSurface, border: `1px solid ${colors.border}`, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
@@ -490,19 +553,6 @@ export default function Livraisons() {
     }
   };
 
-  // Revoir/réimprimer le bon de livraison depuis l'historique — même document
-  // que celui joint à l'email d'origine, régénéré à la demande.
-  const handleVoirBon = async (l) => {
-    const etab = await fetchEtabFromAuth(auth);
-    printBonLivraison({
-      numeroSuivi: l.numero_suivi,
-      destinataireNom: destNom(l),
-      lignes: l.livraison_lignes ?? [],
-      dateDepart: l.date_depart,
-      etab,
-    });
-  };
-
   return (
     <Layout title="Livraisons" subtitle="Suivi des livraisons en temps réel">
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
@@ -541,7 +591,7 @@ export default function Livraisons() {
         />
       )}
       {detailModal && (
-        <DetailModal livraison={detailModal} onClose={() => setDetailModal(null)} />
+        <DetailModal livraison={detailModal} destinataireNom={destNom(detailModal)} auth={auth} onClose={() => setDetailModal(null)} />
       )}
       {tracabiliteModal && (
         <TracabiliteModal livraison={tracabiliteModal} onClose={() => setTracabiliteModal(null)} />
@@ -643,18 +693,12 @@ export default function Livraisons() {
                           Statut
                         </button>
                       )}
-                      {l.statut === "livree" && (
-                        <button onClick={() => setDetailModal(l)} style={{ padding: "4px 10px", backgroundColor: "#DCFCE7", color: "#16A34A", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>
-                          Détail
-                        </button>
-                      )}
+                      <button onClick={() => setDetailModal(l)} style={{ padding: "4px 10px", backgroundColor: "#DCFCE7", color: "#16A34A", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>
+                        Détail
+                      </button>
                       <button onClick={() => setTracabiliteModal(l)} style={{ padding: "4px 10px", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>
                         Traçabilité
                       </button>
-                      {lignes.length > 0 && (
-                        <button onClick={() => handleVoirBon(l)} style={{ padding: "4px 10px", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>
-                          Bon de livraison
-                        </button>
                       )}
                       {modifiable && (
                         <button onClick={() => handleAnnuler(l)} disabled={busyId === l.id} style={{ padding: "4px 10px", backgroundColor: "#FEF2F2", color: "#DC2626", border: "none", borderRadius: 6, fontSize: 11, cursor: busyId === l.id ? "wait" : "pointer", fontWeight: 600 }}>

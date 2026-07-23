@@ -13,13 +13,18 @@
  * manuel (distributeur_clients_id seul, etablissement_id nul).
  */
 import { colors } from "../theme";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "./Modal";
 import {
   insertLivraison, insertLivraisonLignes, updateLivraison, expedierLigneLivraison,
 } from "../hooks/useMutations";
-import { openDocument, tableHTML, infoGridHTML, fetchEtabFromAuth } from "../utils/MedOSDocument";
 import { supabase } from "../supabaseClient";
+import { openDocument, tableHTML, infoGridHTML, fetchEtabFromAuth } from "../utils/MedOSDocument";
+
+function fmtDate(iso) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("fr-FR");
+}
 
 // ── Bon de livraison — impression locale, PDF serveur (pièce jointe), email ───
 // Même pattern que le bon de commande fabricant (Entrepot.jsx) : un document
@@ -128,6 +133,7 @@ export default function NouvelleLivraisonModal({ relations, medicaments, distrib
   const [form, setForm] = useState({
     relation_id: preselectedRelationId, transporteur: "",
     date_depart: new Date().toISOString().slice(0, 10), date_arrivee_prevue: "",
+    commande_id: "",
   });
   const [cart, setCart] = useState([]);
   const [medicamentId, setMedicamentId] = useState("");
@@ -136,6 +142,28 @@ export default function NouvelleLivraisonModal({ relations, medicaments, distrib
   const [formError, setFormError] = useState(null);
   const [partiel, setPartiel] = useState(null);
   const set = (k) => (e) => { setFormError(null); setForm((f) => ({ ...f, [k]: e.target.value })); };
+
+  // Commande d'origine (optionnelle) — les commandes que CE client a passées
+  // chez ce distributeur, pour relier la livraison à ce qui a été commandé
+  // (visible ensuite dans le détail de la livraison). Rechargé à chaque
+  // changement de destinataire ; jamais obligatoire, une livraison peut très
+  // bien être créée sans commande d'origine.
+  const [commandesClient, setCommandesClient] = useState([]);
+  useEffect(() => {
+    const relation = relations.find((r) => r.id === form.relation_id);
+    if (!relation || relation.client.estManuel) { setCommandesClient([]); return; }
+    let cancelled = false;
+    supabase
+      .from("commandes")
+      .select("id, reference, date_commande, montant_total")
+      .eq("distributeur_id", distributeurId)
+      .eq("etablissement_id", relation.client.id)
+      .order("date_commande", { ascending: false })
+      .limit(20)
+      .then(({ data }) => { if (!cancelled) setCommandesClient(data ?? []); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.relation_id]);
 
   const addToCart = () => {
     if (!medicamentId) { setFormError("Choisissez un médicament."); return; }
@@ -181,6 +209,7 @@ export default function NouvelleLivraisonModal({ relations, medicaments, distrib
         etablissement_id: relation.client.estManuel ? null : relation.client.id,
         distributeur_clients_id: relation.id,
         distributeur_id: distributeurId,
+        commande_id: form.commande_id || null,
         statut: "planifiee",
         transporteur: form.transporteur || null,
         numero_suivi: "LIV-" + Date.now().toString().slice(-8),
@@ -296,6 +325,22 @@ export default function NouvelleLivraisonModal({ relations, medicaments, distrib
           </div>
         )}
       </Field>
+      {commandesClient.length > 0 && (
+        <Field label="Commande d'origine (optionnel)">
+          <select style={selectStyle} value={form.commande_id} onChange={set("commande_id")}>
+            <option value="">— Aucune, livraison créée directement —</option>
+            {commandesClient.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.reference ?? c.id.slice(0, 8).toUpperCase()} — {fmtDate(c.date_commande)} — {(c.montant_total ?? 0).toLocaleString("fr-FR")} FCFA
+              </option>
+            ))}
+          </select>
+          <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 4 }}>
+            Relie cette livraison à une commande déjà reçue de ce client — visible ensuite dans le
+            détail de la livraison.
+          </div>
+        </Field>
+      )}
       <Field label="Transporteur">
         <input style={inputStyle} value={form.transporteur} onChange={set("transporteur")} placeholder="Ex: DHL, Transport Koné…" />
       </Field>
