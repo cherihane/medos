@@ -2252,3 +2252,35 @@ un client manuel. La logique de sauvegarde elle-même (décrément stock, email,
 inchangée — déjà testée en conditions réelles à la session 10 (points 4/5/8), non re-testée ici pour
 éviter une duplication de preuve déjà établie. Suite complète : `13 passed, 13 total`. `npm run build`
 sans erreur.
+
+## Point 3 — Diagnostic + fix : le mode "Client manuel" d'AjouterClientModal était invisible en pratique
+
+**Cause exacte trouvée** : pas un bug fonctionnel — `onClick={() => setMode(t.key)}` a toujours
+correctement basculé le mode (vérifié en testant contre le code d'avant ce correctif, voir plus bas).
+Le vrai problème est un **défaut de contraste visuel** dans
+[AjouterClientModal.jsx](src/components/AjouterClientModal.jsx) : l'onglet actif était stylé en blanc
+(`backgroundColor: "white"`) sur un fond `colors.borderLight`, qui vaut **`#F3F4F6` en mode clair**
+(vérifié dans [index.css](src/index.css)) — quasiment la même teinte que le blanc, la seule
+différence étant un `box-shadow` de 1px très discret (`0 1px 3px rgba(0,0,0,0.08)`). Résultat : le
+sélecteur "Client MedOS / Client manuel" se lisait comme un simple sous-titre décoratif plutôt qu'un
+vrai bouton à deux états cliquables — exactement le symptôme rapporté ("je ne vois que le mode
+MedOS").
+
+**Corrigé** : l'onglet actif a désormais un fond ambre (`#FFFBEB`) et une bordure `#F59E0B` (la
+couleur de marque déjà utilisée pour les actions principales de ce composant), l'onglet inactif reste
+neutre/transparent avec une bordure de conteneur visible (`1.5px solid var(--border)`) — contraste net
+dans les deux thèmes clair et sombre, plus une ligne d'aide contextuelle sous le sélecteur rappelant
+ce que fait le mode actif. Composant unique (voir point 1), donc le correctif s'applique
+automatiquement aux deux écrans qui l'utilisent, `Clients.jsx` et `ReseauClients.jsx` — vérifié qu'ils
+importent bien ce même composant sans variante ni override.
+
+**Testé** : nouveau
+[AjouterClientModal.test.js](src/components/AjouterClientModal.test.js) — confirme que (a) le
+basculement de mode a toujours été fonctionnel (le formulaire manuel apparaît bien au clic, avant et
+après le correctif) et (b) que le style actif est désormais nettement différent du style inactif
+(couleurs de fond distinctes, vérifiées par valeur RGB calculée). **Rejoué contre le code d'avant ce
+correctif** (`git stash` temporaire) : les assertions de contraste échouent bien (`"white"` au lieu de
+l'ambre attendu), confirmant que le style était bien le problème et que ce n'est pas un test vacant —
+la bascule fonctionnelle, elle, réussissait déjà avant, cohérent avec le diagnostic ("pas un bug de
+logique, un défaut d'affordance visuelle"). Suite complète : `16 passed, 16 total`. `npm run build`
+sans erreur.
