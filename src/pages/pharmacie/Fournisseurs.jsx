@@ -312,7 +312,12 @@ function FournisseurModal({ initial, onClose, onSaved }) {
   const { auth } = useAuth();
   const { data: distributeurs, loading: loadingDistrib } = useEtablissements("distributeur");
   const [mode, setMode] = useState("medos"); // "medos" | "externe" — non modifiable en édition
-  const [distributeurId, setDistributeurId] = useState("");
+  // En édition, un fournisseur créé "externe" (ou avant l'existence de ce lien)
+  // doit pouvoir être relié après coup à un vrai distributeur MedOS — sinon
+  // aucune commande passée dessus ne renseignera jamais distributeur_id, et le
+  // rattachement automatique du client (attacher_client_distributeur) ne se
+  // déclenchera jamais pour ce fournisseur.
+  const [distributeurId, setDistributeurId] = useState(initial?.distributeur_etablissement_id || "");
   const [form, setForm] = useState(initial
     ? {
         nom:                  initial.nom               || "",
@@ -345,7 +350,7 @@ function FournisseurModal({ initial, onClose, onSaved }) {
     setSaving(true);
     try {
       if (isEdit) {
-        await updateFournisseur(initial.id, form);
+        await updateFournisseur(initial.id, { ...form, distributeur_etablissement_id: distributeurId || null });
       } else {
         await insertFournisseur({
           ...form,
@@ -398,6 +403,22 @@ function FournisseurModal({ initial, onClose, onSaved }) {
       ) : (
         <Field label="Nom du fournisseur *">
           <input style={inputStyle} value={form.nom} onChange={set("nom")} placeholder="Ex: PharmaDistrib Congo" autoFocus disabled={isEdit ? false : mode === "medos"} />
+        </Field>
+      )}
+      {isEdit && (
+        <Field label="Distributeur MedOS lié (optionnel)">
+          {loadingDistrib ? (
+            <div style={{ fontSize: 12, color: colors.textMuted }}>Chargement…</div>
+          ) : (
+            <select style={inputStyle} value={distributeurId} onChange={(e) => setDistributeurId(e.target.value)}>
+              <option value="">— Aucun (fournisseur externe) —</option>
+              {distributeurs.map((d) => <option key={d.id} value={d.id}>{d.nom} ({d.ville})</option>)}
+            </select>
+          )}
+          <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 4 }}>
+            Reliez ce fournisseur à un distributeur MedOS pour que vos prochaines commandes lui
+            soient routées en temps réel — nécessaire pour apparaître dans son "Réseau clients".
+          </div>
         </Field>
       )}
       <Row>

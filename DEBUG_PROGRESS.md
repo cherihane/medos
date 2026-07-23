@@ -1821,3 +1821,63 @@ corrige devient impossible à créer pour de nouveaux comptes : il protège auss
 créés avant ce correctif (si un cas 1a existait déjà en base, ce qui n'est pas le cas actuellement —
 vérifié par requête directe, 0 doublon) et n'a aucun effet de bord sur le fonctionnement normal
 (scénario 1, testé et validé).
+
+---
+
+## Module DISTRIBUTEUR — Session 10 (2026-07-23) : compléter le module de bout en bout
+
+## Point 1 — Diagnostic : "une commande n'attache pas le client"
+
+**Hypothèse de départ (de la mission) infirmée par le test réel.** L'hypothèse à vérifier était que
+[Fournisseurs.jsx](src/pages/pharmacie/Fournisseurs.jsx) ne permettrait pas de choisir un vrai
+distributeur MedOS à la création d'un fournisseur. Relecture du code : ce n'est pas le cas — le mode
+"Distributeur MedOS" existe déjà depuis la session 8 (`FournisseurModal`, sélecteur medos/externe,
+`distributeur_etablissement_id` bien renseigné à l'insert, `CommandeModal` le reporte bien sur
+`commandes.distributeur_id`).
+
+**Test réel effectué pour trouver la vraie cause** (pas une supposition) : script authentifié en tant
+que Pharmacie Mimi (compte réel), reproduisant exactement le payload React — création d'un
+fournisseur "medos" pointant vers "Distributeur Test Kela" (0 client au départ, choisi pour un test
+propre) puis une commande dessus.
+- `commandes.distributeur_id` correctement renseigné : ✅.
+- Vérification en tant que Pharmacie Mimi que `distributeur_clients` contenait la relation : liste
+  vide — **alerte initiale, fausse piste.** Revérifié directement avec la clé `service_role`
+  (contourne RLS) : **la ligne existe bel et bien** dans `distributeur_clients`. Cause de la fausse
+  alerte : la policy RLS `dc_select` ne montre les lignes qu'au DISTRIBUTEUR (`distributeur_id = ANY
+  (mes_etablissements())`), jamais au client — comportement RLS correct et voulu, pas un bug.
+- Revérifié en tant que "Distributeur Test Kela" (requête exacte de `useDistributeurClients()`) :
+  **le nouveau client apparaît correctement**, avec toutes ses infos (nom, ville, email, dernière
+  connexion). **Le mécanisme attacher_client_distributeur() fonctionne donc parfaitement de bout en
+  bout** pour une commande créée avec un fournisseur "medos" fraîchement créé.
+
+**La vraie cause trouvée : aucun moyen de relier un fournisseur existant après coup.** En relisant
+`FournisseurModal`, le sélecteur medos/externe et le champ `distributeur_etablissement_id` ne sont
+affichés qu'à la CRÉATION (`{!isEdit && (...)}`) — une fois un fournisseur créé (en mode "externe",
+ou avant même l'existence de ce système au sprint 8), **il n'existe aucun moyen de le relier à un
+distributeur MedOS après coup.** Concrètement : toute pharmacie qui a créé son fournisseur
+"PharmaDistrib Congo"/"Poto-Poto"/etc. en mode texte libre — par habitude, avant que le mode MedOS
+n'existe, ou simplement parce que le fournisseur n'était pas encore inscrit sur MedOS au moment de
+la création — reste bloquée à vie : toutes ses commandes sur ce fournisseur auront
+`distributeur_id = NULL`, et `attacher_client_distributeur()` ne se déclenchera jamais, sans le
+moindre message d'erreur. C'est un vrai fournisseur existant en base
+(`c12eac5e-0569-454d-a825-6ee93957778f`, "PharmaDistrib Congo", `distributeur_etablissement_id:
+null`, appartenant à Pharmacie Mimi) qui aurait ce problème exact s'il correspondait à un vrai
+distributeur MedOS.
+
+**Corrigé** : [Fournisseurs.jsx](src/pages/pharmacie/Fournisseurs.jsx) — nouveau champ "Distributeur
+MedOS lié (optionnel)" affiché en mode édition (`isEdit`), pré-rempli avec
+`initial.distributeur_etablissement_id` s'il existe, permettant de lier ou changer le distributeur
+MedOS d'un fournisseur déjà créé — y compris un qui a été créé "externe". `handleSave` en édition
+inclut désormais `distributeur_etablissement_id: distributeurId || null` dans l'update.
+
+**Testé en conditions réelles** (script authentifié Pharmacie Mimi, sur le VRAI fournisseur
+préexistant "PharmaDistrib Congo") :
+- `update` du fournisseur (exactement le payload que produit le nouveau formulaire d'édition) →
+  `distributeur_etablissement_id` correctement mis à jour vers "Distributeur Test Kela".
+- Commande passée sur ce fournisseur relié après coup → `distributeur_id` correctement renseigné.
+- Revérifié côté "Distributeur Test Kela" (requête exacte du hook) : **Pharmacie Mimi apparaît bien
+  dans son "Réseau clients"**, preuve que la relation fonctionne aussi pour un fournisseur relinké
+  après coup, pas seulement à la création.
+- Données de test nettoyées après vérification (commande/lignes/relation supprimées,
+  `distributeur_etablissement_id` de "PharmaDistrib Congo" remis à `null` pour restaurer l'état
+  d'origine).
