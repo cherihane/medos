@@ -175,6 +175,41 @@ const STATUT_CMD_STYLE = {
 };
 
 // ─── Historique d'achat du client chez ce distributeur (toujours affiché) ─────
+// ─── Solde dû (point 7 — facturation) ────────────────────────────────────────
+// Somme des commandes reçues de CE client dont le paiement n'est pas encore
+// marqué "payé" (voir Facturation.jsx) — un client manuel n'a jamais de
+// commande (pas de compte MedOS pour en passer une), donc pas de solde.
+function SoldeDu({ client }) {
+  const { auth } = useAuth();
+  const [solde, setSolde] = useState(null);
+
+  useEffect(() => {
+    if (client.estManuel || !auth?.etablissement_id) { setSolde(0); return; }
+    let cancelled = false;
+    supabase
+      .from("commandes")
+      .select("montant_total")
+      .eq("distributeur_id", auth.etablissement_id)
+      .eq("etablissement_id", client.id)
+      .neq("statut_paiement", "paye")
+      .then(({ data }) => {
+        if (cancelled) return;
+        setSolde((data ?? []).reduce((s, c) => s + (c.montant_total ?? 0), 0));
+      });
+    return () => { cancelled = true; };
+  }, [client.id, client.estManuel, auth?.etablissement_id]);
+
+  if (client.estManuel) return null;
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid var(--border-light)" }}>
+      <span style={{ fontSize: 13, color: colors.textSecondary }}>Solde dû</span>
+      <span style={{ fontSize: 13, fontWeight: 700, color: solde > 0 ? "#DC2626" : "#16A34A" }}>
+        {solde === null ? "…" : `${solde.toLocaleString("fr-FR")} FCFA`}
+      </span>
+    </div>
+  );
+}
+
 function HistoriqueAchat({ client }) {
   const [commandes, setCommandes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -248,6 +283,7 @@ function FicheClient({ client, onCommande, onHistorique }) {
           <span style={{ fontSize: 13, fontWeight: 600, color: colors.navy }}>{f.value}</span>
         </div>
       ))}
+      <SoldeDu client={client} />
 
       {!usesMedOS && (
         <div style={{ marginTop: 14, padding: "10px 12px", backgroundColor: "#F3F4F6", borderRadius: 10, fontSize: 12, color: colors.textSecondary }}>
