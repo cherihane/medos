@@ -32,7 +32,8 @@ function CommandeClientModal({ client, onClose, onSaved }) {
     setSaving(true);
     try {
       await insertLivraison({
-        etablissement_id: client.id,
+        etablissement_id: client.estManuel ? null : client.id,
+        distributeur_clients_id: client.relationId,
         distributeur_id: auth?.etablissement_id,
         statut: "planifiee",
         transporteur: form.transporteur || null,
@@ -99,14 +100,17 @@ function HistoriqueClientModal({ client, onClose }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // distributeur_clients_id couvre aussi bien un client MedOS qu'un client
+    // manuel (etablissement_id seul ne matcherait jamais une livraison créée
+    // pour un client manuel, qui n'a pas de ligne etablissements).
     supabase
       .from("livraisons")
       .select("id, numero_suivi, statut, date_depart, date_arrivee_prevue, transporteur")
-      .eq("etablissement_id", client.id)
+      .or(`etablissement_id.eq.${client.id},distributeur_clients_id.eq.${client.relationId}`)
       .order("date_depart", { ascending: false })
       .limit(20)
       .then(({ data }) => { setLivraisons(data ?? []); setLoading(false); });
-  }, [client.id]);
+  }, [client.id, client.relationId]);
 
   return (
     <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
@@ -279,13 +283,7 @@ function FicheClient({ client, onCommande, onHistorique }) {
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 20 }}>
-        {client.estManuel ? (
-          <div style={{ padding: "9px 12px", backgroundColor: colors.bgSurface, borderRadius: 10, fontSize: 11, color: colors.textMuted, textAlign: "center" }}>
-            Création de livraison pour un client manuel — bientôt disponible.
-          </div>
-        ) : (
-          <button onClick={() => onCommande(client)} style={{ padding: "9px", backgroundColor: "#F59E0B", color: "white", border: "none", borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Créer livraison</button>
-        )}
+        <button onClick={() => onCommande(client)} style={{ padding: "9px", backgroundColor: "#F59E0B", color: "white", border: "none", borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Créer livraison</button>
         <button onClick={() => onHistorique(client)} style={{ padding: "9px", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)", borderRadius: 10, fontSize: 12, cursor: "pointer" }}>Historique des livraisons</button>
       </div>
     </>

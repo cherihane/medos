@@ -1938,3 +1938,74 @@ affiché à la place plutôt que de laisser un bouton qui échouerait silencieus
   vrai établissement), donc ces requêtes renvoient naturellement une liste vide, sans erreur ni
   fausse donnée — comportement demandé ("vide si aucune commande pour un client purement manuel, ce
   qui est normal").
+
+## Point 4 — Livraisons : cycle de vie complet
+
+Migrations :
+[20260723c_livraisons_cycle_de_vie.sql](supabase/migrations/20260723c_livraisons_cycle_de_vie.sql)
+et [20260723d_annuler_livraison_rpc.sql](supabase/migrations/20260723d_annuler_livraison_rpc.sql).
+
+**a) Modification tant que non "livree".** `livraisons.etablissement_id` était déjà nullable (bonne
+surprise), donc pas de changement de schéma nécessaire pour supporter un client manuel — juste
+`distributeur_clients_id` ajouté (référence directe vers la relation, MedOS ou manuelle). Nouvelles
+policies RLS `ll_update`/`ll_delete` sur `livraison_lignes` (elles n'existaient pas du tout — seuls
+select/insert étaient couverts), restreintes au distributeur propriétaire ET `statut != 'livree'` —
+le verrou est au niveau des LIGNES, pas de la livraison elle-même (transporteur/dates restent
+modifiables même en transit). Nouvelle RPC `ajuster_ligne_livraison()` (même construction que
+`expedier_ligne_livraison`) : réconcilie le stock entrepôt à chaque changement de quantité (incrémente
+si la quantité baisse ou qu'une ligne est retirée, décrémente avec le même verrou/vérification bloquante
+si elle augmente) — jamais un simple update qui désynchroniserait le stock réel. Nouveau `EditModal`
+dans [Livraisons.jsx](src/pages/distributeur/Livraisons.jsx).
+
+**b) Lien traçabilité lots.** `lots` était déjà un registre public par `medicament_id` (`lots_select`
+accessible à tout membre actif) — aucun changement de schéma. Nouveau `TracabiliteModal` : pour
+chaque ligne de la livraison, requête `lots` par `medicament_id` et affiche numéro de lot/fabricant/
+péremption.
+
+**c) Statut de disponibilité par ligne.** `livraison_lignes.disponible` (boolean, défaut `true`)
+ajouté. Éditable dans `EditModal` (bouton bascule "Disponible" / "En rupture, à reporter" par ligne,
+sans impact sur le stock — pure information). Visible dans `StatutModal` (badge "EN RUPTURE" à côté
+du nom au moment de confirmer "Livrée") et dans le tableau principal ("rupture signalée" sous le
+nombre de produits). Le "côté client" demandé par la mission n'a pas de page dédiée à ce jour (voir
+diagnostic Point 1 : aucune page pharmacie/hôpital n'affiche les livraisons entrantes) — l'information
+est déjà en base et prête à être exposée dès qu'un tel écran existera ; en attendant, elle est déjà
+visible via l'email de bon de livraison (Point 5).
+
+**d) Suppression uniquement si "planifiee".** Comme pour `cmd_delete` (commandes, session 9) : la
+policy `livr_delete` ne vérifiait que la propriété, pas le statut — n'importe quelle livraison pouvait
+être supprimée. Restreinte à `statut = 'planifiee'` (équivalent "brouillon"/jamais expédiée pour une
+livraison — la notion de "planifiee" est déjà l'état pré-expédition). Nouveau statut `'annulee'`
+ajouté à la contrainte `CHECK` ; nouvelle RPC `annuler_livraison()` : restitue le stock entrepôt pour
+chaque ligne (contrairement à `ajuster_ligne_livraison(0)`, ne supprime PAS les lignes — trace d'audit
+conservée, exactement la demande de la mission).
+
+**Support des clients manuels étendu aux livraisons** (différé du point 2/3, où "Créer livraison"
+avait été désactivé pour un client manuel faute de schéma adapté) : `NouvelleModal` choisit désormais
+le destinataire parmi TOUTES les relations (`useDistributeurClients()`, MedOS ou manuel),
+`distributeur_clients_id` toujours renseigné, `etablissement_id` seulement si le client est MedOS.
+`useDistributeurClients()` expose maintenant `client.relationId` (id de la relation, distinct de
+`client.id` pour un client MedOS) pour que `ReseauClients.jsx` (bouton "Créer livraison" réactivé,
+`HistoriqueClientModal` cherchant désormais par `etablissement_id` OU `distributeur_clients_id`) et
+`Livraisons.jsx` puissent tous les deux créer/retrouver une livraison quel que soit le type de client.
+
+**Testé en conditions réelles** (script authentifié "Poto-Poto", scénario complet de bout en bout,
+un client manuel créé pour l'occasion) :
+1. Création livraison Ceftriaxone × 40 → stock entrepôt 160 → 120 (exact).
+2. Édition : quantité baissée à 25 → stock restitué à 135 (+15 exact).
+3. Édition : ajout Paracetamol × 10 → stock 125 → 115 (exact).
+4. Disponibilité d'une ligne basculée à `false` → confirmé en relisant la ligne.
+5. Édition avec quantité irréaliste (999999) → bloquée (`stock_insuffisant`), stock inchangé
+   (vérifié explicitement — aucune mutation partielle).
+6. Requête exacte de `useLivraisonsPaginated()` relue → `etablissements: null` (client manuel),
+   `distributeur_clients_id` correct, `disponible` correct par ligne.
+7. Traçabilité : lot réel `MEDOS-2026-DIST-5JDUD` (Sanofi, créé lors d'un test de session précédente)
+   retrouvé pour Ceftriaxone.
+8. Suppression tentée sur une livraison `en_transit` → **bloquée par la RLS** (0 ligne supprimée,
+   livraison toujours présente) — pas seulement une restriction visuelle côté UI.
+9. Annulation → stock restitué exactement (135 → 160, +25), **les 2 lignes toujours présentes**
+   (trace d'audit confirmée), statut final `annulee`.
+10. Suppression testée séparément sur une livraison neuve `planifiee` → **autorisée**, 1 ligne
+    supprimée, confirmant que la restriction du point 8 est bien liée au statut et non un blocage
+    général.
+Toutes les données de test (relations manuelles, livraisons, lignes) supprimées après vérification ;
+stock entrepôt (Ceftriaxone 160, Paracetamol 125) confirmé revenu exactement à son état d'origine.

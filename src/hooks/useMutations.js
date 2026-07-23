@@ -163,10 +163,57 @@ export async function updateLivraison(id, fields) {
   return run(supabase.from("livraisons").update(fields).eq("id", id).select().single());
 }
 
+// Suppression réelle réservée aux livraisons "planifiee" (jamais expédiée) —
+// appliqué aussi au niveau RLS (livr_delete), donc la restriction tient même
+// via un appel direct à l'API, pas seulement dans l'UI.
+export async function deleteLivraison(id) {
+  const { error } = await supabase.from("livraisons").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
 // Lignes d'une livraison multi-produits (voir livraison_lignes).
 export async function insertLivraisonLignes(lignes) {
   if (!lignes || lignes.length === 0) return [];
   return run(supabase.from("livraison_lignes").insert(lignes).select());
+}
+
+// Ajuste la quantité d'une ligne (tant que la livraison n'est pas "livree") —
+// réconcilie le stock entrepôt du distributeur avec la nouvelle quantité,
+// atomique et bloquant côté serveur (voir ajuster_ligne_livraison).
+// nouvelle_quantite = 0 supprime la ligne.
+export async function ajusterLigneLivraison(livraisonId, medicamentId, medicamentNom, nouvelleQuantite, distributeurId) {
+  const { data, error } = await supabase.rpc("ajuster_ligne_livraison", {
+    p_livraison_id:       livraisonId,
+    p_medicament_id:      medicamentId,
+    p_medicament_nom:     medicamentNom,
+    p_nouvelle_quantite:  nouvelleQuantite,
+    p_distributeur_id:    distributeurId,
+  });
+  if (error) throw new Error(`ajuster_ligne_livraison: ${error.message}`);
+  return data; // "ok" | "stock_insuffisant" | "medicament_introuvable" | "livraison_introuvable" | "livraison_deja_livree"
+}
+
+// Annule une livraison non encore livrée — restitue le stock entrepôt sans
+// supprimer les lignes (trace d'audit conservée), voir annuler_livraison.
+export async function annulerLivraison(livraisonId, distributeurId) {
+  const { data, error } = await supabase.rpc("annuler_livraison", {
+    p_livraison_id:    livraisonId,
+    p_distributeur_id: distributeurId,
+  });
+  if (error) throw new Error(`annuler_livraison: ${error.message}`);
+  return data; // "ok" | "livraison_introuvable" | "livraison_deja_livree"
+}
+
+// Disponibilité d'une ligne ("disponible" / "en rupture, à reporter") —
+// visible du côté client, aucun impact sur le stock (contrairement à la
+// quantité, gérée par ajuster_ligne_livraison).
+export async function updateLivraisonLigneDisponibilite(livraisonId, medicamentId, disponible) {
+  const { error } = await supabase
+    .from("livraison_lignes")
+    .update({ disponible })
+    .eq("livraison_id", livraisonId)
+    .eq("medicament_id", medicamentId);
+  if (error) throw new Error(error.message);
 }
 
 // ─── Distributeur : "Mes Clients" (relation réelle) ────────────────────────────
