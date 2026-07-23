@@ -1881,3 +1881,60 @@ préexistant "PharmaDistrib Congo") :
 - Données de test nettoyées après vérification (commande/lignes/relation supprimées,
   `distributeur_etablissement_id` de "PharmaDistrib Congo" remis à `null` pour restaurer l'état
   d'origine).
+
+## Points 2 et 3 — Ajout manuel de clients + recherche par email (traités ensemble)
+
+Commités ensemble : les deux points touchent exactement le même écran d'ajout de client, qui
+n'existait qu'à moitié (recherche email seule, uniquement dans `ReseauClients.jsx`) — les séparer
+aurait juste dupliqué la même modale deux fois pour la re-fusionner ensuite.
+
+**Point 3 — diagnostic de la recherche par email.** Testé en conditions réelles (script authentifié
+en tant que "Poto-Poto", requête `rechercher_client_par_email` exactement comme l'appelle
+`rechercherClientParEmail()`) : email existant → trouvé, avec casse/espaces différents → trouvé
+(normalisation OK), email inconnu → `null` proprement. **La RPC et le wrapper front fonctionnaient
+déjà correctement dans `ReseauClients.jsx`** — pas un bug reproductible à cet endroit. La vraie
+lacune : [Clients.jsx](src/pages/distributeur/Clients.jsx) n'avait **aucune fonctionnalité de
+recherche/ajout du tout** (juste un tableau en lecture seule) — de ce point de vue, "cassée" pour cet
+écran signifiait "absente".
+
+**Point 2 — ajout manuel de clients hors MedOS.** `distributeur_clients.client_etablissement_id`
+était `NOT NULL` avec une FK vers `etablissements` — impossible d'enregistrer un client réel qui n'a
+pas de compte MedOS (le cas le plus courant en pratique, beaucoup de clients n'ont pas d'outils
+informatiques). Migration
+[20260723b_distributeur_clients_manuels.sql](supabase/migrations/20260723b_distributeur_clients_manuels.sql) :
+`client_etablissement_id` devient nullable, colonnes `nom_manuel/adresse_manuel/ville_manuel/
+contact_manuel/telephone_manuel/email_manuel` ajoutées, contrainte `CHECK` garantissant qu'une
+relation a toujours une identité (établissement réel OU nom manuel). Aucune policy RLS à changer :
+`dc_insert` exige déjà `source = 'manuel'`, ce qui couvre nativement ce cas.
+
+**Corrigé** : nouveau composant partagé
+[AjouterClientModal.jsx](src/components/AjouterClientModal.jsx) — deux onglets "Client MedOS"
+(recherche email, logique reprise telle quelle de l'ancienne `NouveauClientModal`) et "Client manuel"
+(nom obligatoire, adresse/ville/contact/téléphone/email optionnels). Remplace l'ancienne
+`NouveauClientModal` dans `ReseauClients.jsx`, et **ajoute pour la première fois cette
+fonctionnalité dans `Clients.jsx`** (bouton "+ Ajouter un client", absent jusqu'ici).
+[`useDistributeurClients()`](src/hooks/useSupabaseData.js) normalise chaque relation en un objet
+`client` de forme identique que ce soit un vrai établissement ou un client manuel (`estManuel: true`,
+`derniere_connexion: null`) — le reste de l'app (tableau, fiche, KPI "Utilise MedOS") n'a rien à
+distinguer.
+
+**"Créer livraison" désactivé pour un client manuel dans `ReseauClients.jsx`**, volontairement, pour
+l'instant : `insertLivraison` référence `etablissement_id` (FK vers un vrai établissement), qui
+n'existe pas pour un client manuel — le brancher correctement fait partie du point 4 (cycle de vie
+des livraisons), qui va de toute façon retravailler `livraisons` en profondeur. Message temporaire
+affiché à la place plutôt que de laisser un bouton qui échouerait silencieusement.
+
+**Testé en conditions réelles** :
+- Recherche email (script authentifié "Poto-Poto") : `cherihaneadam123@gmail.com` → trouvé,
+  variante casse/espaces → trouvé, email inconnu → `null`.
+- Client manuel : insert exact du payload de `handleAddManuel()` ("Pharmacie du Marché (test)",
+  Pointe-Noire, sans email) → ligne créée avec `client_etablissement_id = null` → relue avec la
+  requête exacte de `useDistributeurClients()` → toutes les colonnes manuelles correctement
+  renvoyées (`client: null` côté jointure, normalisé côté hook). Donnée de test supprimée après
+  vérification.
+- Historique d'achat / stock bas pour un client manuel : vérifié par lecture de code que
+  `HistoriqueAchat`/`useClientStockBas` interrogent `commandes`/`medicaments` par `etablissement_id
+  = client.id` — pour un client manuel, `client.id` est l'id de la relation elle-même (jamais un
+  vrai établissement), donc ces requêtes renvoient naturellement une liste vide, sans erreur ni
+  fausse donnée — comportement demandé ("vide si aucune commande pour un client purement manuel, ce
+  qui est normal").

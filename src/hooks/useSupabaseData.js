@@ -327,16 +327,41 @@ export function useFournisseurs() {
 
 // ─── distributeur : "Mes Clients" (relation réelle, pas la liste brute des
 // établissements MedOS) — RLS scope automatiquement à distributeur_id = soi-même.
+// Un client "manuel" (hors MedOS, pas de client_etablissement_id) est
+// normalisé en un objet `client` de même forme que pour un vrai établissement
+// — le reste de l'app (fiche, tableau, historique) n'a pas à distinguer les
+// deux cas. `estManuel` reste disponible pour les endroits qui doivent le
+// savoir (ex : création de livraison, tant que non couverte pour ce cas).
 export function useDistributeurClients() {
-  return useQuery(() =>
+  const result = useQuery(() =>
     supabase
       .from("distributeur_clients")
       .select(`
         id, source, created_at,
+        nom_manuel, adresse_manuel, ville_manuel, contact_manuel, telephone_manuel, email_manuel,
         client:client_etablissement_id ( id, nom, ville, type, email, telephone, actif, derniere_connexion )
       `)
       .order("created_at", { ascending: false })
   );
+  return {
+    ...result,
+    data: result.data.map((r) => ({
+      ...r,
+      client: r.client ?? {
+        id: r.id,
+        nom: r.nom_manuel,
+        ville: r.ville_manuel,
+        adresse: r.adresse_manuel,
+        type: "manuel",
+        email: r.email_manuel,
+        telephone: r.telephone_manuel,
+        contact_nom: r.contact_manuel,
+        actif: true,
+        derniere_connexion: null,
+        estManuel: true,
+      },
+    })),
+  };
 }
 
 // Un client est considéré "actif" (connecté récemment) s'il a émis un
