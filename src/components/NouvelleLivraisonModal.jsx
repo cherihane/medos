@@ -244,6 +244,21 @@ export default function NouvelleLivraisonModal({ relations, medicaments, distrib
         return;
       }
 
+      // Notification dans l'espace MedOS du client (en plus de l'email) — un
+      // client manuel n'a pas de compte MedOS à notifier, seul l'email compte
+      // pour lui. Best-effort : n'empêche jamais la livraison si ça échoue.
+      if (!relation.client.estManuel) {
+        try {
+          await supabase.rpc("notifier_client_distributeur", {
+            p_etablissement_id: relation.client.id,
+            p_type: "livraison",
+            p_titre: `Nouvelle livraison — ${distributeurNom}`,
+            p_message: `${cart.length} médicament${cart.length > 1 ? "s" : ""}${form.date_arrivee_prevue ? `, arrivée prévue le ${fmtDate(form.date_arrivee_prevue)}` : ""}`,
+            p_severite: "info",
+          });
+        } catch (_) {}
+      }
+
       // Bon de livraison envoyé au moment de l'expédition (= création, voir
       // commentaire plus haut sur le décrément entrepôt). Un client manuel
       // sans email n'en reçoit simplement pas — ce n'est jamais une erreur

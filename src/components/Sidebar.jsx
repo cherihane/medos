@@ -15,10 +15,12 @@ const roleColors = {
   autorite:     colors.autorite,
 };
 
+// "fournisseurs" combine commande + livraison : les deux types de
+// notification s'affichent sur cette même page côté pharmacie/hôpital.
 const BADGE_MAP = {
-  fournisseurs: "commande",
-  dashboard:    "commande",
-  alertes:      "alerte",
+  fournisseurs: ["commande", "livraison"],
+  dashboard:    ["commande"],
+  alertes:      ["alerte"],
 };
 
 function NotifToast({ notif, onDismiss, accentColor }) {
@@ -245,8 +247,8 @@ export default function Sidebar({ mobileOpen, onMobileClose }) {
               );
             }
 
-            const badgeType = BADGE_MAP[item.icon];
-            const badgeCount = badgeType ? unreadByType[badgeType] : 0;
+            const badgeTypes = BADGE_MAP[item.icon];
+            const badgeCount = badgeTypes ? badgeTypes.reduce((sum, t) => sum + (unreadByType[t] || 0), 0) : 0;
 
             return (
               <NavLink

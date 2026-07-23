@@ -8,6 +8,7 @@ import { useToast } from "../../hooks/useToast";
 import {
   useFournisseursPaginated, useCommandesRealtime, useCommandesPaginated,
   useCommandeHistorique, useMedicaments, useFournisseurs, useEtablissements,
+  useLivraisonsEntrantesRealtime,
 } from "../../hooks/useSupabaseData";
 import { insertCommande, updateCommande, deleteCommande, insertCommandeLignes, insertFournisseur, updateFournisseur } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
@@ -275,6 +276,53 @@ function MesCommandesPanel({ etablissement_id }) {
                 <span style={{ fontSize: 13, fontWeight: 800, color: colors.text }}>{(c.montant_total ?? 0).toLocaleString()} FCFA</span>
                 <span style={{ fontSize: 10, fontWeight: 700, color: s.color, padding: "2px 8px", backgroundColor: colors.bgCard, borderRadius: 8, whiteSpace: "nowrap" }}>{s.label}</span>
               </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Statuts livraisons ────────────────────────────────────────────────────────
+const LIVRAISON_STATUT_STYLE = {
+  planifiee:  { bg: "#F3F4F6", color: colors.textSecondary, label: "Planifiée" },
+  en_transit: { bg: "#E0E7FF", color: "#4F46E5", label: "En transit" },
+  livree:     { bg: "#DCFCE7", color: "#16A34A", label: "Livrée" },
+  incident:   { bg: "#FEF2F2", color: "#DC2626", label: "Incident" },
+  annulee:    { bg: "#FEF2F2", color: "#DC2626", label: "Annulée" },
+};
+
+// ── Panneau livraisons entrantes temps réel ───────────────────────────────────
+// Livraisons dont CET établissement est le destinataire, envoyées par ses
+// distributeurs — même logique de panneau temps réel que "Mes commandes en
+// cours" ci-dessus, mais côté livraison plutôt que côté commande.
+function MesLivraisonsEntrantesPanel({ etablissement_id }) {
+  const { data: livraisons, loading } = useLivraisonsEntrantesRealtime(etablissement_id);
+  if (loading || livraisons.length === 0) return null;
+  return (
+    <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: colors.navy }}>Livraisons entrantes</h3>
+        <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10, fontWeight: 700, backgroundColor: "#DCFCE7", color: "#16A34A", padding: "3px 8px", borderRadius: 10 }}>
+          <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "#16A34A", display: "inline-block", animation: "livePulse 1.5s ease-in-out infinite" }} />
+          TEMPS RÉEL
+        </span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {livraisons.slice(0, 8).map((l) => {
+          const s = LIVRAISON_STATUT_STYLE[l.statut] || { bg: "#F3F4F6", color: colors.textSecondary, label: l.statut };
+          const nbMeds = l.livraison_lignes?.length ?? 0;
+          return (
+            <div key={l.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", backgroundColor: s.bg, borderRadius: 10, borderLeft: `3px solid ${s.color}`, animation: "fadeIn 0.3s ease" }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: colors.navy }}>{l.etablissements?.nom ?? "—"}</div>
+                <div style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
+                  {l.numero_suivi ?? "—"} · {nbMeds} médicament{nbMeds > 1 ? "s" : ""}
+                  {l.date_arrivee_prevue && ` · arrivée prévue le ${new Date(l.date_arrivee_prevue).toLocaleDateString("fr-FR")}`}
+                </div>
+              </div>
+              <span style={{ fontSize: 10, fontWeight: 700, color: s.color, padding: "2px 8px", backgroundColor: colors.bgCard, borderRadius: 8, whiteSpace: "nowrap", flexShrink: 0, marginLeft: 12 }}>{s.label}</span>
             </div>
           );
         })}
@@ -1070,8 +1118,9 @@ export default function Fournisseurs() {
 
       {tab === "fournisseurs" && (
       <>
-      {/* Commandes temps réel */}
+      {/* Commandes et livraisons temps réel */}
       <MesCommandesPanel etablissement_id={etablissement_id} />
+      <MesLivraisonsEntrantesPanel etablissement_id={etablissement_id} />
 
       {/* Barre d'actions */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>

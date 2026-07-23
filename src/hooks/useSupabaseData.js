@@ -706,6 +706,76 @@ export function useCommandesRealtime(etablissement_id = null) {
   return state;
 }
 
+// ─── livraisons entrantes en temps réel (INSERT + UPDATE), côté client ───────
+// Pharmacie/hôpital : livraisons dont ILS sont le destinataire (etablissement_id),
+// avec le NOM DU DISTRIBUTEUR (pas le leur) — jointure inverse de celle utilisée
+// côté distributeur (useLivraisonsPaginated), d'où la FK distincte.
+const LIVRAISONS_ENTRANTES_SELECT = `
+  id, statut, date_depart, date_arrivee_prevue, date_arrivee_reelle,
+  transporteur, numero_suivi, commande_id, created_at,
+  etablissements!livraisons_distributeur_id_fkey ( nom, ville ),
+  livraison_lignes ( id, medicament_nom, quantite )
+`.trim();
+
+export function useLivraisonsEntrantesRealtime(etablissement_id = null) {
+  const [state, setState] = useState({ data: [], loading: true, error: null });
+  const channelRef = useRef(null);
+  const etabRef = useRef(etablissement_id);
+  useEffect(() => { etabRef.current = etablissement_id; }, [etablissement_id]);
+
+  useEffect(() => {
+    if (!etablissement_id) { setState({ data: [], loading: false, error: null }); return; }
+
+    supabase
+      .from("livraisons")
+      .select(LIVRAISONS_ENTRANTES_SELECT)
+      .eq("etablissement_id", etablissement_id)
+      .order("created_at", { ascending: false })
+      .limit(20)
+      .then(({ data, error }) =>
+        setState({ data: data ?? [], loading: false, error: error ?? null })
+      );
+
+    async function fetchOne(id) {
+      const { data } = await supabase
+        .from("livraisons")
+        .select(LIVRAISONS_ENTRANTES_SELECT)
+        .eq("id", id)
+        .single();
+      return data;
+    }
+
+    const ch = supabase
+      .channel(`livraisons:entrantes:${etablissement_id}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "livraisons" },
+        async (p) => {
+          if (p.new.etablissement_id !== etabRef.current) return;
+          const row = await fetchOne(p.new.id);
+          if (row) setState((prev) => ({ ...prev, data: [row, ...prev.data] }));
+        }
+      )
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "livraisons" },
+        async (p) => {
+          if (p.new.etablissement_id !== etabRef.current) return;
+          const row = await fetchOne(p.new.id);
+          if (row)
+            setState((prev) => ({
+              ...prev,
+              data: prev.data.map((l) => (l.id === row.id ? row : l)),
+            }));
+        }
+      )
+      .subscribe();
+
+    channelRef.current = ch;
+    return () => {
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
+    };
+  }, [etablissement_id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return state;
+}
+
 // ─── alertes en temps réel (INSERT) ──────────────────────────────────────────
 export function useAlertesRealtime(limit = 20) {
   const [state, setState] = useState({ data: [], loading: true, error: null });
