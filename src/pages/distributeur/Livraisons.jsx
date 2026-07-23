@@ -278,12 +278,36 @@ function TracabiliteModal({ livraison, onClose }) {
 }
 
 // ── Modal Update statut ───────────────────────────────────────────────────────
+const STATUT_NOTIF_TITRES = {
+  en_transit: "Livraison en transit",
+  livree:     "Livraison reçue",
+  incident:   "Incident sur une livraison",
+};
+
 function StatutModal({ livraison, auth, onClose, onSaved }) {
   const { data: lignes } = useLivraisonLignes(livraison.id);
   const [statut, setStatut] = useState(livraison.statut);
   const [saving, setSaving] = useState(false);
   const [stockWarn, setStockWarn] = useState(null);
   const [results, setResults] = useState(null);
+
+  // Notification dans l'espace MedOS du client — uniquement les vrais clients
+  // MedOS (etablissement_id renseigné, jamais le cas pour un client manuel).
+  // Best-effort : ne bloque jamais la mise à jour du statut si ça échoue.
+  const notifierClient = async (nouveauStatut) => {
+    if (!livraison.etablissement_id) return;
+    const titre = STATUT_NOTIF_TITRES[nouveauStatut];
+    if (!titre) return;
+    try {
+      await supabase.rpc("notifier_client_distributeur", {
+        p_etablissement_id: livraison.etablissement_id,
+        p_type: "livraison",
+        p_titre: titre,
+        p_message: `Suivi ${livraison.numero_suivi ?? "—"}`,
+        p_severite: nouveauStatut === "incident" ? "critique" : "info",
+      });
+    } catch (_) {}
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -306,6 +330,7 @@ function StatutModal({ livraison, auth, onClose, onSaved }) {
         // aucun mouvement de stock n'a été appliqué et un nouvel essai
         // reste sûr — jamais rejoué après un succès partiel.
         await updateLivraison(livraison.id, update);
+        await notifierClient(statut);
 
         const lignesResults = [];
         for (const ligne of lignes) {
@@ -317,6 +342,7 @@ function StatutModal({ livraison, auth, onClose, onSaved }) {
         setResults(lignesResults);
       } else {
         await updateLivraison(livraison.id, update);
+        await notifierClient(statut);
         onSaved(statut);
         onClose();
       }
@@ -530,6 +556,17 @@ export default function Livraisons() {
     try {
       const res = await annulerLivraison(l.id, auth?.etablissement_id);
       if (res !== "ok") { toastError("Impossible d'annuler : " + res); return; }
+      if (l.etablissement_id) {
+        try {
+          await supabase.rpc("notifier_client_distributeur", {
+            p_etablissement_id: l.etablissement_id,
+            p_type: "livraison",
+            p_titre: "Livraison annulée",
+            p_message: `Suivi ${l.numero_suivi ?? "—"}`,
+            p_severite: "critique",
+          });
+        } catch (_) {}
+      }
       refetch();
       success("Livraison annulée, stock entrepôt restitué.");
     } catch (e) {

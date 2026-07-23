@@ -2356,3 +2356,73 @@ restants dans le build sont tous préexistants, sans rapport avec ce point — v
 fichier). Suite Jest complète revalidée : `16 passed, 16 total` (aucune régression sur
 `NouvelleLivraisonModal.test.js`, `AjouterClientModal.test.js`, `AuthContext.test.js`,
 `Inscription.test.js`, `App.test.js`).
+
+## Point 2 — Notification côté client dans son propre espace MedOS
+
+**Diagnostic** : une livraison envoyait bien un email au client (déjà prouvé en Vague 4, non
+retesté ici), mais rien n'apparaissait dans son interface MedOS. Recherche du pattern déjà utilisé
+pour les alertes de stock déjà visibles côté client (demande explicite : "même logique") : la table
+`alertes` existe déjà avec un type `'livraison'` valide dans sa contrainte CHECK (jamais utilisé),
+et la fonction `SECURITY DEFINER` **`notifier_client_distributeur`** (créée session précédente, déjà
+utilisée par `distributeur/Dashboard.jsx` pour les commandes) est le mécanisme robuste déjà en place
+pour écrire une notification dans l'espace d'un client depuis le compte du distributeur (contourne
+un problème RLS documenté sur l'INSERT direct, voir migrations `20260721e/f/g`). Aucun canal
+temps réel n'écoutait la table `livraisons` côté client (`NotificationsContext.jsx` n'avait que
+`commandes`/`alertes`), et aucun écran ne listait les livraisons entrantes — `pharmacie/Alertes.jsx`
+s'est avéré être un écran de stock bas pur (calcul client, pas de lecture de la table `alertes`),
+donc pas le bon endroit pour ça (voir point 9 pour le diagnostic complet de cette page).
+**Contrainte respectée** : aucune entrée de nav n'a été ajoutée dans `AuthContext.jsx` (interdit) —
+l'écran a été intégré à la page "Fournisseurs" déjà présente dans la nav pharmacie/hôpital, à côté
+du panneau "Mes commandes en cours" déjà existant.
+
+**Corrigé** :
+1. Nouveau hook `useLivraisonsEntrantesRealtime(etablissement_id)` dans
+   [useSupabaseData.js](src/hooks/useSupabaseData.js) — livraisons dont CET établissement est le
+   destinataire, jointure sur `etablissements!livraisons_distributeur_id_fkey` pour afficher le
+   **nom du distributeur** (jointure inverse de celle utilisée côté distributeur, FK distincte
+   vérifiée directement en base : `livraisons_distributeur_id_fkey`).
+2. Nouveau panneau `MesLivraisonsEntrantesPanel` (même style temps réel que "Mes commandes en
+   cours") ajouté dans [pharmacie/Fournisseurs.jsx](src/pages/pharmacie/Fournisseurs.jsx) et
+   [hopital/Fournisseurs.jsx](src/pages/hopital/Fournisseurs.jsx) : statut, distributeur, contenu
+   (nombre de médicaments), date d'arrivée prévue, numéro de suivi.
+3. [NouvelleLivraisonModal.jsx](src/components/NouvelleLivraisonModal.jsx) : appel à
+   `notifier_client_distributeur` (type `"livraison"`) juste après la création réussie, uniquement
+   pour les vrais clients MedOS (un client manuel n'a pas de compte à notifier — seul l'email
+   compte pour lui, déjà géré).
+4. [Livraisons.jsx](src/pages/distributeur/Livraisons.jsx) : même notification lors d'un changement
+   de statut (`StatutModal`, sévérité "critique" pour "incident") et lors d'une annulation
+   (`handleAnnuler`, sévérité "critique"). Best-effort dans les deux cas : n'empêche jamais l'action
+   principale si la notification échoue.
+5. [NotificationsContext.jsx](src/context/NotificationsContext.jsx) : nouveau canal Realtime
+   `livraisons` (INSERT + UPDATE) poussant un toast côté pharmacie/hôpital, avec un piège évité —
+   l'écriture `UPDATE` annexe faite juste après la création (statut `email_statut`, même livraison,
+   statut toujours `"planifiee"`) aurait redéclenché à tort le toast de création si `"planifiee"`
+   avait un libellé dans la table utilisée par le canal `UPDATE` ; corrigé en séparant le titre de
+   création (canal `INSERT` uniquement) de la table de libellés `UPDATE` qui omet volontairement
+   `"planifiee"` — même logique que celle déjà appliquée aux commandes (`STATUT_LABELS` omet aussi
+   les statuts de création `brouillon`/`envoyee`).
+6. [Sidebar.jsx](src/components/Sidebar.jsx) : le badge de la page "Fournisseurs" additionne
+   désormais les notifications `commande` ET `livraison` (les deux types s'affichent sur cette même
+   page côté client) — `BADGE_MAP` passé de valeurs simples à des tableaux, somme calculée au lieu
+   d'une seule clé.
+
+**Preuve concrète (script authentifié, base de production, nettoyé après coup)** : connecté en tant
+que Poto-Poto (mot de passe réinitialisé via l'API Admin). Livraison de test créée pour Pharmacie
+Mimi avec une ligne médicament. Rejoué exactement les appels que fait le code réel :
+- `notifier_client_distributeur` appelé à la création → ligne `alertes` trouvée en base pour
+  Pharmacie Mimi, titre `"Nouvelle livraison — Poto-Poto"`, message correct (nombre de médicaments +
+  date d'arrivée prévue).
+- Changement de statut vers `en_transit` + `notifier_client_distributeur` → deuxième ligne `alertes`
+  trouvée, titre `"Livraison en transit"`.
+- Le `select(...)` exact de `useLivraisonsEntrantesRealtime` (panneau client), filtré sur
+  `etablissement_id` de Pharmacie Mimi, renvoie bien **"Poto-Poto"** comme nom joint (pas le nom du
+  client — confirme que la jointure inverse `livraisons_distributeur_id_fkey` est correcte) et le
+  contenu correct (1 ligne, "Test Point2 Médicament" × 12).
+Nettoyage : alertes et livraison de test supprimées après vérification.
+
+**Non re-testé séparément** : l'envoi d'email de livraison (déjà confirmé Vague 4, demande
+explicite de ne pas retester si déjà prouvé).
+
+`CI=true npx eslint` propre sur les 7 fichiers modifiés. `npm run build` sans erreur. Suite Jest
+complète revalidée après le correctif du piège de double-toast : `16 passed, 16 total` (aucune
+régression).

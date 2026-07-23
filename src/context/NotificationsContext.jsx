@@ -2,9 +2,10 @@
  * NotificationsContext — Supabase Realtime pour MedOS
  *
  * Souscrit à :
- *  • commandes INSERT  → notifie le distributeur
- *  • commandes UPDATE  → notifie pharmacie / hôpital (changement de statut)
- *  • alertes   INSERT  → notifie tous les rôles
+ *  • commandes  INSERT  → notifie le distributeur
+ *  • commandes  UPDATE  → notifie pharmacie / hôpital (changement de statut)
+ *  • alertes    INSERT  → notifie tous les rôles
+ *  • livraisons INSERT/UPDATE → notifie pharmacie / hôpital destinataire
  *
  * Expose :
  *  { unreadCount, unreadByType, notifications, lastNotif, markAllRead, dismissLast }
@@ -15,7 +16,7 @@ import { useAuth } from "./AuthContext";
 
 const NotificationsContext = createContext({
   unreadCount: 0,
-  unreadByType: { commande: 0, alerte: 0 },
+  unreadByType: { commande: 0, alerte: 0, livraison: 0 },
   notifications: [],
   lastNotif: null,
   markAllRead: () => {},
@@ -29,6 +30,22 @@ const STATUT_LABELS = {
   en_transit: "Commande en cours de livraison",
   livree:     "Commande livrée",
   annulee:    "Commande annulée / refusée",
+};
+
+// Titre affiché sur la création (INSERT), toujours "planifiee" à ce stade.
+const LIVRAISON_TITRE_CREATION = "Nouvelle livraison planifiée";
+
+// Valeurs exactes du check constraint SQL sur livraisons.statut, pour les
+// UPDATE seulement — "planifiee" en est volontairement absent : une livraison
+// créée reçoit ensuite une écriture UPDATE annexe (email_statut) sans que le
+// statut ne change, ce qui redéclencherait à tort le toast de création si
+// "planifiee" avait un libellé ici (même logique que STATUT_LABELS ci-dessus,
+// qui omet aussi les statuts de création "brouillon"/"envoyee" des commandes).
+const LIVRAISON_STATUT_LABELS = {
+  en_transit: "Livraison en cours de transit",
+  livree:     "Livraison reçue",
+  incident:   "Incident sur une livraison",
+  annulee:    "Livraison annulée",
 };
 
 export function NotificationsProvider({ children }) {
@@ -112,7 +129,44 @@ export function NotificationsProvider({ children }) {
       )
       .subscribe();
 
-    channelsRef.current = [cmdCh, altCh];
+    // ── Canal livraisons entrantes (côté pharmacie/hôpital uniquement) ────────
+    const livCh = supabase
+      .channel(`medos:livraisons:${auth.role}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "livraisons" },
+        (p) => {
+          if (auth.role !== "pharmacie" && auth.role !== "hopital") return;
+          if (p.new.etablissement_id !== auth.etablissement_id) return;
+          push({
+            type: "livraison",
+            title: LIVRAISON_TITRE_CREATION,
+            message: `Suivi ${p.new.numero_suivi || "—"}`,
+            navPath: `/${auth.role}/fournisseurs`,
+            severite: "info",
+          });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "livraisons" },
+        (p) => {
+          if (auth.role !== "pharmacie" && auth.role !== "hopital") return;
+          if (p.new.etablissement_id !== auth.etablissement_id) return;
+          const title = LIVRAISON_STATUT_LABELS[p.new.statut];
+          if (!title) return;
+          push({
+            type: "livraison",
+            title,
+            message: `Suivi ${p.new.numero_suivi || "—"}`,
+            navPath: `/${auth.role}/fournisseurs`,
+            severite: p.new.statut === "annulee" || p.new.statut === "incident" ? "critique" : "info",
+          });
+        }
+      )
+      .subscribe();
+
+    channelsRef.current = [cmdCh, altCh, livCh];
 
     return () => {
       channelsRef.current.forEach((ch) => supabase.removeChannel(ch));
@@ -131,8 +185,9 @@ export function NotificationsProvider({ children }) {
 
   const unreadCount = notifications.filter((n) => !n.read).length;
   const unreadByType = {
-    commande: notifications.filter((n) => !n.read && n.type === "commande").length,
-    alerte:   notifications.filter((n) => !n.read && n.type === "alerte").length,
+    commande:  notifications.filter((n) => !n.read && n.type === "commande").length,
+    alerte:    notifications.filter((n) => !n.read && n.type === "alerte").length,
+    livraison: notifications.filter((n) => !n.read && n.type === "livraison").length,
   };
 
   return (
