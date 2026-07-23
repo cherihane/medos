@@ -199,6 +199,7 @@ export function useLivraisonsPaginated(statut = "", pageSize = 20) {
     let q = supabase.from("livraisons").select(`
       id, statut, date_depart, date_arrivee_prevue, date_arrivee_reelle,
       transporteur, numero_suivi, etablissement_id, distributeur_clients_id, created_at,
+      email_statut, email_erreur,
       etablissements!livraisons_etablissement_id_fkey ( nom, ville ),
       livraison_lignes ( id, medicament_id, medicament_nom, quantite, disponible )
     `, { count: "exact" }).order("created_at", { ascending: false });
