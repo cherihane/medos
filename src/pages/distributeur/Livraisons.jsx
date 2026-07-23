@@ -662,7 +662,7 @@ export default function Livraisons() {
                         </button>
                       )}
                       {l.statut === "planifiee" && (
-                        <button onClick={() => handleSupprimer(l)} disabled={busyId === l.id} style={{ padding: "4px 10px", backgroundColor: "transparent", color: "#9CA3AF", border: "1px solid var(--border)", borderRadius: 6, fontSize: 11, cursor: busyId === l.id ? "wait" : "pointer", fontWeight: 600 }}>
+                        <button onClick={() => handleSupprimer(l)} disabled={busyId === l.id} style={{ padding: "4px 10px", backgroundColor: "#DC2626", color: "white", border: "none", borderRadius: 6, fontSize: 11, cursor: busyId === l.id ? "wait" : "pointer", fontWeight: 700 }}>
                           Supprimer
                         </button>
                       )}
@@ -674,6 +674,11 @@ export default function Livraisons() {
           </tbody>
         </table></div>
         <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
+      </div>
+
+      <div style={{ marginTop: 12, fontSize: 11, color: colors.textMuted }}>
+        La suppression définitive n'est proposée que pour une livraison encore "Planifiée" (jamais
+        expédiée) — pour toute autre livraison, utilisez "Annuler" pour garder une trace d'audit.
       </div>
     </Layout>
   );
