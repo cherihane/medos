@@ -196,3 +196,35 @@ test("login() fige le rôle choisi dans ce formulaire, même si le snapshot user
   await screen.findByText("pharmacie");
   expect(sessionStorage.getItem("medos_role_actif")).toBe("pharmacie");
 });
+
+// ── roleConfig.distributeur.nav — liens Rapports/Facturation ────────────────
+// Sidebar.jsx rend exactement `auth.nav.map(...)` (NavLink to={item.path},
+// texte item.label) — vérifier que ces deux entrées sont bien dans le nav
+// construit par buildAuthBase() pour un compte distributeur "principal"
+// (role_interne = null, le cas de tous les comptes distributeur actuels)
+// prouve qu'elles apparaîtront dans la barre latérale et pointeront vers les
+// bonnes pages, sans avoir à monter Sidebar.jsx lui-même (react-router-dom
+// v7 non résolvable par le Jest figé de react-scripts, voir Inscription.test.js).
+function NavProbe() {
+  const { auth } = useAuth();
+  return (
+    <ul>
+      {(auth?.nav ?? []).map((item) => (
+        <li key={item.path}>{item.label} — {item.path} — {item.icon}</li>
+      ))}
+    </ul>
+  );
+}
+
+test("roleConfig.distributeur.nav contient bien les liens Rapports et Facturation, avec la bonne cible et une icône existante", async () => {
+  setSession({ user: fakeUser("distributeur") });
+
+  render(
+    <AuthProvider>
+      <NavProbe />
+    </AuthProvider>
+  );
+
+  await screen.findByText("Rapports — /distributeur/rapports — rapports");
+  await screen.findByText("Facturation — /distributeur/facturation — facturation");
+});

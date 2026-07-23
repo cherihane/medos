@@ -293,6 +293,8 @@ export const roleConfig = {
       { path: "/distributeur/entrepot", label: "Entrepôt", icon: "entrepot" },
       { path: "/distributeur/clients", label: "Clients", icon: "patients" },
       { path: "/distributeur/alertes", label: "Alertes", icon: "alertes" },
+      { path: "/distributeur/rapports", label: "Rapports", icon: "rapports" },
+      { path: "/distributeur/facturation", label: "Facturation", icon: "facturation" },
       { path: "/parametres", label: "Paramètres", icon: "parametres" },
     ],
   },

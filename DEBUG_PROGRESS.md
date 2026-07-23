@@ -2186,3 +2186,33 @@ Livraison de test supprimée après vérification.
 pas dans la barre latérale distributeur — cela nécessiterait d'ajouter deux entrées à
 `roleConfig.distributeur.nav` dans `AuthContext.jsx`, explicitement exclu par la règle absolue de ce
 fichier tant que je n'ai pas de confirmation explicite. Accessibles dès maintenant par URL directe.
+
+---
+
+## CORRECTIF — liens de navigation Rapports/Facturation ajoutés (2026-07-23, confirmation explicite)
+
+**Exception limitée à `roleConfig.distributeur.nav` accordée explicitement** pour lever la limite
+ci-dessus. Deux lignes ajoutées dans le tableau, entre "Alertes" et "Paramètres" :
+```js
+{ path: "/distributeur/rapports", label: "Rapports", icon: "rapports" },
+{ path: "/distributeur/facturation", label: "Facturation", icon: "facturation" },
+```
+Rien d'autre dans `AuthContext.jsx` n'a été touché — vérifié avec `git diff` (2 lignes ajoutées, aucune
+autre ligne modifiée) : `NAV_INTERNE`, `buildAuthBase`, `enrichWithEtablissement`, `mountedRef`,
+`getSession`, `onAuthStateChange`, `login`, `logout` tous intacts.
+
+**Icônes déjà existantes** : `rapports` et `facturation` étaient déjà dans le mapping
+[NavIcon.jsx](src/components/NavIcon.jsx) (`rapports` déjà utilisée par Pharmacie et Hôpital,
+`facturation` par Hôpital) — aucune nouvelle icône créée.
+
+**Testé** : `Sidebar.jsx` rend directement `auth.nav.map(...)` (confirmé en lisant son code) — vérifier
+que `roleConfig.distributeur.nav` contient bien les deux entrées avec le bon `path`/`label`/`icon`
+prouve donc qu'elles apparaîtront dans la barre latérale et pointeront vers les bonnes pages. Comme
+pour `Inscription.test.js`, impossible de monter `Sidebar.jsx` lui-même dans un test (react-router-dom
+v7 non résolvable par le Jest 27 figé de `react-scripts`) — nouveau test dans
+[AuthContext.test.js](src/context/AuthContext.test.js) qui construit `auth` via le vrai `AuthProvider`
+pour un compte distributeur "principal" (`role_interne = null`, le cas de tous les comptes
+distributeur actuels — donc nav complet non filtré) et vérifie que les deux entrées y figurent
+exactement. **Validité du test vérifiée** : échoue bien sur le code d'avant ce correctif (`git stash`
+temporaire), confirmant que ce n'est pas un test vacant. Suite complète revalidée : `10 passed, 10
+total`. `npm run build` sans erreur.
