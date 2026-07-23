@@ -2053,3 +2053,50 @@ destinataire, sur le même principe que les badges déjà en place pour les comm
    ne plante pas.
 Email de test volontairement laissé dans la boîte Gmail réelle de l'utilisateur (suppression de
 données non effectuée, hors du périmètre de ce qui m'est autorisé).
+
+## Point 6 — Page Rapports distributeur
+
+Nouveau [Rapports.jsx](src/pages/distributeur/Rapports.jsx), sur le modèle de
+[Rapports.jsx (pharmacie)](src/pages/pharmacie/Rapports.jsx) (mêmes helpers `downloadCSV`, mêmes
+composants de carte KPI/graphique) mais avec des données propres au distributeur — jamais
+`useCommandes()`/`useMedicaments()` génériques, qui mélangeraient commandes reçues des clients ET
+commandes placées aux fabricants (deux relations différentes, déjà distinguées ailleurs dans le
+code par `distributeur_id` vs `fabricant_id`).
+
+- **CA par mois (12 derniers mois)** : `commandes` où `distributeur_id = soi-même` (commandes reçues
+  des clients, jamais celles passées aux fabricants), groupées par mois — même construction que le
+  graphique déjà présent sur Prévisions.jsx mais sur 12 mois au lieu de 6.
+- **Répartition par client réel** : `livraisons` groupées par destinataire, résolu via
+  `distributeur_clients_id` (couvre client MedOS et manuel, voir points 2/4) avec un repli sur
+  l'ancien lien direct `etablissement_id` pour compatibilité avec des livraisons antérieures à
+  l'ajout de cette colonne.
+- **Médicaments les plus livrés** : agrégation de toutes les `livraison_lignes` par `medicament_nom`,
+  triée par quantité totale.
+- **Taux de rupture** : proportion des lignes de livraison marquées `disponible = false` (point 4c)
+  sur le total des lignes — donnée réelle, pas une estimation.
+- **Taux de retard** : proportion des livraisons `statut = 'livree'` dont `date_arrivee_reelle >
+  date_arrivee_prevue`, parmi celles où les deux dates sont renseignées.
+- **Export CSV** : une ligne par livraison (date, client, statut, nb produits, quantité totale, rupture
+  oui/non, date prévue/réelle) — même helper `downloadCSV` que la pharmacie.
+
+**Testé en conditions réelles** (compte réel "Poto-Poto", requêtes et calculs reproduits exactement
+tels qu'ils tournent dans `Rapports.jsx`, avec 2 livraisons de test ajoutées pour exercer le calcul
+des taux) :
+- CA total (12 mois) : 265 000 FCFA — recalculé manuellement en sommant `montant_total` de toutes les
+  commandes réelles `distributeur_id = Poto-Poto` sur la période, exact.
+- 6 livraisons totales (4 réelles des sessions précédentes + 2 de test) → 6 lignes de médicaments →
+  1 marquée en rupture → **taux de rupture 17% (1/6), exact**.
+- 2 livraisons livrées avec les deux dates renseignées, 1 en retard (date réelle 3 jours après la
+  date prévue) → **taux de retard 50% (1/2), exact**.
+- Agrégation médicaments cohérente avec l'historique réel déjà documenté (Ceftriaxone 1g,
+  Paracetamol Injectable des sessions 8/9, plus les 2 lignes de test).
+Les 2 livraisons de test supprimées après vérification ; les données réelles des sessions
+précédentes n'ont pas été touchées (ce ne sont pas des données de test, juste l'historique réel déjà
+en place).
+
+**Limite connue, signalée pour confirmation avant d'y toucher.** La page est créée et routée
+(`/distributeur/rapports` ajouté dans [App.js](src/App.js), sans dépendance à `AuthContext.jsx`) mais
+**n'apparaît pas encore dans la barre latérale** : ça nécessiterait d'ajouter une entrée à
+`roleConfig.distributeur.nav` dans `AuthContext.jsx`, explicitement exclu par la règle absolue de ce
+fichier ("ne touche pas à AuthContext.jsx"). Accessible dès maintenant par URL directe ; ajouter le
+lien de navigation sur confirmation explicite.

@@ -76,6 +76,7 @@ const DiTracabilite = lazy(() => import("./pages/distributeur/Tracabilite"));
 const DiEntrepot = lazy(() => import("./pages/distributeur/Entrepot"));
 const DiClients = lazy(() => import("./pages/distributeur/Clients"));
 const DiAlertes = lazy(() => import("./pages/distributeur/Alertes"));
+const DiRapports = lazy(() => import("./pages/distributeur/Rapports"));
 
 // Autorité
 const AuVueNationale = lazy(() => import("./pages/autorite/VueNationale"));
@@ -540,6 +541,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute requiredRole="distributeur">
               <DiAlertes />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/distributeur/rapports"
+          element={
+            <ProtectedRoute requiredRole="distributeur">
+              <DiRapports />
             </ProtectedRoute>
           }
         />
