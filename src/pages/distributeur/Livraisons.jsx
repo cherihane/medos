@@ -12,6 +12,7 @@ import {
 } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../supabaseClient";
+import { openDocument, tableHTML, infoGridHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
 
 const statusStyle = {
   planifiee:   { bg: "#F3F4F6",  color: colors.textSecondary,  label: "Planifiée" },
@@ -26,13 +27,114 @@ function fmt(iso) {
   return new Date(iso).toLocaleDateString("fr-FR");
 }
 
+// ── Bon de livraison — impression locale, PDF serveur (pièce jointe), email ───
+// Même pattern que le bon de commande fabricant (Entrepot.jsx) : un document
+// imprimable côté client, un PDF généré côté serveur pour l'email, un envoi
+// honnête qui trace le vrai statut sans jamais bloquer la livraison elle-même.
+function printBonLivraison({ numeroSuivi, destinataireNom, lignes, dateDepart, etab }) {
+  const dateFr = new Date().toLocaleDateString("fr-FR");
+  openDocument({
+    titre: "Bon de livraison",
+    sousTitre: `${numeroSuivi} — Émis le ${dateFr}`,
+    etablissement: etab,
+    sections: [
+      { titre: "Destinataire", html: infoGridHTML([
+        { label: "Client", value: destinataireNom || "—" },
+        { label: "Date de livraison", value: dateDepart ? new Date(dateDepart).toLocaleDateString("fr-FR") : "Non précisée" },
+      ]) },
+      { titre: "Médicaments", html: tableHTML(
+        ["Médicament", "Quantité"],
+        lignes.map((l) => [l.medicament_nom || l.nom || "—", `${(l.quantite || 0).toLocaleString("fr-FR")} unités`]),
+        { alignRight: [1] }
+      ) },
+    ],
+  });
+}
+
+async function genererPieceJointeBonLivraison({ numeroSuivi, destinataireNom, destinataireEmail, lignes, dateDepart, etabNom }) {
+  try {
+    const { data, error } = await supabase.functions.invoke("generate-bon-commande-pdf", {
+      body: {
+        reference: numeroSuivi, etablissementNom: etabNom, entiteLabel: "CLIENT", documentType: "livraison",
+        fournisseur: { nom: destinataireNom, email: destinataireEmail },
+        lignes: lignes.map((l) => ({ nom: l.medicament_nom || l.nom, quantite: l.quantite })),
+        dateLivraison: dateDepart,
+      },
+    });
+    if (error || !data?.pdfBase64) return null;
+    return { filename: data.filename, content: data.pdfBase64 };
+  } catch {
+    return null;
+  }
+}
+
+async function sendLivraisonEmail({ destinataireEmail, destinataireNom, numeroSuivi, lignes, dateDepart, distributeurNom, pieceJointe }) {
+  const dateStr = dateDepart ? new Date(dateDepart).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" }) : "Non précisée";
+  const totalQty = lignes.reduce((s, l) => s + (l.quantite || 0), 0);
+  const lignesHtml = lignes.map((l, i) => `
+    <tr style="background:${i % 2 === 0 ? "#ffffff" : "#F8FAFC"}">
+      <td style="padding:10px 14px;font-size:13px;color:#0A1628;font-weight:600;border-bottom:1px solid #e5e7eb">${l.medicament_nom || l.nom}</td>
+      <td style="padding:10px 14px;font-size:13px;color:#374151;text-align:right;border-bottom:1px solid #e5e7eb">${(l.quantite || 0).toLocaleString("fr-FR")} unités</td>
+    </tr>`).join("");
+
+  const html = `
+<div style="font-family:Arial,sans-serif;max-width:640px;margin:auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb">
+  <div style="background:#F59E0B;padding:28px 32px">
+    <h1 style="color:white;margin:0;font-size:20px;font-weight:700">Bon de livraison</h1>
+    <p style="color:rgba(255,255,255,0.88);margin:6px 0 0;font-size:13px">MedOS — Plateforme de distribution médicale</p>
+  </div>
+  <div style="padding:28px 32px">
+    <p style="font-size:14px;color:#374151;margin:0 0 6px">Bonjour${destinataireNom ? ` <strong>${destinataireNom}</strong>` : ""},</p>
+    <p style="font-size:14px;color:#374151;margin:0 0 22px">
+      Le distributeur <strong>${distributeurNom}</strong> vous informe de l'expédition de la livraison
+      <strong>${numeroSuivi}</strong> ci-dessous via la plateforme MedOS.
+    </p>
+    <div className="table-scroll"><table style="width:100%;border-collapse:collapse;margin-bottom:20px">
+      <tr style="background:#F8FAFC">
+        <td style="padding:9px 0;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:12px;width:44%">Date de livraison</td>
+        <td style="padding:9px 0;border-bottom:1px solid #e5e7eb;font-weight:700;font-size:13px;color:#0A1628">${dateStr}</td>
+      </tr>
+    </table></div>
+    <h2 style="font-size:14px;font-weight:700;color:#0A1628;margin:0 0 10px">Médicaments</h2>
+    <div className="table-scroll"><table style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin-bottom:20px">
+      <thead>
+        <tr style="background:#0A1628">
+          <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;font-weight:700">Médicament</th>
+          <th style="padding:10px 14px;text-align:right;font-size:12px;color:#fff;font-weight:700">Quantité</th>
+        </tr>
+      </thead>
+      <tbody>${lignesHtml}
+        <tr style="background:#FFFBEB">
+          <td style="padding:10px 14px;font-size:13px;font-weight:700;color:#92400E">${lignes.length} référence${lignes.length > 1 ? "s" : ""}</td>
+          <td style="padding:10px 14px;font-size:13px;font-weight:700;color:#92400E;text-align:right">${totalQty.toLocaleString("fr-FR")} unités au total</td>
+        </tr>
+      </tbody>
+    </table></div>
+    <p style="font-size:12px;color:#9CA3AF;margin:0">Bon de livraison joint en pièce jointe (PDF).</p>
+  </div>
+  <div style="background:#F8FAFC;padding:14px 32px;border-top:1px solid #e5e7eb;text-align:center">
+    <p style="font-size:12px;color:#9CA3AF;margin:0">MedOS — ${distributeurNom}</p>
+  </div>
+</div>`;
+
+  const { error } = await supabase.functions.invoke("send-app-email", {
+    body: {
+      to: destinataireEmail,
+      subject: `Bon de livraison MedOS — ${numeroSuivi}`,
+      html,
+      ...(pieceJointe ? { attachments: [pieceJointe] } : {}),
+    },
+  });
+  if (error) throw new Error(error.message);
+}
+
 // ── Modal Nouvelle livraison ───────────────────────────────────────────────────
 // Le panier de médicaments est fixé ici, à la création — c'est le seul
 // moment où l'on décrémente le stock entrepôt du distributeur (l'expédition
 // réelle des produits), voir handleSave. Le destinataire peut être un client
 // MedOS (distributeur_clients_id + etablissement_id réel) ou un client
 // manuel (distributeur_clients_id seul, etablissement_id nul).
-function NouvelleModal({ relations, medicaments, distributeurId, onClose, onSaved }) {
+function NouvelleModal({ relations, medicaments, distributeurId, distributeurNom, auth, onClose, onSaved }) {
   const [form, setForm] = useState({
     relation_id: "", transporteur: "",
     date_depart: new Date().toISOString().slice(0, 10), date_arrivee_prevue: "",
@@ -119,6 +221,40 @@ function NouvelleModal({ relations, medicaments, distributeurId, onClose, onSave
         setPartiel({ numero_suivi: livraison.numero_suivi, echecs, total: cart.length });
         setSaving(false);
         return;
+      }
+
+      // Bon de livraison envoyé au moment de l'expédition (= création, voir
+      // commentaire plus haut sur le décrément entrepôt). Un client manuel
+      // sans email n'en reçoit simplement pas — ce n'est jamais une erreur
+      // qui bloque la livraison, seulement un statut tracé honnêtement.
+      if (relation.client.email) {
+        let emailStatut = "non_envoye";
+        let emailErreur = null;
+        try {
+          const etab = await fetchEtabFromAuth(auth);
+          const pieceJointe = await genererPieceJointeBonLivraison({
+            numeroSuivi: livraison.numero_suivi,
+            destinataireNom: relation.client.nom,
+            destinataireEmail: relation.client.email,
+            lignes: cart,
+            dateDepart: form.date_depart,
+            etabNom: etab.nom,
+          });
+          await sendLivraisonEmail({
+            destinataireEmail: relation.client.email,
+            destinataireNom: relation.client.nom,
+            numeroSuivi: livraison.numero_suivi,
+            lignes: cart,
+            dateDepart: form.date_depart,
+            distributeurNom,
+            pieceJointe,
+          });
+          emailStatut = "envoye";
+        } catch (emailErr) {
+          emailStatut = "echec";
+          emailErreur = emailErr.message;
+        }
+        await updateLivraison(livraison.id, { email_statut: emailStatut, email_erreur: emailErreur });
       }
 
       onSaved();
@@ -664,6 +800,19 @@ export default function Livraisons() {
     }
   };
 
+  // Revoir/réimprimer le bon de livraison depuis l'historique — même document
+  // que celui joint à l'email d'origine, régénéré à la demande.
+  const handleVoirBon = async (l) => {
+    const etab = await fetchEtabFromAuth(auth);
+    printBonLivraison({
+      numeroSuivi: l.numero_suivi,
+      destinataireNom: destNom(l),
+      lignes: l.livraison_lignes ?? [],
+      dateDepart: l.date_depart,
+      etab,
+    });
+  };
+
   return (
     <Layout title="Livraisons" subtitle="Suivi des livraisons en temps réel">
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
@@ -674,6 +823,8 @@ export default function Livraisons() {
           relations={relations}
           medicaments={medicaments}
           distributeurId={auth?.etablissement_id}
+          distributeurNom={auth?.structure ?? "Votre Distributeur"}
+          auth={auth}
           onClose={() => setShowNouvelle(false)}
           onSaved={() => { refetch(); success("Livraison créée avec succès"); }}
         />
@@ -774,6 +925,8 @@ export default function Livraisons() {
                   <td style={{ padding: "14px 16px", fontWeight: 600, color: colors.navy }}>
                     {destNom(l)}
                     {destVille(l) && <div style={{ fontSize: 11, color: colors.textMuted }}>{destVille(l)}</div>}
+                    {l.email_statut === "envoye" && <div style={{ fontSize: 10, color: "#16A34A", fontWeight: 700 }}>Bon envoyé par email</div>}
+                    {l.email_statut === "echec" && <div style={{ fontSize: 10, color: "#DC2626", fontWeight: 700 }} title={l.email_erreur ?? ""}>Échec envoi email</div>}
                   </td>
                   <td style={{ padding: "14px 16px", color: colors.textSecondary, fontSize: 12 }} title={lignes.map(x => `${x.medicament_nom} ×${x.quantite}`).join(", ")}>
                     {lignes.length === 0 ? "—" : `${lignes.length} produit${lignes.length > 1 ? "s" : ""}`}
@@ -806,6 +959,11 @@ export default function Livraisons() {
                       {lignes.length > 0 && (
                         <button onClick={() => setTracabiliteModal(l)} style={{ padding: "4px 10px", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>
                           Traçabilité
+                        </button>
+                      )}
+                      {lignes.length > 0 && (
+                        <button onClick={() => handleVoirBon(l)} style={{ padding: "4px 10px", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>
+                          Bon de livraison
                         </button>
                       )}
                       {modifiable && (

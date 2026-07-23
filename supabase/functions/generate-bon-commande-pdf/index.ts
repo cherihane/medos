@@ -47,7 +47,8 @@ interface BonCommandePayload {
   reference?:        string;
   etablissementNom?: string;
   fournisseur?:       { nom?: string; telephone?: string; email?: string; pays?: string };
-  entiteLabel?:       string; // "FOURNISSEUR" (défaut) ou "FABRICANT"
+  entiteLabel?:       string; // "FOURNISSEUR" (défaut), "FABRICANT" ou "CLIENT"
+  documentType?:      string; // "commande" (défaut) ou "livraison"
   medicamentNom?:     string;
   quantite?:          number | string;
   lignes?:            { nom?: string; quantite?: number | string }[];
@@ -87,10 +88,11 @@ Deno.serve(async (req: Request) => {
 
   const {
     reference = "", etablissementNom = "MedOS", fournisseur = {},
-    entiteLabel = "FOURNISSEUR",
+    entiteLabel = "FOURNISSEUR", documentType = "commande",
     medicamentNom = "—", quantite = "—", lignes,
     dateLivraison = null, montantTotal = 0, notes = "",
   } = payload;
+  const estLivraison = documentType === "livraison";
 
   // Rétrocompatible : les appelants historiques envoient un seul médicament
   // (medicamentNom/quantite) ; les commandes multi-produits envoient `lignes`.
@@ -121,7 +123,8 @@ Deno.serve(async (req: Request) => {
     page.drawLine({ start: { x: left, y }, end: { x: right, y }, thickness: 1.5, color: navy });
     y -= 32;
 
-    page.drawText(pdfSafe(`Bon de commande ${entiteLabel.toLowerCase()}`), { x: left, y, size: 16, font: bold, color: black });
+    const titrePdf = estLivraison ? "Bon de livraison" : `Bon de commande ${entiteLabel.toLowerCase()}`;
+    page.drawText(pdfSafe(titrePdf), { x: left, y, size: 16, font: bold, color: black });
     y -= 18;
     const dateFr = new Date().toLocaleDateString("fr-FR");
     page.drawText(pdfSafe(`${reference} — Émis le ${dateFr}`), { x: left, y, size: 10, font, color: gray });
@@ -143,13 +146,13 @@ Deno.serve(async (req: Request) => {
     if (entiteLabel === "FOURNISSEUR") ligne(`Pays : ${fournisseur.pays ?? "—"}`);
     y -= 14;
 
-    section("DÉTAILS DE LA COMMANDE");
-    ligne(`Date de livraison souhaitée : ${dateLivraison ? new Date(dateLivraison).toLocaleDateString("fr-FR") : "Non précisée"}`);
-    ligne(`Montant total estimé : ${montantTotal > 0 ? montantTotal.toLocaleString("fr-FR") + " FCFA" : "—"}`);
+    section(estLivraison ? "DÉTAILS DE LA LIVRAISON" : "DÉTAILS DE LA COMMANDE");
+    ligne(`${estLivraison ? "Date de livraison" : "Date de livraison souhaitée"} : ${dateLivraison ? new Date(dateLivraison).toLocaleDateString("fr-FR") : "Non précisée"}`);
+    if (!estLivraison) ligne(`Montant total estimé : ${montantTotal > 0 ? montantTotal.toLocaleString("fr-FR") + " FCFA" : "—"}`);
     ligne(`Notes : ${notes || "Aucune"}`);
     y -= 14;
 
-    section("MÉDICAMENTS COMMANDÉS");
+    section(estLivraison ? "MÉDICAMENTS LIVRÉS" : "MÉDICAMENTS COMMANDÉS");
     page.drawRectangle({ x: left, y: y - 6, width: right - left, height: 24, color: navy });
     page.drawText("Médicament", { x: left + 10, y: y + 1, size: 10, font: bold, color: white });
     page.drawText("Quantité", { x: right - 90, y: y + 1, size: 10, font: bold, color: white });
@@ -167,7 +170,7 @@ Deno.serve(async (req: Request) => {
 
     const pdfBytes = await pdfDoc.save();
     const pdfBase64 = uint8ToBase64(pdfBytes);
-    const filename = `bon-de-commande-${reference || "medos"}.pdf`;
+    const filename = `bon-de-${estLivraison ? "livraison" : "commande"}-${reference || "medos"}.pdf`;
 
     return new Response(JSON.stringify({ ok: true, pdfBase64, filename }), {
       headers: { ...CORS_HEADERS, "Content-Type": "application/json" },

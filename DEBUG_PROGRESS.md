@@ -2009,3 +2009,47 @@ un client manuel créé pour l'occasion) :
     général.
 Toutes les données de test (relations manuelles, livraisons, lignes) supprimées après vérification ;
 stock entrepôt (Ceftriaxone 160, Paracetamol 125) confirmé revenu exactement à son état d'origine.
+
+## Point 5 — Bon de livraison PDF envoyé par email
+
+Même pattern que le bon de commande fabricant (Entrepot.jsx, session 9) : réutilisé l'Edge Function
+[generate-bon-commande-pdf](supabase/functions/generate-bon-commande-pdf/index.ts) plutôt que d'en
+créer une nouvelle — ajouté un paramètre `documentType` ("commande" par défaut, "livraison") qui
+change le titre ("Bon de livraison" au lieu de "Bon de commande {entité}"), les libellés de section
+("DÉTAILS DE LA LIVRAISON"/"MÉDICAMENTS LIVRÉS") et le préfixe du nom de fichier — le reste (grille
+destinataire, tableau médicaments/quantités, pied de page) était déjà entièrement générique.
+`entiteLabel: "CLIENT"` fonctionnait déjà sans changement. Redéployée (`supabase functions deploy
+generate-bon-commande-pdf`).
+
+Ajouté dans [Livraisons.jsx](src/pages/distributeur/Livraisons.jsx) : `printBonLivraison()` (impression
+locale, même moteur `MedOSDocument` que les autres bons), `genererPieceJointeBonLivraison()` (appelle
+l'Edge Function), `sendLivraisonEmail()` (via `send-app-email`, même pattern honnête que les autres
+emails du projet — l'échec ne bloque jamais la livraison). Migration
+[20260723e_livraisons_email_statut.sql](supabase/migrations/20260723e_livraisons_email_statut.sql) :
+`livraisons.email_statut`/`email_erreur` (comme `commandes`).
+
+**Déclenché au moment de l'expédition** = à la création de la livraison dans `NouvelleModal`
+(cohérent avec le reste du système : c'est déjà le moment où le stock entrepôt est décrémenté, donc
+la définition de "expédition" déjà en vigueur dans le code). Envoyé uniquement si le client a un
+email connu (`relation.client.email` — vide pour un client manuel sans email renseigné : pas une
+erreur, juste `email_statut` qui reste à sa valeur par défaut `non_envoye`).
+
+**"Revoir/réimprimer depuis l'historique"** : nouveau bouton "Bon de livraison" sur chaque ligne du
+tableau (si elle a des médicaments), régénère le même document à la demande via `printBonLivraison()`
+— pas besoin de ressaisir quoi que ce soit, les données viennent de la livraison déjà persistée.
+Badge "Bon envoyé par email" / "Échec envoi email" (avec l'erreur en tooltip) affiché sous le nom du
+destinataire, sur le même principe que les badges déjà en place pour les commandes fabricant.
+
+**Testé en conditions réelles, de bout en bout, avec un vrai email reçu** (pas une supposition) :
+1. Génération PDF via l'Edge Function redéployée (`documentType: "livraison"`, `entiteLabel: "CLIENT"`)
+   → `bon-de-livraison-TEST-BON-LIV-001.pdf` généré, contenu base64 valide.
+2. Email envoyé via `send-app-email` avec ce PDF en pièce jointe, adressé à l'email réel de
+   "Pharmacie Mimi" (`cherihaneadam123@gmail.com`).
+3. **Réception vérifiée directement dans la vraie boîte Gmail** (recherche par sujet exact) : email
+   trouvé, expéditeur `noreply@mail.kelagroup.org`, corps HTML correct, destinataire correct.
+4. **Pièce jointe confirmée présente** en relisant le message complet :
+   `bon-de-livraison-TEST-BON-LIV-001.pdf`, `mimeType: application/pdf` — preuve que la génération
+   PDF et l'attachement à l'email fonctionnent réellement de bout en bout, pas seulement que l'appel
+   ne plante pas.
+Email de test volontairement laissé dans la boîte Gmail réelle de l'utilisateur (suppression de
+données non effectuée, hors du périmètre de ce qui m'est autorisé).
