@@ -1,9 +1,10 @@
 import { colors } from "../../theme";
 import { useState, useEffect } from "react";
 import Layout from "../../components/Layout";
+import AjouterClientModal from "../../components/AjouterClientModal";
 import { useAuth } from "../../context/AuthContext";
 import { useDistributeurClients, useClientStockBas } from "../../hooks/useSupabaseData";
-import { insertLivraison, insertDistributeurClient, rechercherClientParEmail } from "../../hooks/useMutations";
+import { insertLivraison } from "../../hooks/useMutations";
 import { supabase } from "../../supabaseClient";
 import { useIsMobile } from "../../hooks/useWindowSize";
 
@@ -12,109 +13,6 @@ const inputStyle = {
   borderRadius: 8, fontSize: 13, outline: "none", boxSizing: "border-box",
   color: colors.navy, backgroundColor: colors.bgCard,
 };
-
-// ─── Modal Ajouter un client (relation manuelle réelle) ───────────────────────
-// Pas d'annuaire parcourable de tous les établissements MedOS (volontaire —
-// cf. mission) : on rattache un établissement déjà inscrit via son email exact,
-// comme on ajouterait un contact business dont on connaît les coordonnées.
-function NouveauClientModal({ onClose, onSaved }) {
-  const { auth } = useAuth();
-  const [email, setEmail] = useState("");
-  const [found, setFound] = useState(null);
-  const [searching, setSearching] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [erreur, setErreur] = useState(null);
-
-  const handleSearch = async () => {
-    if (!email.trim()) { setErreur("Saisissez l'email de l'établissement."); return; }
-    setErreur(null);
-    setFound(null);
-    setSearching(true);
-    try {
-      const res = await rechercherClientParEmail(email.trim());
-      if (!res) setErreur("Aucun établissement pharmacie/hôpital/clinique actif trouvé avec cet email.");
-      else setFound(res);
-    } catch (e) {
-      setErreur("Erreur : " + e.message);
-    } finally {
-      setSearching(false);
-    }
-  };
-
-  const handleAdd = async () => {
-    if (!found) return;
-    setSaving(true);
-    setErreur(null);
-    try {
-      await insertDistributeurClient({
-        distributeur_id: auth?.etablissement_id,
-        client_etablissement_id: found.id,
-      });
-      onSaved(`${found.nom} ajouté à votre réseau clients.`);
-      onClose();
-    } catch (e) {
-      setErreur("Erreur : " + e.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-      <div style={{ backgroundColor: colors.bgCard, borderRadius: 16, width: 460, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
-        <div style={{ padding: "20px 24px 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: colors.navy }}>Ajouter un client</h3>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: colors.textMuted }}>×</button>
-        </div>
-        <div style={{ padding: "16px 24px" }}>
-          <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 14 }}>
-            Rattachez un établissement déjà inscrit sur MedOS (pharmacie, hôpital, clinique) en
-            saisissant son email exact — un client devient automatiquement visible ici dès sa
-            première commande passée chez vous, cette recherche ne sert qu'à l'ajouter avant coup.
-          </div>
-          <label style={{ fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 4 }}>Email de l'établissement</label>
-          <div style={{ display: "flex", gap: 8 }}>
-            <input
-              style={inputStyle}
-              type="email"
-              value={email}
-              onChange={(e) => { setEmail(e.target.value); setFound(null); setErreur(null); }}
-              placeholder="contact@pharmacie.com"
-              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            />
-            <button onClick={handleSearch} disabled={searching} style={{ padding: "9px 16px", backgroundColor: colors.bgSurface, border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: searching ? "wait" : "pointer", whiteSpace: "nowrap" }}>
-              {searching ? "…" : "Rechercher"}
-            </button>
-          </div>
-
-          {found && (
-            <div style={{ marginTop: 14, padding: "12px 14px", backgroundColor: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: colors.navy }}>{found.nom}</div>
-                <div style={{ fontSize: 11, color: colors.textMuted, textTransform: "capitalize" }}>{found.type} · {found.ville}</div>
-              </div>
-              <div style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "#F59E0B" }} />
-            </div>
-          )}
-
-          {erreur && (
-            <div style={{ marginTop: 12, padding: "9px 13px", backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, fontSize: 12, color: "#DC2626" }}>
-              {erreur}
-            </div>
-          )}
-        </div>
-        <div style={{ padding: "14px 24px 20px", display: "flex", gap: 10, justifyContent: "flex-end", borderTop: "1px solid var(--border-light)" }}>
-          <button onClick={onClose} style={{ padding: "9px 18px", backgroundColor: colors.bgCard, border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 13, color: colors.textSecondary, cursor: "pointer" }}>
-            Annuler
-          </button>
-          <button onClick={handleAdd} disabled={!found || saving} style={{ padding: "9px 18px", backgroundColor: (!found || saving) ? "#E5E7EB" : "#F59E0B", color: (!found || saving) ? "#9CA3AF" : "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: (!found || saving) ? "not-allowed" : "pointer" }}>
-            {saving ? "Ajout…" : "Ajouter au réseau"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ─── Modal Créer une livraison vers un client ─────────────────────────────────
 function CommandeClientModal({ client, onClose, onSaved }) {
@@ -381,7 +279,13 @@ function FicheClient({ client, onCommande, onHistorique }) {
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 20 }}>
-        <button onClick={() => onCommande(client)} style={{ padding: "9px", backgroundColor: "#F59E0B", color: "white", border: "none", borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Créer livraison</button>
+        {client.estManuel ? (
+          <div style={{ padding: "9px 12px", backgroundColor: colors.bgSurface, borderRadius: 10, fontSize: 11, color: colors.textMuted, textAlign: "center" }}>
+            Création de livraison pour un client manuel — bientôt disponible.
+          </div>
+        ) : (
+          <button onClick={() => onCommande(client)} style={{ padding: "9px", backgroundColor: "#F59E0B", color: "white", border: "none", borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Créer livraison</button>
+        )}
         <button onClick={() => onHistorique(client)} style={{ padding: "9px", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)", borderRadius: 10, fontSize: 12, cursor: "pointer" }}>Historique des livraisons</button>
       </div>
     </>
@@ -416,7 +320,7 @@ export default function ReseauClients() {
       )}
 
       {showModal && (
-        <NouveauClientModal
+        <AjouterClientModal
           onClose={() => setShowModal(false)}
           onSaved={(msg) => { showToast(msg); refetch(); }}
         />
