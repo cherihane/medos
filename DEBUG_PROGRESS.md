@@ -2313,3 +2313,46 @@ manquer ou à percevoir comme désactivé au milieu d'une rangée chargée.
 **Non re-testé au niveau RLS/mutation** (déjà prouvé fonctionnel ci-dessus, aucune logique modifiée —
 seul le style et un texte d'aide ont changé). Suite complète revalidée : `16 passed, 16 total`.
 `npm run build` sans erreur.
+
+## Point 5 — Détail complet d'une livraison (commande d'origine + bon de livraison ensemble)
+
+**Diagnostic** : la colonne `livraisons.commande_id` existe dans le schéma depuis une session
+précédente mais n'était utilisée nulle part dans le code (`grep` : zéro référence). Le détail d'une
+livraison (`DetailModal` dans [Livraisons.jsx](src/pages/distributeur/Livraisons.jsx)) n'était
+d'ailleurs affiché que pour le statut "livree", à partir d'un instantané JSON figé
+(`lignes_livrees`), et le bon de livraison PDF n'était accessible que via un bouton séparé dans la
+ligne du tableau — pas "consultables ensemble" comme demandé.
+
+**Corrigé** :
+1. [NouvelleLivraisonModal.jsx](src/components/NouvelleLivraisonModal.jsx) : ajout d'un sélecteur
+   optionnel "Commande d'origine" à la création d'une livraison, peuplé avec l'historique réel des
+   commandes du client sélectionné chez ce distributeur (masqué pour les clients manuels, qui n'ont
+   pas de commandes MedOS). `commande_id` transmis à `insertLivraison(...)`.
+2. `DetailModal` entièrement réécrit : disponible pour **tout** statut de livraison (plus seulement
+   "livree"), affiche un récapitulatif complet (destinataire/statut/dates/transporteur), la
+   **commande d'origine liée** (référence, montant, statut, paiement) si `commande_id` est renseigné,
+   les lignes de médicaments en direct (`useLivraisonLignes`, plus l'ancien instantané JSON figé), et
+   un bouton "Voir le bon de livraison" intégré qui génère le même PDF que celui envoyé par email —
+   tout dans une seule fenêtre, comme demandé. L'ancien bouton "Bon de livraison" séparé de la ligne
+   du tableau et son handler dédié ont été supprimés (absorbés par `DetailModal`).
+3. **Bug annexe trouvé et corrigé** : `useLivraisonsPaginated` (dans
+   [useSupabaseData.js](src/hooks/useSupabaseData.js)) ne sélectionnait pas `commande_id` dans sa
+   requête — la colonne existait en base et était bien écrite à la création, mais jamais relue par
+   la vue liste, ce qui aurait laissé `DetailModal` avec `commande_id` toujours `undefined` pour
+   toute livraison affichée depuis l'écran principal. Ajouté à la liste des colonnes sélectionnées.
+
+**Preuve concrète (script authentifié, base de production, nettoyé après coup)** : connecté en tant
+que Poto-Poto (mot de passe réinitialisé via l'API Admin pour ce test). Commande de test créée pour
+Pharmacie Mimi (référence `TEST-P5-…`, 12 345 FCFA), livraison créée avec `commande_id` pointant
+vers cette commande. Rejoué exactement les deux requêtes que le code exécute :
+- Le `select(...)` de `useLivraisonsPaginated` (avec le correctif) renvoie bien `commande_id` sur la
+  ligne de la livraison — confirmé égal à l'id de la commande de test.
+- Le `select(...)` de `DetailModal` sur `commandes` avec cet id renvoie bien la commande de test
+  (référence et montant corrects).
+Nettoyage : livraison et commande de test supprimées après vérification.
+
+`CI=true npx eslint` propre sur les 3 fichiers modifiés. `npm run build` sans erreur (warnings
+restants dans le build sont tous préexistants, sans rapport avec ce point — vérifié fichier par
+fichier). Suite Jest complète revalidée : `16 passed, 16 total` (aucune régression sur
+`NouvelleLivraisonModal.test.js`, `AjouterClientModal.test.js`, `AuthContext.test.js`,
+`Inscription.test.js`, `App.test.js`).
