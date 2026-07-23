@@ -100,12 +100,24 @@ export default function AjouterClientModal({ onClose, onSaved }) {
         </div>
 
         <div style={{ padding: "16px 24px 0" }}>
-          <div style={{ display: "flex", gap: 4, marginBottom: 16, backgroundColor: colors.borderLight, borderRadius: 8, padding: 4 }}>
+          {/* Choix explicite MedOS/manuel — bordure + couleur de marque sur l'onglet
+              actif pour rester lisible en clair ET en sombre (l'ancien style, blanc
+              sur fond gris très clair, était quasiment invisible en mode clair —
+              signalé comme "je ne vois que le mode MedOS", corrigé ici). */}
+          <div style={{ display: "flex", gap: 6, marginBottom: 4, border: "1.5px solid var(--border)", borderRadius: 8, padding: 4 }}>
             {[{ key: "medos", label: "Client MedOS" }, { key: "manuel", label: "Client manuel" }].map((t) => (
-              <button key={t.key} type="button" onClick={() => { setMode(t.key); setErreur(null); }} style={{ flex: 1, padding: "7px", borderRadius: 6, border: "none", fontSize: 12, fontWeight: 600, cursor: "pointer", backgroundColor: mode === t.key ? "white" : "transparent", color: mode === t.key ? "#0A1628" : "#6B7280", boxShadow: mode === t.key ? "0 1px 3px rgba(0,0,0,0.08)" : "none" }}>
+              <button key={t.key} type="button" onClick={() => { setMode(t.key); setErreur(null); }} style={{
+                flex: 1, padding: "8px", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer",
+                border: mode === t.key ? "1.5px solid #F59E0B" : "1.5px solid transparent",
+                backgroundColor: mode === t.key ? "#FFFBEB" : "transparent",
+                color: mode === t.key ? "#D97706" : colors.textSecondary,
+              }}>
                 {t.label}
               </button>
             ))}
+          </div>
+          <div style={{ fontSize: 11, color: colors.textMuted, margin: "6px 2px 12px" }}>
+            {mode === "medos" ? "Rattacher un établissement déjà inscrit sur MedOS." : "Enregistrer un client sans compte MedOS."}
           </div>
         </div>
 
