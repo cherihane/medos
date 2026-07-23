@@ -189,13 +189,18 @@ export function useCommandesStats(etablissement_id = null) {
   }, [etablissement_id]);
 }
 
+// `distributeur_clients_id` couvre aussi bien un client MedOS qu'un client
+// manuel (voir useDistributeurClients) — la jointure `etablissements` reste
+// pour l'affichage rapide d'un client MedOS classique, mais un client manuel
+// n'a pas de ligne etablissements du tout : le nom est alors résolu côté
+// composant à partir de la liste déjà chargée par useDistributeurClients().
 export function useLivraisonsPaginated(statut = "", pageSize = 20) {
   return usePaginated(() => {
     let q = supabase.from("livraisons").select(`
       id, statut, date_depart, date_arrivee_prevue, date_arrivee_reelle,
-      transporteur, numero_suivi, etablissement_id, created_at,
+      transporteur, numero_suivi, etablissement_id, distributeur_clients_id, created_at,
       etablissements!livraisons_etablissement_id_fkey ( nom, ville ),
-      livraison_lignes ( id, medicament_id, medicament_nom, quantite )
+      livraison_lignes ( id, medicament_id, medicament_nom, quantite, disponible )
     `, { count: "exact" }).order("created_at", { ascending: false });
     if (statut && statut !== "tous") q = q.eq("statut", statut);
     return q;
@@ -204,13 +209,14 @@ export function useLivraisonsPaginated(statut = "", pageSize = 20) {
 
 // Lignes d'une livraison — utilisé quand on marque "Livrée" pour incrémenter
 // le stock du destinataire d'après le panier fixé à la création (plus de
-// re-saisie manuelle des médicaments à ce moment-là).
+// re-saisie manuelle des médicaments à ce moment-là), et pour l'édition tant
+// que la livraison n'est pas encore livrée.
 export function useLivraisonLignes(livraison_id) {
   return useQuery(() => {
     if (!livraison_id) return Promise.resolve({ data: [], error: null });
     return supabase
       .from("livraison_lignes")
-      .select("id, medicament_id, medicament_nom, quantite")
+      .select("id, medicament_id, medicament_nom, quantite, disponible")
       .eq("livraison_id", livraison_id)
       .order("created_at", { ascending: true });
   }, [livraison_id]);
@@ -331,7 +337,9 @@ export function useFournisseurs() {
 // normalisé en un objet `client` de même forme que pour un vrai établissement
 // — le reste de l'app (fiche, tableau, historique) n'a pas à distinguer les
 // deux cas. `estManuel` reste disponible pour les endroits qui doivent le
-// savoir (ex : création de livraison, tant que non couverte pour ce cas).
+// savoir. `relationId` (= id de la ligne distributeur_clients, distinct de
+// `client.id` pour un client MedOS) permet de créer une livraison via
+// distributeur_clients_id quel que soit le type de client.
 export function useDistributeurClients() {
   const result = useQuery(() =>
     supabase
@@ -347,8 +355,9 @@ export function useDistributeurClients() {
     ...result,
     data: result.data.map((r) => ({
       ...r,
-      client: r.client ?? {
+      client: r.client ? { ...r.client, relationId: r.id } : {
         id: r.id,
+        relationId: r.id,
         nom: r.nom_manuel,
         ville: r.ville_manuel,
         adresse: r.adresse_manuel,
