@@ -2284,3 +2284,32 @@ l'ambre attendu), confirmant que le style était bien le problème et que ce n'e
 la bascule fonctionnelle, elle, réussissait déjà avant, cohérent avec le diagnostic ("pas un bug de
 logique, un défaut d'affordance visuelle"). Suite complète : `16 passed, 16 total`. `npm run build`
 sans erreur.
+
+## Point 4 — Diagnostic : suppression de livraison "impossible"
+
+**Testé en conditions réelles (script authentifié "Poto-Poto"), le mécanisme lui-même fonctionne
+parfaitement** — aucun bug de fond :
+1. Livraison créée avec `statut = "planifiee"` → `deleteLivraison()` (exactement l'appel du bouton
+   "Supprimer") → **succès**, 1 ligne supprimée, confirmée absente en base ensuite.
+2. Livraison créée avec `statut = "en_transit"` → tentative de suppression → **bloquée par la RLS**
+   `livr_delete` (0 ligne supprimée, requête sans erreur mais sans effet — comportement RLS normal),
+   confirmée toujours présente ensuite. Exactement le comportement voulu ("prévu uniquement pour
+   planifiee").
+
+**Cause probable du signalement, par élimination** : soit (a) le cas testé par l'utilisatrice n'était
+pas "planifiee" (bouton correctement absent, mais sans explication visible du pourquoi), soit (b) un
+défaut de contraste du même type que le point 3 — le bouton "Supprimer" était stylé en gris clair
+(`#9CA3AF`) sur fond transparent, **le moins visible des 6 boutons possibles** sur la même ligne
+(Modifier/Statut/Traçabilité/Bon de livraison/Annuler/Supprimer), positionné en dernier — facile à
+manquer ou à percevoir comme désactivé au milieu d'une rangée chargée.
+
+**Corrigé les deux hypothèses en même temps** dans
+[Livraisons.jsx](src/pages/distributeur/Livraisons.jsx) :
+1. Bouton "Supprimer" restylé en rouge plein (`#DC2626` / texte blanc) — action irréversible, doit
+   être la plus visible de la ligne, pas la plus discrète.
+2. Légende ajoutée sous le tableau expliquant explicitement la règle : suppression uniquement pour
+   "Planifiée", "Annuler" sinon — répond directement au "pourquoi" sans avoir à deviner.
+
+**Non re-testé au niveau RLS/mutation** (déjà prouvé fonctionnel ci-dessus, aucune logique modifiée —
+seul le style et un texte d'aide ont changé). Suite complète revalidée : `16 passed, 16 total`.
+`npm run build` sans erreur.
