@@ -2100,3 +2100,40 @@ en place).
 `roleConfig.distributeur.nav` dans `AuthContext.jsx`, explicitement exclu par la règle absolue de ce
 fichier ("ne touche pas à AuthContext.jsx"). Accessible dès maintenant par URL directe ; ajouter le
 lien de navigation sur confirmation explicite.
+
+## Point 7 — Facturation / crédit client distributeur
+
+Migration [20260723f_commandes_statut_paiement.sql](supabase/migrations/20260723f_commandes_statut_paiement.sql) :
+`commandes.statut_paiement` (`en_attente` par défaut, `paye`, `en_retard`) — suivi manuel simple,
+même logique que [Credits.jsx](src/pages/pharmacie/Credits.jsx) en pharmacie (pas de moteur de
+facturation, juste un statut qu'on bascule). Posé sur `commandes`, pas `livraisons` : seule la
+commande porte un vrai montant (`montant_total`), une livraison n'a pas de colonne monétaire propre —
+documenté dans la migration pour que ça ne soit pas oublié plus tard.
+
+**Nouvelle page** [Facturation.jsx](src/pages/distributeur/Facturation.jsx) (route
+`/distributeur/facturation` ajoutée dans `App.js`, même limitation de lien de navigation que le
+point 6) : liste des commandes reçues des clients (`distributeur_id = soi-même`, nouveau hook
+`useCommandesRecuesPaginated` — distinct de `useCommandesFabricantPaginated`, relation inverse),
+filtrable par statut de paiement, actions "Marquer payé"/"Marquer en retard"/"Annuler", KPI (solde dû,
+payé, en retard, total) sur la page courante.
+
+**Solde dû par client** ajouté dans la fiche client de
+[ReseauClients.jsx](src/pages/distributeur/ReseauClients.jsx) (`SoldeDu`, nouveau composant) : somme
+des `commandes.montant_total` de ce client dont `statut_paiement != 'paye'`. Masqué pour un client
+manuel (`estManuel`) — il ne peut jamais avoir de commande MedOS, n'ayant pas de compte pour en
+passer une.
+
+**Testé en conditions réelles**, avec le VRAI flux applicatif à deux comptes (une commande est créée
+par le CLIENT, jamais directement par le distributeur — vérifié que la RLS `cmd_insert` refuse
+explicitement une tentative du distributeur d'insérer une commande avec un `etablissement_id` qui
+n'est pas le sien, confirmant que le test devait passer par Pharmacie Mimi comme en production) :
+1. 2 commandes créées par Pharmacie Mimi vers Poto-Poto (20 000 FCFA en attente, 8 000 FCFA en retard).
+2. Relues avec la requête exacte de `useCommandesRecuesPaginated` en tant que Poto-Poto : les 2
+   commandes bien visibles, avec le bon client joint et le bon `statut_paiement`.
+3. Solde dû (requête exacte de `SoldeDu`) avant paiement : 293 000 FCFA (inclut l'historique réel déjà
+   en place, pas seulement les 2 commandes de test).
+4. Le distributeur marque la commande de 20 000 FCFA "payé" (`update` direct, RLS `cmd_update`
+   autorise bien le distributeur à modifier une commande qui lui est adressée).
+5. Solde dû recalculé : 273 000 FCFA — **exactement 293 000 − 20 000**, confirmant que le calcul
+   suit précisément les changements de statut.
+Commandes de test supprimées après vérification.

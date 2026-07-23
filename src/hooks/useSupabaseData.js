@@ -132,6 +132,24 @@ export function useCommandesPaginated(etablissement_id = null, pageSize = 20, fi
   }, [etablissement_id, statut, fournisseur_id, search], pageSize);
 }
 
+// Commandes REÇUES par un distributeur de la part de ses clients — filtrées
+// sur distributeur_id (jamais etablissement_id, qui désigne l'émetteur/client
+// ici, pas le distributeur). Utilisé par Facturation.jsx pour le suivi de
+// paiement ; distinct de useCommandesFabricantPaginated (commandes PLACÉES
+// par le distributeur auprès de ses propres fabricants, relation inverse).
+export function useCommandesRecuesPaginated(distributeur_id = null, pageSize = 20, filtres = {}) {
+  const { statut_paiement = "" } = filtres;
+  return usePaginated(() => {
+    let q = supabase.from("commandes").select(`
+      id, reference, statut, statut_paiement, date_commande, montant_total, etablissement_id,
+      etablissements!commandes_etablissement_id_fkey ( nom, ville )
+    `, { count: "exact" }).order("date_commande", { ascending: false });
+    if (distributeur_id) q = q.eq("distributeur_id", distributeur_id);
+    if (statut_paiement) q = q.eq("statut_paiement", statut_paiement);
+    return q;
+  }, [distributeur_id, statut_paiement], pageSize);
+}
+
 // Commandes passées à des fabricants (module Distributeur) — même table que
 // useCommandesPaginated, filtrée sur fabricant_id non nul pour ne jamais
 // mélanger avec les commandes fournisseur du module Pharmacie.
