@@ -2216,3 +2216,39 @@ distributeur actuels — donc nav complet non filtré) et vérifie que les deux 
 exactement. **Validité du test vérifiée** : échoue bien sur le code d'avant ce correctif (`git stash`
 temporaire), confirmant que ce n'est pas un test vacant. Suite complète revalidée : `10 passed, 10
 total`. `npm run build` sans erreur.
+
+---
+
+## Module DISTRIBUTEUR — Session 11 (2026-07-24) : bug de fond + manques trouvés en usage réel
+
+## Point 1 — Bug confirmé : création de livraison depuis la fiche client, chemin parallèle sans panier
+
+**Confirmé en relisant le code** : [ReseauClients.jsx](src/pages/distributeur/ReseauClients.jsx)
+avait son propre `CommandeClientModal` — un mini-formulaire avec seulement transporteur/dates,
+**aucun panier de médicaments**, appelant `insertLivraison(...)` directement sans jamais insérer de
+`livraison_lignes` ni décrémenter le stock entrepôt (`expedier_ligne_livraison` jamais appelé). Une
+livraison créée depuis une fiche client était donc une coquille vide — 0 médicament, stock entrepôt
+jamais touché — complètement différente d'une livraison créée depuis l'écran Livraisons principal
+(qui, lui, a le panier complet depuis la session 10).
+
+**Corrigé en supprimant le chemin parallèle**, pas en le réparant : `NouvelleModal` (le vrai
+formulaire panier de [Livraisons.jsx](src/pages/distributeur/Livraisons.jsx)) extrait dans un nouveau
+composant partagé [NouvelleLivraisonModal.jsx](src/components/NouvelleLivraisonModal.jsx) — avec ses
+fonctions d'impression/PDF/email du bon de livraison (`printBonLivraison`,
+`genererPieceJointeBonLivraison`, `sendLivraisonEmail`, jusque-là dupliquables si jamais réutilisées
+ailleurs). Nouveau prop `preselectedRelationId` (optionnel, défaut vide) : pré-remplit le destinataire
+sans le verrouiller — l'utilisateur peut toujours le changer. `Livraisons.jsx` importe désormais ce
+composant partagé au lieu de sa propre copie locale ; `ReseauClients.jsx` fait de même à la place de
+`CommandeClientModal` (supprimé entièrement), en passant `preselectedRelationId={commandeModal.relationId}`
+depuis le client cliqué. Il n'existe plus qu'**un seul** chemin de création de livraison dans toute
+l'application.
+
+**Testé** : nouveau
+[NouvelleLivraisonModal.test.js](src/components/NouvelleLivraisonModal.test.js) (Jest + RTL, le vrai
+composant monté) — confirme que le champ "Médicaments à expédier *" (le panier, absent de l'ancien
+`CommandeClientModal` par construction) est bien présent, et que `preselectedRelationId` pré-sélectionne
+correctement le bon client dans le `<select>` destinataire, aussi bien pour un client MedOS que pour
+un client manuel. La logique de sauvegarde elle-même (décrément stock, email, trace employé) est
+inchangée — déjà testée en conditions réelles à la session 10 (points 4/5/8), non re-testée ici pour
+éviter une duplication de preuve déjà établie. Suite complète : `13 passed, 13 total`. `npm run build`
+sans erreur.
