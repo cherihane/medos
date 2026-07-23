@@ -2,90 +2,11 @@ import { colors } from "../../theme";
 import { useState, useEffect } from "react";
 import Layout from "../../components/Layout";
 import AjouterClientModal from "../../components/AjouterClientModal";
+import NouvelleLivraisonModal from "../../components/NouvelleLivraisonModal";
 import { useAuth } from "../../context/AuthContext";
-import { useDistributeurClients, useClientStockBas } from "../../hooks/useSupabaseData";
-import { insertLivraison } from "../../hooks/useMutations";
+import { useDistributeurClients, useClientStockBas, useMedicaments } from "../../hooks/useSupabaseData";
 import { supabase } from "../../supabaseClient";
 import { useIsMobile } from "../../hooks/useWindowSize";
-
-const inputStyle = {
-  width: "100%", padding: "9px 13px", border: "1.5px solid var(--border)",
-  borderRadius: 8, fontSize: 13, outline: "none", boxSizing: "border-box",
-  color: colors.navy, backgroundColor: colors.bgCard,
-};
-
-// ─── Modal Créer une livraison vers un client ─────────────────────────────────
-function CommandeClientModal({ client, onClose, onSaved }) {
-  const { auth } = useAuth();
-  const [form, setForm] = useState({
-    transporteur: "",
-    date_depart: new Date().toISOString().slice(0, 10),
-    date_arrivee_prevue: "",
-    notes: "",
-  });
-  const [saving, setSaving] = useState(false);
-  const [erreur, setErreur] = useState(null);
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
-
-  const handleSave = async () => {
-    setErreur(null);
-    setSaving(true);
-    try {
-      await insertLivraison({
-        etablissement_id: client.estManuel ? null : client.id,
-        distributeur_clients_id: client.relationId,
-        distributeur_id: auth?.etablissement_id,
-        statut: "planifiee",
-        transporteur: form.transporteur || null,
-        numero_suivi: "LIV-" + Date.now().toString().slice(-8),
-        date_depart: form.date_depart || null,
-        date_arrivee_prevue: form.date_arrivee_prevue || null,
-      });
-      onSaved("Livraison créée pour " + client.nom);
-      onClose();
-    } catch (e) {
-      setErreur("Erreur : " + e.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-      <div style={{ backgroundColor: colors.bgCard, borderRadius: 16, width: 460, padding: "24px 28px", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: colors.navy }}>Nouvelle livraison — {client.nom}</h3>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: colors.textMuted }}>×</button>
-        </div>
-        <div style={{ marginBottom: 14 }}>
-          <label style={{ fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 4 }}>Transporteur</label>
-          <input style={inputStyle} value={form.transporteur} onChange={set("transporteur")} placeholder="Ex: DHL, Transport local…" />
-        </div>
-        <div className="form-row-2" style={{ marginBottom: 14 }}>
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 4 }}>Date de départ</label>
-            <input style={inputStyle} type="date" value={form.date_depart} onChange={set("date_depart")} />
-          </div>
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 4 }}>Arrivée prévue</label>
-            <input style={inputStyle} type="date" value={form.date_arrivee_prevue} onChange={set("date_arrivee_prevue")} />
-          </div>
-        </div>
-        {erreur && (
-          <div style={{ padding: "9px 13px", backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, fontSize: 12, color: "#DC2626", marginBottom: 12 }}>
-            {erreur}
-          </div>
-        )}
-        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-          <button onClick={onClose} style={{ padding: "9px 18px", backgroundColor: colors.bgCard, border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 13, color: colors.textSecondary, cursor: "pointer" }}>Annuler</button>
-          <button onClick={handleSave} disabled={saving} style={{ padding: "9px 18px", backgroundColor: saving ? "#E5E7EB" : "#F59E0B", color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer" }}>
-            {saving ? "Création…" : "Créer la livraison"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ─── Modal Historique livraisons d'un client ──────────────────────────────────
 const STATUT_LIV = {
@@ -329,8 +250,10 @@ function FicheClient({ client, onCommande, onHistorique }) {
 // ─── Page principale ──────────────────────────────────────────────────────────
 export default function ReseauClients() {
   const isMobile = useIsMobile();
+  const { auth } = useAuth();
 
   const { data: relations, loading, refetch } = useDistributeurClients();
+  const { data: medicaments } = useMedicaments(auth?.etablissement_id);
   const etabs = relations.map((r) => r.client).filter(Boolean);
   const [selected, setSelected] = useState(null);
   const [showModal, setShowModal] = useState(false);
@@ -360,10 +283,15 @@ export default function ReseauClients() {
         />
       )}
       {commandeModal && (
-        <CommandeClientModal
-          client={commandeModal}
+        <NouvelleLivraisonModal
+          relations={relations}
+          medicaments={medicaments}
+          distributeurId={auth?.etablissement_id}
+          distributeurNom={auth?.structure ?? "Votre Distributeur"}
+          auth={auth}
+          preselectedRelationId={commandeModal.relationId}
           onClose={() => setCommandeModal(null)}
-          onSaved={(msg) => { showToast(msg); setCommandeModal(null); }}
+          onSaved={() => { showToast("Livraison créée avec succès"); refetch(); }}
         />
       )}
       {historiqueModal && (
