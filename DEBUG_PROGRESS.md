@@ -2137,3 +2137,52 @@ n'est pas le sien, confirmant que le test devait passer par Pharmacie Mimi comme
 5. Solde dû recalculé : 273 000 FCFA — **exactement 293 000 − 20 000**, confirmant que le calcul
    suit précisément les changements de statut.
 Commandes de test supprimées après vérification.
+
+## Point 8 — Traçabilité employé sur les livraisons
+
+Même pattern que `caissier_id`/`caissier_email` en pharmacie ([Caisse.jsx](src/pages/pharmacie/Caisse.jsx)) :
+migration [20260723g_livraisons_tracabilite_employe.sql](supabase/migrations/20260723g_livraisons_tracabilite_employe.sql)
+ajoute trois paires `{action}_par_id` (FK `auth.users`, `ON DELETE SET NULL`) / `{action}_par_email` sur
+`livraisons` — trois actions distinctes demandées par la mission, donc trois paires plutôt qu'une
+seule (une équipe logistique réelle peut avoir une personne différente à chaque étape) :
+- `cree_par_id/email` — posé à la création (`NouvelleModal`, déjà authentifié via `auth.user`).
+- `traite_par_id/email` — posé à chaque modification (`EditModal` — transporteur/dates/panier).
+- `expedie_par_id/email` — posé uniquement à la transition précise vers `en_transit` (`StatutModal`,
+  jamais réécrit sur les transitions suivantes vers `livree`/`incident`).
+
+Affiché dans le `TracabiliteModal` déjà créé au point 4 (nouvelle section "Traçabilité employé" en
+haut, avant les lots) — cohérent avec le nom déjà donné à cette modale plutôt que d'en ajouter une
+autre. Le bouton "Traçabilité" n'est plus conditionné à la présence de lignes de médicaments (l'info
+employé existe dès la création, même livraison encore vide).
+
+**Testé en conditions réelles** (compte "Poto-Poto", les trois actions reproduites dans l'ordre réel) :
+1. Création → `cree_par_email` = email du compte connecté, exact.
+2. Modification (transporteur changé) → `traite_par_email` renseigné, exact.
+3. Transition vers `en_transit` → `expedie_par_email` renseigné, exact, **et statut confirmé
+   `en_transit`**.
+4. Relecture avec la requête exacte de `useLivraisonsPaginated()` : les trois champs bien présents et
+   corrects dans le même objet — confirme que le hook les expose correctement au composant.
+Livraison de test supprimée après vérification.
+
+---
+
+## RÉCAPITULATIF — Module DISTRIBUTEUR, session 10 (2026-07-23), 8 points
+
+| # | Point | Statut |
+|---|---|---|
+| 1 | Diagnostic + fix rattachement client (relier un fournisseur existant après coup) | ✅ |
+| 2 | Ajout manuel de clients hors MedOS | ✅ |
+| 3 | Diagnostic recherche par email (déjà fonctionnelle, absente de Clients.jsx) | ✅ |
+| 4 | Livraisons — cycle de vie complet (modif, traçabilité lots, disponibilité, annulation) | ✅ |
+| 5 | Bon de livraison PDF envoyé par email, vérifié reçu réellement | ✅ |
+| 6 | Page Rapports distributeur | ✅ (pas encore de lien nav, voir limite ci-dessous) |
+| 7 | Facturation / solde dû client | ✅ (pas encore de lien nav, voir limite ci-dessous) |
+| 8 | Traçabilité employé sur les livraisons | ✅ |
+
+**AuthContext.jsx non modifié**, conformément à la règle absolue de cette mission.
+
+**Limite connue commune aux points 6 et 7** : les deux nouvelles pages (`/distributeur/rapports`,
+`/distributeur/facturation`) sont créées, routées, et pleinement fonctionnelles, mais n'apparaissent
+pas dans la barre latérale distributeur — cela nécessiterait d'ajouter deux entrées à
+`roleConfig.distributeur.nav` dans `AuthContext.jsx`, explicitement exclu par la règle absolue de ce
+fichier tant que je n'ai pas de confirmation explicite. Accessibles dès maintenant par URL directe.

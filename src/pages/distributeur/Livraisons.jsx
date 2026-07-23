@@ -196,6 +196,8 @@ function NouvelleModal({ relations, medicaments, distributeurId, distributeurNom
         numero_suivi: "LIV-" + Date.now().toString().slice(-8),
         date_depart: form.date_depart || null,
         date_arrivee_prevue: form.date_arrivee_prevue || null,
+        cree_par_id: auth?.user?.id ?? null,
+        cree_par_email: auth?.user?.email ?? null,
       });
 
       await insertLivraisonLignes(cart.map((it) => ({
@@ -372,7 +374,7 @@ function NouvelleModal({ relations, medicaments, distributeurId, distributeurNom
 // entrepôt à chaque changement — jamais un simple update local qui désynchro-
 // niserait le stock réel. La disponibilité par ligne (point c) est éditable
 // ici aussi, sans impact sur le stock.
-function EditModal({ livraison, medicaments, distributeurId, onClose, onSaved }) {
+function EditModal({ livraison, medicaments, distributeurId, auth, onClose, onSaved }) {
   const { data: lignesExistantes, loading: loadingLignes } = useLivraisonLignes(livraison.id);
   const [form, setForm] = useState({
     transporteur: livraison.transporteur || "",
@@ -434,6 +436,8 @@ function EditModal({ livraison, medicaments, distributeurId, onClose, onSaved })
         transporteur: form.transporteur || null,
         date_depart: form.date_depart || null,
         date_arrivee_prevue: form.date_arrivee_prevue || null,
+        traite_par_id: auth?.user?.id ?? null,
+        traite_par_email: auth?.user?.email ?? null,
       });
 
       const cartIds = new Set(cart.map((it) => it.medicament_id));
@@ -559,8 +563,27 @@ function TracabiliteModal({ livraison, onClose }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [livraison.id]);
 
+  const employes = [
+    { label: "Créée par",   value: livraison.cree_par_email },
+    { label: "Traitée par", value: livraison.traite_par_email },
+    { label: "Expédiée par", value: livraison.expedie_par_email },
+  ].filter((e) => e.value);
+
   return (
     <Modal title={`Traçabilité — ${livraison.numero_suivi ?? ""}`} onClose={onClose} width={520}>
+      {employes.length > 0 && (
+        <div style={{ marginBottom: 18, paddingBottom: 14, borderBottom: "1px solid var(--border-light)" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: colors.textSecondary, textTransform: "uppercase", marginBottom: 8 }}>
+            Traçabilité employé
+          </div>
+          {employes.map((e) => (
+            <div key={e.label} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 12 }}>
+              <span style={{ color: colors.textMuted }}>{e.label}</span>
+              <span style={{ color: colors.navy, fontWeight: 600 }}>{e.value}</span>
+            </div>
+          ))}
+        </div>
+      )}
       {lignes.map((l) => {
         const lotsProduit = (lots ?? []).filter((lo) => lo.medicament_id === l.medicament_id);
         return (
@@ -595,7 +618,7 @@ function TracabiliteModal({ livraison, onClose }) {
 }
 
 // ── Modal Update statut ───────────────────────────────────────────────────────
-function StatutModal({ livraison, onClose, onSaved }) {
+function StatutModal({ livraison, auth, onClose, onSaved }) {
   const { data: lignes } = useLivraisonLignes(livraison.id);
   const [statut, setStatut] = useState(livraison.statut);
   const [saving, setSaving] = useState(false);
@@ -607,6 +630,13 @@ function StatutModal({ livraison, onClose, onSaved }) {
     setStockWarn(null);
     try {
       const update = { statut };
+      // "Expédiée" = passage à en_transit, la livraison quitte physiquement
+      // l'entrepôt — ne s'écrit qu'à cette transition précise, jamais réécrit
+      // ensuite (livree/incident ne repassent pas par ce champ).
+      if (statut === "en_transit" && livraison.statut !== "en_transit") {
+        update.expedie_par_id = auth?.user?.id ?? null;
+        update.expedie_par_email = auth?.user?.email ?? null;
+      }
       if (statut === "livree") {
         update.date_arrivee_reelle = new Date().toISOString();
         update.lignes_livrees = JSON.stringify(lignes.map((l) => ({ nom: l.medicament_nom, quantite: l.quantite })));
@@ -834,6 +864,7 @@ export default function Livraisons() {
           livraison={editModal}
           medicaments={medicaments}
           distributeurId={auth?.etablissement_id}
+          auth={auth}
           onClose={() => setEditModal(null)}
           onSaved={() => { refetch(); success("Livraison modifiée avec succès"); }}
         />
@@ -841,6 +872,7 @@ export default function Livraisons() {
       {statutModal && (
         <StatutModal
           livraison={statutModal}
+          auth={auth}
           onClose={() => setStatutModal(null)}
           onSaved={(newStatut) => {
             refetch();
@@ -956,11 +988,9 @@ export default function Livraisons() {
                           Détail
                         </button>
                       )}
-                      {lignes.length > 0 && (
-                        <button onClick={() => setTracabiliteModal(l)} style={{ padding: "4px 10px", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>
-                          Traçabilité
-                        </button>
-                      )}
+                      <button onClick={() => setTracabiliteModal(l)} style={{ padding: "4px 10px", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>
+                        Traçabilité
+                      </button>
                       {lignes.length > 0 && (
                         <button onClick={() => handleVoirBon(l)} style={{ padding: "4px 10px", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>
                           Bon de livraison
