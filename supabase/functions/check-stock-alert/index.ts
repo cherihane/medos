@@ -35,6 +35,7 @@ interface Medicament {
   categorie?: string;
   stock_actuel: number;
   stock_minimum: number;
+  etablissement_id?: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -53,16 +54,34 @@ async function alerteExisteDeja(medicamentId: string): Promise<boolean> {
 
 /** Insère une alerte dans la table alertes */
 async function insererAlerte(med: Medicament): Promise<void> {
+  // etablissement_id est requis pour que l'alerte soit visible : les
+  // policies RLS de lecture filtrent sur etablissement_id = mes_etablissements(),
+  // une ligne sans cette valeur n'apparaît jamais dans l'app pour personne
+  // (bug corrigé ici — la ligne était insérée sans, donc invisible).
   const { error } = await supabase.from("alertes").insert({
     type: "rupture",
     severite: med.stock_actuel === 0 ? "critique" : "alerte",
     titre: `Rupture de stock : ${med.nom}`,
     message: `Le stock de ${med.nom} (${med.stock_actuel} unités) est passé sous le seuil minimum (${med.stock_minimum} unités). Réapprovisionnement requis.`,
     medicament_id: med.id,
+    etablissement_id: med.etablissement_id ?? null,
     lu: false,
     resolu: false,
   });
   if (error) console.error("[alerte] Erreur insertion:", error.message);
+}
+
+/** Email réel de l'établissement propriétaire du médicament — jamais un compte
+ *  MedOS générique. Retombe sur ADMIN_EMAIL seulement si l'établissement n'a
+ *  aucune adresse renseignée. */
+async function resoudreDestinataire(etablissementId?: string): Promise<string> {
+  if (!etablissementId) return ADMIN_EMAIL;
+  const { data } = await supabase
+    .from("etablissements")
+    .select("email")
+    .eq("id", etablissementId)
+    .maybeSingle();
+  return data?.email || ADMIN_EMAIL;
 }
 
 /** Résout les alertes rupture si le stock est repassé au-dessus du seuil */
@@ -260,14 +279,14 @@ Deno.serve(async (req: Request) => {
     return new Response("Method not allowed", { status: 405 });
   }
 
-  // Vérification secret webhook (optionnel mais recommandé)
-  const webhookSecret = Deno.env.get("WEBHOOK_SECRET");
-  if (webhookSecret) {
-    const authHeader = req.headers.get("x-webhook-secret");
-    if (authHeader !== webhookSecret) {
-      return new Response("Unauthorized", { status: 401 });
-    }
-  }
+  // Pas de vérification x-webhook-secret ici : le trigger notify_stock_alert()
+  // (migration 20260719_fix_stock_alert_webhook_auth.sql) n'envoie plus cet
+  // en-tête depuis qu'il authentifie l'appel avec la clé "anon" du projet en
+  // Authorization Bearer — déjà exigée par la passerelle Supabase pour
+  // atteindre cette fonction. Un ancien WEBHOOK_SECRET encore configuré ici
+  // rejetait donc silencieusement CHAQUE appel en 401, empêchant toute
+  // alerte de stock bas de se créer depuis l'introduction de ce fix (bug
+  // trouvé et corrigé lors du diagnostic Point 9, session 11).
 
   let payload: WebhookPayload;
   try {
@@ -319,7 +338,8 @@ Deno.serve(async (req: Request) => {
 
   if (stockChange) {
     try {
-      await envoyerEmail(med, ADMIN_EMAIL);
+      const destinataire = await resoudreDestinataire(med.etablissement_id);
+      await envoyerEmail(med, destinataire);
     } catch (err) {
       console.error("[email] Échec envoi:", err);
       // On ne fail pas la fonction si l'email échoue
