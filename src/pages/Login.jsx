@@ -4,6 +4,7 @@ import { useAuth, roleConfig } from "../context/AuthContext";
 import PublicFooter from "../components/PublicFooter";
 import { useIsMobile } from "../hooks/useWindowSize";
 import { colors, radius, shadow, font, inputStyle, btnStyle } from "../theme";
+import { supabase } from "../supabaseClient";
 
 /**
  * Traduit les erreurs techniques Supabase/Auth en messages utilisateur lisibles.
@@ -73,6 +74,21 @@ export default function Login() {
 
     setLoading(true);
     try {
+      // Vérifie le statut d'inscription AVANT toute tentative de connexion —
+      // signInWithPassword() crée une session active dès qu'il réussit, ce
+      // qui provoquait un flash (connexion brièvement acceptée puis annulée,
+      // message d'erreur jamais visible) pour un compte encore en_attente.
+      // Best-effort : si la vérification échoue (réseau, etc.), on continue
+      // normalement — AuthContext.jsx reste le filet de sécurité final.
+      try {
+        const { data: statut } = await supabase.rpc("statut_inscription_par_email", { p_email: form.email.trim() });
+        if (statut === "en_attente") {
+          setError("Votre compte est en cours de validation. Vous recevrez un email dès qu'une décision sera prise.");
+          setLoading(false);
+          return;
+        }
+      } catch (_) {}
+
       await login(form.role, form.email, form.password);
       navigate(roleConfig[form.role].dashboardPath);
     } catch (err) {
