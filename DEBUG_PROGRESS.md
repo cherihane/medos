@@ -2544,3 +2544,59 @@ silencieuse, comportement attendu). Valeurs d'origine restaurées après le test
 `CI=true npx eslint` propre sur les 4 fichiers modifiés (1 warning préexistant sans rapport,
 vérifié). `npm run build` sans erreur. Suite Jest complète revalidée : `16 passed, 16 total`
 (aucune régression).
+
+## Point 9 — Diagnostic page Alertes distributeur : bug confirmé, PAS un manque de données
+
+**`distributeur/Alertes.jsx` existe déjà** (session précédente, commit `c77cb4b`) avec 3 onglets :
+"Stock entrepôt" et "Stock clients" (calculés côté client depuis `medicaments`/`useClientStockBas`,
+fonctionnent indépendamment de la table `alertes`) et "Notifications" (lit vraiment la table
+`alertes` via `useAlertesPaginated`). Testé en conditions réelles : baisse volontaire du stock d'un
+médicament de test sous son seuil minimum sur le compte Poto-Poto.
+
+**Bug confirmé, de fond, affectant TOUTE la plateforme (pas seulement Distributeur)** : le trigger
+`trg_stock_alert` (déclenché sur `medicaments`) appelle bien l'Edge Function `check-stock-alert` via
+`pg_net`, mais **chaque appel échouait en HTTP 401 "Unauthorized"** — vérifié directement dans
+`net._http_response` (4 appels précédents, tous 401, avant correctif). Cause : la migration
+`20260719_fix_stock_alert_webhook_auth.sql` (déjà présente, correctif d'un problème d'auth
+différent — 401 côté passerelle Supabase) a retiré l'en-tête `x-webhook-secret` du trigger en le
+remplaçant par une authentification via la clé "anon" du projet, **mais la fonction elle-même avait
+encore un `WEBHOOK_SECRET` configuré** qui continuait d'exiger cet en-tête désormais absent —
+rejetant silencieusement CHAQUE appel depuis l'introduction de ce correctif. Résultat : **aucune
+alerte de rupture de stock automatique n'a jamais été créée depuis**, pour aucun établissement,
+aucun rôle — la page n'était donc vide à tort, pas par manque de données de test.
+
+**Deux bugs additionnels trouvés dans la même fonction en creusant** (`insererAlerte` /
+`envoyerEmail`) :
+1. La ligne insérée dans `alertes` ne renseignait jamais `etablissement_id` — même en corrigeant le
+   401, les alertes créées seraient restées invisibles pour tout le monde (les policies RLS de
+   lecture filtrent sur `etablissement_id = mes_etablissements()`, jamais vrai pour une valeur nulle).
+2. L'email était toujours envoyé à `ADMIN_EMAIL` (adresse générique de secours), jamais à
+   l'établissement réellement concerné par la rupture.
+
+**Corrigé** dans [supabase/functions/check-stock-alert/index.ts](supabase/functions/check-stock-alert/index.ts) :
+1. Suppression de la vérification `WEBHOOK_SECRET` devenue incohérente avec le trigger actuel
+   (la protection réelle reste la clé anon exigée par la passerelle Supabase).
+2. `etablissement_id` transmis dans l'insertion de l'alerte (déjà présent dans le payload webhook,
+   simplement jamais lu par le code).
+3. Nouvelle fonction `resoudreDestinataire()` : résout le vrai email de l'établissement concerné,
+   retombe sur `ADMIN_EMAIL` seulement si l'établissement n'a aucune adresse renseignée.
+Fonction redéployée (`supabase functions deploy check-stock-alert`).
+
+**Preuve concrète, avant/après (base de production, nettoyé après coup)** :
+- **Avant correctif** : médicament de test créé à 50 unités (seuil 20), stock baissé à 5 → aucune
+  ligne `alertes` créée du tout ; `net._http_response` confirme un 401 "Unauthorized" pour cet appel.
+- **Après correctif et redéploiement** : même scénario rejoué à l'identique → `net._http_response`
+  confirme un `200` avec `{"ok":true,...,"alerte_creee":true}` ; ligne `alertes` créée avec
+  `etablissement_id` correct (celui de Poto-Poto) ; **relue avec succès via le compte réel de
+  Poto-Poto (RLS)**, confirmant qu'elle apparaîtrait bien dans l'onglet "Notifications" ; **email
+  réellement reçu** dans la boîte Gmail réelle de Poto-Poto (vérifié directement dans Gmail : sujet
+  "⚠️ STOCK CRITIQUE — Test Point9 Médicament Rupture (5 unités restantes)", destinataire
+  `cherihaneadam123+distributeur@gmail.com`) — plus l'adresse générique de secours.
+Nettoyage : alerte et médicament de test supprimés après vérification.
+
+**Hors scope, noté pour référence** : `pharmacie/Alertes.jsx` s'est avéré être un écran de stock bas
+purement calculé côté client (ne lit jamais la table `alertes`), contrairement à
+`hopital/Alertes.jsx` qui la lit. Possible divergence de conception entre les deux pages plutôt
+qu'un bug confirmé (le titre de la page pharmacie, "Alertes de stock", suggère un scope volontai-
+rement plus étroit) — non traité ici, hors périmètre de la mission (module Distributeur), à
+clarifier séparément si besoin.
