@@ -2506,3 +2506,41 @@ bien à celui de la commande d'origine (`"Test Point7 Fabricant"`), et que le st
 
 `CI=true npx eslint` propre sur les 2 fichiers modifiés. `npm run build` sans erreur. Suite Jest
 complète revalidée : `16 passed, 16 total` (aucune régression).
+
+## Point 8 — Fiches clients enrichies (Clients.jsx)
+
+**Diagnostic** : la fiche client (`FicheModal` dans `Clients.jsx`) n'affichait que les champs déjà
+disponibles ailleurs (nom, ville, type générique, téléphone, email, adresse) — aucun champ propre à
+la relation distributeur↔client (personne de contact, horaires, licence, notes internes, type
+précis). `distributeur_clients` avait bien un `contact_manuel`, mais seulement pour les clients
+manuels et jamais éditable après coup — pas de policy `UPDATE` du tout sur cette table (relation
+posée une fois, jamais modifiée depuis sa création).
+
+**Corrigé** :
+1. Migration [20260724b_distributeur_clients_fiche_enrichie.sql](supabase/migrations/20260724b_distributeur_clients_fiche_enrichie.sql) —
+   5 nouvelles colonnes nullable sur `distributeur_clients` : `contact_nom`, `horaires_ouverture`,
+   `numero_licence`, `notes_internes`, `type_etablissement_precis`. Génériques, applicables aux
+   clients MedOS ET manuels (contrairement à `contact_manuel`, historiquement manuel uniquement).
+   Ajout de la policy `dc_update` manquante, scopée au distributeur propriétaire de la relation
+   (`distributeur_id = mes_etablissements()`), condition nécessaire pour permettre l'édition.
+2. `useDistributeurClients()` : select étendu, nouveau helper `fiche()` qui expose ces 5 champs pour
+   tout client — pour un client manuel créé avant ce correctif, `contact_nom` retombe sur l'ancien
+   `contact_manuel` si le nouveau champ n'est pas encore renseigné (pas de perte de donnée).
+3. Nouvelle mutation `updateDistributeurClient(id, fields)`.
+4. `Clients.jsx` — `FicheModal` réécrit en deux sections : "Coordonnées" (lecture seule, inchangée)
+   et "Notes de la relation" (nouveau formulaire éditable avec bouton Enregistrer). La colonne
+   "Type" du tableau affiche désormais `type_etablissement_precis` quand renseigné, sinon retombe
+   sur le type générique comme avant.
+
+**Preuve concrète (script authentifié × 2 comptes distributeur réels, base de production, nettoyé
+après coup)** : connecté en tant que Poto-Poto (A) et Distributeur Test Kela (B). Sur une relation
+réelle (Poto-Poto → Pharmacie Mimi), écriture des 5 nouveaux champs par A (le propriétaire) — tous
+vérifiés corrects après écriture, puis relecture avec le `select(...)` exact de
+`useDistributeurClients` — cohérente. **Test d'isolation critique** : tentative d'écriture sur cette
+même relation par B (qui n'en est pas propriétaire) — **0 ligne affectée**, confirmant que la
+nouvelle policy `dc_update` protège bien contre une modification par un distributeur tiers (RLS
+silencieuse, comportement attendu). Valeurs d'origine restaurées après le test.
+
+`CI=true npx eslint` propre sur les 4 fichiers modifiés (1 warning préexistant sans rapport,
+vérifié). `npm run build` sans erreur. Suite Jest complète revalidée : `16 passed, 16 total`
+(aucune régression).

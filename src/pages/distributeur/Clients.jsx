@@ -4,19 +4,64 @@ import Layout from "../../components/Layout";
 import Modal from "../../components/Modal";
 import AjouterClientModal from "../../components/AjouterClientModal";
 import { useDistributeurClients } from "../../hooks/useSupabaseData";
+import { updateDistributeurClient } from "../../hooks/useMutations";
+
+const inputStyle = {
+  width: "100%", padding: "9px 12px", border: "1.5px solid var(--border)",
+  borderRadius: 8, fontSize: 13, outline: "none", boxSizing: "border-box", color: colors.navy,
+};
+const labelStyle = { fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 5 };
 
 // ── Modal Fiche client ─────────────────────────────────────────────────────────
-function FicheModal({ client, onClose }) {
+// Deux sections : les coordonnées (lecture seule — issues du compte MedOS
+// du client, ou de la saisie manuelle faite à l'ajout) et les annotations de
+// relation (Point 8 : contact, horaires, licence/agrément, notes internes,
+// type précis) — celles-ci appartiennent au distributeur et sont éditables
+// ici quel que soit le type de client, MedOS ou manuel.
+function FicheModal({ client, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    contact_nom: client.contact_nom || "",
+    horaires_ouverture: client.horaires_ouverture || "",
+    numero_licence: client.numero_licence || "",
+    notes_internes: client.notes_internes || "",
+    type_etablissement_precis: client.type_etablissement_precis || "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(null);
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const handleSave = async () => {
+    setSaving(true);
+    setErr(null);
+    try {
+      await updateDistributeurClient(client.relationId, {
+        contact_nom: form.contact_nom.trim() || null,
+        horaires_ouverture: form.horaires_ouverture.trim() || null,
+        numero_licence: form.numero_licence.trim() || null,
+        notes_internes: form.notes_internes.trim() || null,
+        type_etablissement_precis: form.type_etablissement_precis.trim() || null,
+      });
+      onSaved();
+      onClose();
+    } catch (e) {
+      setErr("Erreur : " + e.message);
+      setSaving(false);
+    }
+  };
+
   return (
-    <Modal title={client.nom} onClose={onClose} width={460}>
-      <div className="form-row-2">
+    <Modal title={client.nom} onClose={onClose} width={520}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted, textTransform: "uppercase", marginBottom: 8 }}>
+        Coordonnées
+      </div>
+      <div className="form-row-2" style={{ marginBottom: 20 }}>
         {[
-          { label: "Type",          value: client.estManuel ? "Client manuel" : (client.type || "—") },
-          { label: "Ville",         value: client.ville || "—" },
-          { label: "Utilise MedOS", value: client.derniere_connexion ? "Oui" : "Non" },
-          { label: "Téléphone",     value: client.telephone || "—" },
-          { label: "Email",         value: client.email || "—" },
-          { label: "Adresse",       value: client.adresse || "—" },
+          { label: "Type de compte", value: client.estManuel ? "Client manuel" : (client.type || "—") },
+          { label: "Ville",          value: client.ville || "—" },
+          { label: "Utilise MedOS",  value: client.derniere_connexion ? "Oui" : "Non" },
+          { label: "Téléphone",      value: client.telephone || "—" },
+          { label: "Email",          value: client.email || "—" },
+          { label: "Adresse",        value: client.adresse || "—" },
         ].map((item) => (
           <div key={item.label} style={{ padding: "10px 14px", backgroundColor: colors.bgSurface, borderRadius: 10 }}>
             <div style={{ fontSize: 11, color: colors.textMuted, marginBottom: 3 }}>{item.label}</div>
@@ -24,8 +69,50 @@ function FicheModal({ client, onClose }) {
           </div>
         ))}
       </div>
-      <div style={{ marginTop: 16 }}>
-        <button onClick={onClose} style={{ width: "100%", padding: "10px", backgroundColor: colors.bgSurface, border: "1px solid var(--border)", borderRadius: 10, fontSize: 13, cursor: "pointer" }}>Fermer</button>
+
+      <div style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted, textTransform: "uppercase", marginBottom: 8 }}>
+        Notes de la relation — propres à votre réseau, éditables
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div>
+          <label style={labelStyle}>Type d'établissement précis</label>
+          <input style={inputStyle} value={form.type_etablissement_precis} onChange={set("type_etablissement_precis")} placeholder="Ex: Pharmacie de garde, clinique privée pédiatrique…" />
+        </div>
+        <div className="form-row-2">
+          <div>
+            <label style={labelStyle}>Personne de contact</label>
+            <input style={inputStyle} value={form.contact_nom} onChange={set("contact_nom")} placeholder="Ex: Jean Dupont" />
+          </div>
+          <div>
+            <label style={labelStyle}>N° de licence / agrément</label>
+            <input style={inputStyle} value={form.numero_licence} onChange={set("numero_licence")} placeholder="Si pertinent" />
+          </div>
+        </div>
+        <div>
+          <label style={labelStyle}>Horaires d'ouverture</label>
+          <input style={inputStyle} value={form.horaires_ouverture} onChange={set("horaires_ouverture")} placeholder="Ex: Lun-Sam 8h-20h, dimanche fermé" />
+        </div>
+        <div>
+          <label style={labelStyle}>Notes internes</label>
+          <textarea
+            value={form.notes_internes}
+            onChange={set("notes_internes")}
+            placeholder="Remarques libres visibles uniquement par votre équipe…"
+            rows={3}
+            style={{ ...inputStyle, resize: "vertical", fontFamily: "inherit" }}
+          />
+        </div>
+      </div>
+
+      {err && (
+        <div style={{ marginTop: 14, padding: "8px 12px", backgroundColor: "#FEF2F2", borderRadius: 8, fontSize: 12, color: "#DC2626" }}>{err}</div>
+      )}
+
+      <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+        <button onClick={onClose} style={{ flex: 1, padding: "10px", backgroundColor: colors.bgSurface, border: "1px solid var(--border)", borderRadius: 10, fontSize: 13, cursor: "pointer" }}>Fermer</button>
+        <button onClick={handleSave} disabled={saving} style={{ flex: 1, padding: "10px", backgroundColor: saving ? "#E5E7EB" : "#F59E0B", color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer" }}>
+          {saving ? "Enregistrement…" : "Enregistrer"}
+        </button>
       </div>
     </Modal>
   );
@@ -55,7 +142,13 @@ export default function Clients() {
         </div>
       )}
 
-      {ficheModal && <FicheModal client={ficheModal} onClose={() => setFicheModal(null)} />}
+      {ficheModal && (
+        <FicheModal
+          client={ficheModal}
+          onClose={() => setFicheModal(null)}
+          onSaved={() => { showToast("Fiche mise à jour"); refetch(); }}
+        />
+      )}
       {showModal && (
         <AjouterClientModal
           onClose={() => setShowModal(false)}
@@ -101,7 +194,7 @@ export default function Clients() {
               <tr key={c.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
                 <td style={{ padding: "14px 18px", fontWeight: 600, color: colors.navy }}>{c.nom}</td>
                 <td style={{ padding: "14px 18px", color: colors.textSecondary }}>{c.ville || "—"}</td>
-                <td style={{ padding: "14px 18px", color: colors.textSecondary, textTransform: "capitalize" }}>{c.estManuel ? "Manuel" : c.type}</td>
+                <td style={{ padding: "14px 18px", color: colors.textSecondary, textTransform: c.type_etablissement_precis ? "none" : "capitalize" }}>{c.type_etablissement_precis || (c.estManuel ? "Manuel" : c.type)}</td>
                 <td style={{ padding: "14px 18px", color: colors.textSecondary, fontSize: 12 }}>{c.email ?? "—"}</td>
                 <td style={{ padding: "14px 18px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
