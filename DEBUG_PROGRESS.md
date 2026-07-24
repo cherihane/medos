@@ -2600,3 +2600,163 @@ purement calculé côté client (ne lit jamais la table `alertes`), contrairemen
 qu'un bug confirmé (le titre de la page pharmacie, "Alertes de stock", suggère un scope volontai-
 rement plus étroit) — non traité ici, hors périmètre de la mission (module Distributeur), à
 clarifier séparément si besoin.
+
+# Session 12 (2026-07-24) — Audit final et complet du module Distributeur
+
+**Mission** : après 5 vagues de corrections successives, donner une réponse définitive et prouvée
+à "est-ce que le module Distributeur est vraiment complet et fonctionnel" — rejouer tout le cycle
+de vie avec Playwright sur un compte réel créé de zéro, preuve concrète pour chaque fonctionnalité
+(donnée en base vérifiée, email réellement reçu), rapport final honnête et binaire.
+
+**Méthode** : compte distributeur créé de zéro via le vrai formulaire d'inscription
+(`cherihaneadam123+distaudit@gmail.com`, "Distributeur Audit Final"), plus 2 pharmacies fraîches
+("Pharmacie Audit Test", "Pharmacie Audit Commande") pour les scénarios nécessitant un vrai client.
+11 scripts Playwright + vérification base de données (service_role) + vérification email réelle
+(Gmail) pour chaque étape, exécutés séquentiellement, corrigeant immédiatement tout ce qui échouait
+avant de continuer (deux bugs réels trouvés et corrigés, voir ci-dessous). Comptes de test
+`medos2026` (mots de passe communiqués à l'utilisateur à chaque réinitialisation, comme demandé).
+
+## Point 1 — Bug visuel : artefact ")}" dans la colonne Actions de Livraisons
+
+**MARCHE (corrigé).** Trouvé par lecture de code + confirmé par capture d'écran : un `)}` orphelin
+(ligne 739 de `Livraisons.jsx`), reliquat d'une condition JSX retirée lors d'une session précédente
+(le bouton "Bon de livraison" séparé, absorbé depuis dans `DetailModal` — voir Point 5, session 11)
+sans que sa fermeture n'ait été nettoyée. S'affichait comme texte littéral après le bouton
+"Traçabilité", sur toutes les lignes, peu importe le statut. Supprimé. `CI=true npx eslint` propre,
+`npm run build` sans erreur, confirmé visuellement absent sur une capture d'écran réelle après
+déploiement (voir Point 7 du cycle de vie livraison ci-dessous).
+
+## Point 2 — Inscription → validation → connexion
+
+**MARCHE PARTIELLEMENT.**
+- Inscription réelle (formulaire complet, Playwright) : **MARCHE** — écran de confirmation affiché,
+  ligne `etablissements` créée avec `statut_inscription='en_attente'`, `actif=false`.
+- Blocage avant validation : **MARCHE PARTIELLEMENT.** L'accès est réellement bloqué (jamais de
+  redirection vers `/distributeur/dashboard`, aucune session persistante) — mais **le message
+  d'erreur "Votre compte est en cours de validation..." n'est jamais visible par l'utilisateur
+  réel.** Cause : `login()` (AuthContext.jsx) appelle `signInWithPassword()` en premier — qui réussit
+  et crée une session, déclenchant `onAuthStateChange` (SIGNED_IN) et un bref basculement du routing
+  — PUIS le code vérifie `statut_inscription` et appelle `signOut()` (SIGNED_OUT), ce qui démonte le
+  formulaire de connexion en cours (avec son message d'erreur pas encore affiché) et remonte un
+  `Login.jsx` neuf, vidé. Confirmé par captures d'écran à 500 ms et 1500 ms après le clic : aucun
+  texte d'erreur nulle part, formulaire entièrement réinitialisé (rôle "Pharmacie" par défaut, champs
+  vides). **Cause dans `AuthContext.jsx` (ordre signIn → vérification → signOut) — non corrigé, règle
+  absolue du projet.**
+- Validation du compte : fonctionne (testé via mise à jour directe de `statut_inscription`/`actif`)
+  mais **aucune interface d'administration n'existe nulle part dans l'application** pour effectuer
+  cette validation (recherche exhaustive, confirmée) — en production réelle, valider un compte exige
+  une intervention directe en base de données.
+- Connexion après validation : **MARCHE** — redirection `/distributeur/dashboard` confirmée.
+- **Bug annexe trouvé par lecture de code (non testé en conditions réelles, non corrigé — dans
+  AuthContext.jsx)** : la contrainte SQL réelle sur `statut_inscription` est
+  `IN ('en_attente', 'validee', 'refusee')`, mais `AuthContext.jsx` compare à la chaîne `"refuse"`
+  (sans le "e" final) — un compte refusé ("refusee") ne correspond jamais à cette comparaison, donc
+  ne serait **jamais bloqué** par ce contrôle précis. À vérifier en conditions réelles séparément.
+
+## Point 3 — Ajout d'un client MedOS et d'un client manuel
+
+**MARCHE.** Recherche par email exact trouve la fiche pharmacie réelle, "Ajouter au réseau" crée la
+relation `distributeur_clients` (`source='manuel'`). Client manuel (formulaire complet) crée
+également sa relation correctement (`nom_manuel`, coordonnées). Les deux vérifiés en base réelle.
+
+## Point 4 — Réception d'une commande venant d'une vraie pharmacie + rattachement automatique
+
+**MARCHE.** Pharmacie fraîche créée, jamais rattachée manuellement au préalable (précondition
+vérifiée). Distributeur ajouté comme "Distributeur MedOS" depuis Fournisseurs (select réel listant
+les distributeurs actifs). Commande réelle passée (panier, médicament réel). Vérifié en base : la
+relation `distributeur_clients` a été créée **automatiquement par le trigger**
+(`source='commande'`, pas `'manuel'`) — confirme le rattachement automatique, distinct de l'ajout
+manuel testé au point précédent.
+
+## Point 5 — Commande fabricant (produit existant + produit nouveau), email + PDF
+
+**MARCHE (après correction d'un bug réel et significatif).** Commande créée avec 2 lignes : un
+produit déjà à l'entrepôt (`medicament_id` renseigné) et un produit totalement nouveau
+(`medicament_id` NULL, dosage saisi). Email réellement reçu avec PDF attaché, contenu correct pour
+les deux lignes.
+
+**Bug trouvé et corrigé, présent depuis plusieurs sessions (21 et 23 juillet, comptes Poto-Poto
+inclus, jamais remarqué)** : l'email envoyé au fabricant affichait "Le distributeur **Votre
+Distributeur** vous adresse le bon de commande" au lieu du vrai nom de l'établissement.
+`auth.structure` est un texte générique statique codé dans `roleConfig` (`AuthContext.jsx`), jamais
+remplacé par le vrai nom. Corrigé **sans toucher `AuthContext.jsx`** : réutilisation de
+`fetchEtabFromAuth(auth).nom` (déjà appelé pour le PDF dans ces mêmes flux, donc déjà fiable) à la
+place de `distributeurNom`/`auth.structure`, dans `Entrepot.jsx` (commande fabricant),
+`NouvelleLivraisonModal.jsx` (email + notification livraison) et `Previsions.jsx` (commande depuis
+Prévisions IA) ; props `distributeurNom` devenues inutiles supprimées. **Déployé en production**
+(`git pull && npm run build && systemctl restart nginx`) et revérifié avec un nouvel email réel :
+"Le distributeur **Distributeur Audit Final** vous adresse..." — correct. Commit `41efb05`.
+
+## Point 6 — Réception scannée avec numéro de lot
+
+**MARCHE.** Flux Traçabilité → "Enregistrer dans l'entrepôt" (saisie manuelle du code, équivalent
+fonctionnel du scan caméra qui remplit les mêmes champs). Médicament créé, stock incrémenté
+correctement, lot MedOS généré avec numéro certifié (`MEDOS-2026-DIST-XXXXX`), QR code renseigné,
+fabricant correct — tout vérifié en base réelle.
+
+## Point 7 — Création de livraison multi-médicaments, depuis Livraisons ET depuis une fiche client
+
+**MARCHE.** Confirmé le **même** composant/formulaire (panier réel, champ "Médicaments à expédier")
+dans les deux cas : depuis `Livraisons.jsx` ("+ Nouvelle livraison", 2 médicaments, livraison créée
+avec 2 lignes) ET depuis une fiche client (Réseau clients → sélection du client → "Créer
+livraison", destinataire pré-rempli correctement). Aucun mini-formulaire parallèle détecté.
+
+## Point 8 — Cycle de vie complet d'une livraison (modifier, statut, annuler, supprimer)
+
+**MARCHE.** Les 4 actions vérifiées en base sur de vraies livraisons : Modifier (transporteur mis à
+jour), changement de statut vers "En transit" (statut + `expedie_par_email` tracés), Annulation
+(statut → `annulee`), Suppression définitive (sur une livraison restée "Planifiée" — ligne
+réellement supprimée). Capture d'écran après passage "En transit" confirme aussi **visuellement**
+que le correctif du Point 1 tient en conditions réelles — colonne Actions propre sur toutes les
+lignes.
+
+## Point 9 — Notification client (email + espace MedOS)
+
+**MARCHE.** Les deux canaux confirmés réels : panneau "Livraisons entrantes" visible et correct côté
+client (connecté en tant que Pharmacie Audit Test, nom du distributeur bien affiché) ET 4 emails
+"Bon de livraison" réellement reçus, tous avec le nom correct du distributeur (confirme que le
+correctif du Point 5 s'applique aussi à ce flux).
+
+## Point 10 — Rapports et Facturation depuis la barre latérale
+
+**MARCHE.** Navigation réelle (clic sur le lien de la barre latérale) pour les deux pages, aucune
+erreur console/JS, données réelles et cohérentes avec toute l'activité de l'audit (Rapports :
+4 livraisons, répartition par client, médicaments les plus livrés ; Facturation : la vraie commande
+CMD-26275713 avec statut de paiement).
+
+## Point 11 — Alerte de stock bas (entrepôt et client), email réel
+
+**MARCHE, avec une nuance découverte (pas un bug bloquant).** Confirme que le correctif du Point 9
+de la session précédente (401 silencieux + `etablissement_id` manquant + email vers une adresse
+générique) tient dans les deux sens :
+- Entrepôt : stock baissé sous le seuil via une **vraie action UI** (création d'une livraison qui
+  décrémente le stock), alerte créée en base, email réellement reçu dans la boîte du distributeur.
+- Client : stock d'un client MedOS baissé sous son seuil, alerte créée en base, onglet "Stock
+  clients" du distributeur l'affiche correctement, ET email réellement reçu dans la boîte du client
+  lui-même (cohérent : le destinataire est toujours l'établissement propriétaire du médicament).
+
+**Nuance trouvée** : l'onglet "Stock entrepôt" de la page Alertes distributeur est calculé côté
+client avec son **propre** seuil (ratio stock_actuel/stock_minimum ≤ 0.5), différent du seuil qui
+déclenche la vraie alerte en base et l'email (stock_actuel < stock_minimum, sans ratio). À 70% du
+seuil, l'email et la ligne `alertes` existent déjà, mais l'onglet ne l'affiche pas encore (il faut
+descendre à 50% ou moins). Deux seuils différents pour le même concept, jamais remarqué jusqu'ici —
+confirmé par capture d'écran avant/après.
+
+## Point 12 — Isolation entre deux comptes distributeur
+
+**MARCHE.** Connexion réelle en tant que "Distributeur Test Kela" (second compte, totalement
+indépendant), vérifié sur les 7 écrans du module (Réseau clients, Livraisons, Entrepôt, Alertes,
+Rapports, Facturation, Clients) : aucune trace des clients, produits, commandes, livraisons ou nom
+du compte "Distributeur Audit Final" créé pendant cet audit. Isolation complète confirmée.
+
+## Bilan
+
+**10 fonctionnalités marchent entièrement, 2 marchent partiellement** (message d'erreur invisible
+lors d'un blocage de connexion pré-validation ; seuil d'affichage de l'onglet "Stock entrepôt"
+incohérent avec le seuil réel de déclenchement), **0 fonctionnalité cassée**. 2 bugs réels trouvés
+et corrigés pendant l'audit (artefact visuel, nom générique dans les emails/notifications — ce
+second bug touchait la production depuis plusieurs jours sans avoir été remarqué). 1 bug
+supplémentaire identifié par lecture de code dans `AuthContext.jsx` (comparaison "refuse" vs
+"refusee"), non corrigé car hors du fichier autorisé, à vérifier séparément si besoin.
+
+Commits : `41efb05` (bug visuel + nom générique dans les emails, déployé en production).
