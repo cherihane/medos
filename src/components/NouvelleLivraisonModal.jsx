@@ -129,7 +129,7 @@ async function sendLivraisonEmail({ destinataireEmail, destinataireNom, numeroSu
 
 // `preselectedRelationId` : quand ouvert depuis une fiche client (ReseauClients.jsx),
 // le destinataire est déjà connu — pré-rempli mais toujours modifiable, pas verrouillé.
-export default function NouvelleLivraisonModal({ relations, medicaments, distributeurId, distributeurNom, auth, preselectedRelationId = "", onClose, onSaved }) {
+export default function NouvelleLivraisonModal({ relations, medicaments, distributeurId, auth, preselectedRelationId = "", onClose, onSaved }) {
   const [form, setForm] = useState({
     relation_id: preselectedRelationId, transporteur: "",
     date_depart: new Date().toISOString().slice(0, 10), date_arrivee_prevue: "",
@@ -244,6 +244,12 @@ export default function NouvelleLivraisonModal({ relations, medicaments, distrib
         return;
       }
 
+      // Nom réel de l'établissement (jamais le placeholder générique
+      // auth.structure — voir DEBUG_PROGRESS.md, bug confirmé dans les
+      // emails/notifications de plusieurs écrans distributeur), utilisé pour
+      // la notification et l'email ci-dessous.
+      const etab = await fetchEtabFromAuth(auth);
+
       // Notification dans l'espace MedOS du client (en plus de l'email) — un
       // client manuel n'a pas de compte MedOS à notifier, seul l'email compte
       // pour lui. Best-effort : n'empêche jamais la livraison si ça échoue.
@@ -252,7 +258,7 @@ export default function NouvelleLivraisonModal({ relations, medicaments, distrib
           await supabase.rpc("notifier_client_distributeur", {
             p_etablissement_id: relation.client.id,
             p_type: "livraison",
-            p_titre: `Nouvelle livraison — ${distributeurNom}`,
+            p_titre: `Nouvelle livraison — ${etab.nom}`,
             p_message: `${cart.length} médicament${cart.length > 1 ? "s" : ""}${form.date_arrivee_prevue ? `, arrivée prévue le ${fmtDate(form.date_arrivee_prevue)}` : ""}`,
             p_severite: "info",
           });
@@ -267,7 +273,6 @@ export default function NouvelleLivraisonModal({ relations, medicaments, distrib
         let emailStatut = "non_envoye";
         let emailErreur = null;
         try {
-          const etab = await fetchEtabFromAuth(auth);
           const pieceJointe = await genererPieceJointeBonLivraison({
             numeroSuivi: livraison.numero_suivi,
             destinataireNom: relation.client.nom,
@@ -282,7 +287,7 @@ export default function NouvelleLivraisonModal({ relations, medicaments, distrib
             numeroSuivi: livraison.numero_suivi,
             lignes: cart,
             dateDepart: form.date_depart,
-            distributeurNom,
+            distributeurNom: etab.nom,
             pieceJointe,
           });
           emailStatut = "envoye";

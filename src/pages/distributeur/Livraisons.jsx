@@ -600,7 +600,6 @@ export default function Livraisons() {
           relations={relations}
           medicaments={medicaments}
           distributeurId={auth?.etablissement_id}
-          distributeurNom={auth?.structure ?? "Votre Distributeur"}
           auth={auth}
           onClose={() => setShowNouvelle(false)}
           onSaved={() => { refetch(); success("Livraison créée avec succès"); }}
@@ -736,7 +735,6 @@ export default function Livraisons() {
                       <button onClick={() => setTracabiliteModal(l)} style={{ padding: "4px 10px", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>
                         Traçabilité
                       </button>
-                      )}
                       {modifiable && (
                         <button onClick={() => handleAnnuler(l)} disabled={busyId === l.id} style={{ padding: "4px 10px", backgroundColor: "#FEF2F2", color: "#DC2626", border: "none", borderRadius: 6, fontSize: 11, cursor: busyId === l.id ? "wait" : "pointer", fontWeight: 600 }}>
                           Annuler

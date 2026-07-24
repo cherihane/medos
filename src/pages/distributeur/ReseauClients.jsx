@@ -287,7 +287,6 @@ export default function ReseauClients() {
           relations={relations}
           medicaments={medicaments}
           distributeurId={auth?.etablissement_id}
-          distributeurNom={auth?.structure ?? "Votre Distributeur"}
           auth={auth}
           preselectedRelationId={commandeModal.relationId}
           onClose={() => setCommandeModal(null)}

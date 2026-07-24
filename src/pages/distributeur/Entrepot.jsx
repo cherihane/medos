@@ -385,7 +385,7 @@ function ModalReception({ medicaments, etablissement_id, onClose, onSuccess }) {
 // ── Modal Nouvelle commande fabricant (bon de commande multi-médicaments) ──────
 const LIGNE_VIDE = () => ({ id: Date.now() + Math.random(), medicament_id: "", nom: "", dosage: "", quantite: "" });
 
-function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id, auth, prefillLignes, onClose, onSuccess }) {
+function ModalCommandeFabricant({ medicaments, etablissement_id, auth, prefillLignes, onClose, onSuccess }) {
   const { data: fabricants } = useFabricants();
   const [fabricantSelectionId, setFabricantSelectionId] = useState("");
   const [header, setHeader] = useState({ email_fabricant: "", fabricant: "", telephone: "", date_livraison: "", notes: "" });
@@ -515,7 +515,7 @@ function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id
           lignes:         lignesAffichage,
           dateLivraison:  header.date_livraison,
           notes:          header.notes.trim(),
-          distributeur:   distributeurNom,
+          distributeur:   etab.nom,
           pieceJointe,
         });
         emailStatut = "envoye";
@@ -1491,7 +1491,6 @@ export default function Entrepot() {
       {showCommande && (
         <ModalCommandeFabricant
           medicaments={medicaments}
-          distributeurNom={auth?.structure ?? "MedDistrib International"}
           etablissement_id={auth?.etablissement_id ?? null}
           auth={auth}
           prefillLignes={prefillLignes}

@@ -99,7 +99,7 @@ async function sendCommandeEmail({ emailFabricant, fabricant, medicament, quanti
 }
 
 // ─── Modal Agir ───────────────────────────────────────────────────────────────
-function AgirModal({ action, onClose, onSaved, etablissement_id, distributeurNom, auth }) {
+function AgirModal({ action, onClose, onSaved, etablissement_id, auth }) {
   const [fabricant, setFabricant]         = useState("");
   const [fabricants, setFabricants]       = useState([]);
   const [loadingFab, setLoadingFab]       = useState(true);
@@ -170,6 +170,7 @@ function AgirModal({ action, onClose, onSaved, etablissement_id, distributeurNom
         ...(etablissement_id ? { etablissement_id } : {}),
       });
 
+      const etab = await fetchEtabFromAuth(auth);
       await sendCommandeEmail({
         emailFabricant: emailFabricant.trim(),
         fabricant:      fabricant.trim(),
@@ -177,7 +178,7 @@ function AgirModal({ action, onClose, onSaved, etablissement_id, distributeurNom
         quantite:       qty,
         dateLivraison,
         notes:          notes.trim(),
-        distributeur:   distributeurNom,
+        distributeur:   etab.nom,
       });
 
       onSaved(`Commande envoyée à ${fabricant.trim()} (${emailFabricant.trim()}).`);
@@ -486,7 +487,6 @@ export default function Previsions() {
         <AgirModal
           action={agirAction}
           etablissement_id={auth?.etablissement_id ?? null}
-          distributeurNom={auth?.structure ?? "MedDistrib International"}
           auth={auth}
           onClose={() => setAgirAction(null)}
           onSaved={(msg) => { showToast(msg); }}
