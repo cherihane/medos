@@ -18,6 +18,8 @@ import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../supabaseClient";
 import { openDocument, tableHTML, infoGridHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
 import Pagination from "../../components/Pagination";
+import QrScanner from "../../components/QrScanner";
+import { ModalScanEnregistrer } from "./Tracabilite";
 
 function printBonCommandeFabricant({ header, lignes, etab }) {
   const dateFr = new Date().toLocaleDateString("fr-FR");
@@ -1213,14 +1215,23 @@ function CommandeFabricantHistoriqueInline({ commandeId }) {
   );
 }
 
-function CommandeFabricantCard({ commande, auth, success, toastError, onChanged }) {
+function CommandeFabricantCard({ commande, auth, medicaments, success, toastError, onChanged }) {
   const [expanded, setExpanded] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [showScanCamera, setShowScanCamera] = useState(false);
+  const [showScanModal, setShowScanModal] = useState(false);
+  const [codeScanne, setCodeScanne] = useState("");
   const s = STATUT_STYLE[commande.statut] || { bg: "#F3F4F6", color: colors.textSecondary, label: commande.statut };
   const actions = STATUT_ACTIONS[commande.statut] || [];
   const lignes = commande.commande_lignes ?? [];
   const ligneNom = (l) => `${l.medicament_nom}${l.dosage ? ` ${l.dosage}` : ""}`;
   const medicamentLabel = lignes.length === 1 ? `${ligneNom(lignes[0])} × ${lignes[0].quantite}` : `${lignes.length} produits`;
+
+  const handleQrScan = (text) => {
+    setShowScanCamera(false);
+    setCodeScanne(text.trim());
+    setShowScanModal(true);
+  };
 
   const handleStatutChange = async (next, label) => {
     if (next === "annulee" && !window.confirm(`Confirmer l'annulation de la commande ${commande.reference ?? ""} ?`)) return;
@@ -1323,6 +1334,11 @@ function CommandeFabricantCard({ commande, auth, success, toastError, onChanged 
         {commande.statut === "brouillon" && (
           <button disabled={updating} onClick={handleDelete} style={{ padding: "7px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: updating ? "wait" : "pointer", border: "none", backgroundColor: "#FEF2F2", color: "#DC2626" }}>Supprimer</button>
         )}
+        {commande.statut === "en_transit" && (
+          <button onClick={() => setShowScanCamera(true)} style={{ padding: "7px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", backgroundColor: "#FFFBEB", color: "#B45309", border: "1px solid #FDE68A" }}>
+            Scanner pour réceptionner
+          </button>
+        )}
         <button onClick={handlePrint} style={{ padding: "7px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", backgroundColor: colors.bgSurface, color: colors.text, border: "1px solid var(--border)" }}>Voir le bon de commande</button>
         <button onClick={() => setExpanded((e) => !e)} style={{ padding: "7px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", backgroundColor: "transparent", color: colors.textMuted, border: "none" }}>
           {expanded ? "Masquer l'historique ▲" : "Historique ▾"}
@@ -1330,6 +1346,27 @@ function CommandeFabricantCard({ commande, auth, success, toastError, onChanged 
       </div>
 
       {expanded && <CommandeFabricantHistoriqueInline commandeId={commande.id} />}
+
+      {/* Scan-pour-enregistrer directement depuis la réception d'une commande
+          fabricant — même composant que l'écran Traçabilité isolé (Point 7),
+          pour ne plus obliger un aller-retour entre les deux écrans. */}
+      {showScanCamera && <QrScanner onScan={handleQrScan} onClose={() => setShowScanCamera(false)} />}
+      {showScanModal && (
+        <ModalScanEnregistrer
+          nomInitial={lignes.length === 1 ? lignes[0].medicament_nom : ""}
+          fabricantInitial={commande.fabricants?.nom ?? ""}
+          codeScanne={codeScanne}
+          medicaments={medicaments ?? []}
+          etablissement_id={auth?.etablissement_id}
+          onClose={() => { setShowScanModal(false); setCodeScanne(""); }}
+          onSuccess={(lot, qty, nom) => {
+            setShowScanModal(false);
+            setCodeScanne("");
+            success(`Lot ${lot} créé — ${qty} unités de ${nom} ajoutées à l'entrepôt`);
+            onChanged();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1343,7 +1380,7 @@ const STATUTS_FILTRE = [
   { key: "annulee",    label: "Annulée" },
 ];
 
-function CommandesFabricantTab({ etablissement_id, auth, success, toastError }) {
+function CommandesFabricantTab({ etablissement_id, auth, medicaments, success, toastError }) {
   const [filtreStatut, setFiltreStatut] = useState("");
   const [search, setSearch] = useState("");
   const { data: commandes, loading, error, total, page, setPage, totalPages, refetch } =
@@ -1374,7 +1411,7 @@ function CommandesFabricantTab({ etablissement_id, auth, success, toastError }) 
       )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {commandes.map((c) => <CommandeFabricantCard key={c.id} commande={c} auth={auth} success={success} toastError={toastError} onChanged={refetch} />)}
+        {commandes.map((c) => <CommandeFabricantCard key={c.id} commande={c} auth={auth} medicaments={medicaments} success={success} toastError={toastError} onChanged={refetch} />)}
       </div>
 
       <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
@@ -1501,7 +1538,7 @@ export default function Entrepot() {
       </div>
 
       {tab === "fabricants" && <FabricantsTab etablissement_id={auth?.etablissement_id} success={success} toastError={toastError} />}
-      {tab === "commandes" && <CommandesFabricantTab etablissement_id={auth?.etablissement_id} auth={auth} success={success} toastError={toastError} />}
+      {tab === "commandes" && <CommandesFabricantTab etablissement_id={auth?.etablissement_id} auth={auth} medicaments={medicamentsAll} success={success} toastError={toastError} />}
 
       {tab === "stock" && (
       <>

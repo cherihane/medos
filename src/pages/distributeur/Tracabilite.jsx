@@ -45,9 +45,9 @@ const labelStyle = { fontSize: 12, fontWeight: 600, color: colors.text, display:
 // MedOS, les champs sont pré-remplis (même pattern que le "scan-pour-ajouter"
 // de l'Inventaire pharmacie, via rechercherLotPourPrefill). Un numéro de lot
 // MedOS est généré automatiquement, un par médicament reçu.
-function ModalScanEnregistrer({ nomInitial, codeScanne, medicaments, etablissement_id, onClose, onSuccess }) {
+export function ModalScanEnregistrer({ nomInitial, fabricantInitial, codeScanne, medicaments, etablissement_id, onClose, onSuccess }) {
   const [form, setForm] = useState({
-    nom: nomInitial || "", dosage: "", forme: "", fabricant: "",
+    nom: nomInitial || "", dosage: "", forme: "", fabricant: fabricantInitial || "",
     quantite: "", date_fabrication: "", date_expiration: "",
     prix_unitaire: "", prix_achat: "",
   });
