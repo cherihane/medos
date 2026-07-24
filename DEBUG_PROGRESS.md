@@ -2921,3 +2921,58 @@ Les 3 points de la mission traités dans l'ordre demandé :
 
 Commits : `a7a03e5` (Point 2), `8032c01` (Point 3). Point 1 documenté uniquement (`c4e2920`),
 aucune modification de code appliquée.
+
+# Session 14 (2026-07-24) — Point 1 appliqué : compte refusé désormais bloqué
+
+**Correctif du Point 1 (session 13) explicitement autorisé et appliqué** —
+[src/context/AuthContext.jsx:528](src/context/AuthContext.jsx#L528) :
+
+```diff
+- if (etab?.statut_inscription === "refuse") {
++ if (etab?.statut_inscription === "refusee") {
+```
+
+Un seul caractère changé, aucune autre ligne du fichier touchée (diff vérifié). `CI=true npx
+eslint` propre, `npm run build` sans erreur, suite Jest complète revalidée (`16 passed, 16 total`).
+Déployé en production. Commit `ef34a39`.
+
+**Premier retest (même compte de test, même vrai flux n8n)** : le blocage réel fonctionnait déjà
+(le compte n'atteignait jamais `/distributeur/dashboard`) — mais **le message ne s'affichait pas**,
+exactement le même symptôme que le Point 2 de la session 13 (flash `signIn` → `signOut` qui démonte
+le formulaire avant que `setError(...)` ne s'affiche), simplement jamais corrigé pour le cas
+`refusee` puisque cette branche était du code mort jusqu'à ce correctif. Confirmé par capture
+d'écran : formulaire entièrement réinitialisé, aucun message visible.
+
+**Décision utilisateur** : étendre le correctif déjà en place dans `Login.jsx` (pré-vérification
+via `statut_inscription_par_email`, voir Point 2 session 13) au cas `refusee`, avec exactement le
+même schéma — `AuthContext.jsx` non re-touché.
+
+```diff
++ if (statut === "refusee") {
++   setError("Votre demande d'accès a été refusée. Contactez contact@kelagroup.org pour plus d'informations.");
++   setLoading(false);
++   return;
++ }
+```
+
+`CI=true npx eslint` propre (warnings pré-existants, imports inutilisés déjà présents avant ce
+correctif). `npm run build` sans erreur. Suite Jest complète revalidée : `16 passed, 16 total`.
+Déployé en production. Commit `df4765a`.
+
+**Retest final, de bout en bout, sur le même compte de test refusé** (nouvelle inscription réelle,
+nouveau vrai refus via le webhook n8n de production `refuser-compte`, tentative de connexion
+réelle) :
+- `statut_inscription = "refusee"` confirmé en base après le vrai webhook.
+- **Message "Votre demande d'accès a été refusée. Contactez contact@kelagroup.org pour plus
+  d'informations." affiché en 204 ms.**
+- Formulaire non réinitialisé (email conservé).
+- Aucune redirection vers un dashboard.
+Capture d'écran à l'appui : bandeau d'erreur rouge propre, exactement le comportement attendu.
+Nettoyage effectué (compte de test supprimé).
+
+**Bilan** : les 3 points de la mission (session 13) sont maintenant tous corrigés, déployés et
+vérifiés en conditions réelles avec le vrai flux n8n de production, sans qu'aucune ligne
+d'`AuthContext.jsx` n'ait été modifiée sans autorisation explicite préalable.
+
+Commits session 14 : `ef34a39` (AuthContext.jsx, 1 ligne, autorisé), `df4765a` (extension
+Login.jsx au cas refusee).
