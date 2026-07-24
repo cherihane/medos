@@ -2879,3 +2879,45 @@ Final) toujours fonctionnelle après le correctif — redirection `/distributeur
 `CI=true npx eslint` propre (warnings restants pré-existants, imports inutilisés déjà présents
 avant ce correctif, vérifié). `npm run build` sans erreur. Suite Jest complète revalidée :
 `16 passed, 16 total`. Déployé en production. Commit `a7a03e5`.
+
+## Point 3 — Seuil de l'onglet "Stock entrepôt" unifié avec le seuil réel de l'alerte
+
+**MARCHE (corrigé).** Diagnostic du Point 11 (session 12) confirmé et corrigé : l'onglet "Stock
+entrepôt" de la page Alertes distributeur utilisait le même seuil ratio (≤50% du seuil minimum)
+que les autres écrans "stock bas" du site (pharmacie, fiche client), différent du seuil qui
+déclenche réellement l'alerte en base et l'email (`stock_actuel < stock_minimum`, trigger
+`trg_stock_alert` / Edge Function `check-stock-alert`, sans aucune marge). Un produit à 70-90% de
+son seuil pouvait déjà avoir généré une vraie alerte + un vrai email, tout en restant invisible
+dans cet onglet.
+
+**Corrigé** — nouvelle fonction `statutStockEntrepot()` dans
+[distributeur/Alertes.jsx](src/pages/distributeur/Alertes.jsx), utilisée uniquement par
+`StockEntrepotTab` : reproduit exactement la condition du trigger (`stock_actuel < stock_minimum`
+pour l'inclusion) et la sévérité de `check-stock-alert` (`critique` si `stock_actuel = 0`, `alerte`
+sinon — jamais de "normal" caché par un ratio). L'ancienne fonction `statutStock()` (ratio ≤50%/≤20%)
+reste utilisée telle quelle par l'onglet "Stock clients" (`ClientAlertesCard`) — volontairement non
+touché, hors du périmètre demandé.
+
+**Preuve concrète (Playwright réel, production, après déploiement)** : médicament réel de
+l'entrepôt du distributeur ajusté à 8/10 (80% du seuil — sous le seuil réel, mais **au-dessus** de
+l'ancien seuil d'affichage à 50%). Capture d'écran : le produit apparaît désormais dans l'onglet
+"Stock entrepôt" avec le statut "Alerte", aux côtés d'un second produit à 4/10 (40%, déjà visible
+avant le correctif) — les deux avec la sévérité correcte (aucun des deux à `stock_actuel = 0`, donc
+"Alerte" et non "Critique" pour les deux, cohérent avec la logique de `check-stock-alert`).
+
+`CI=true npx eslint` propre (1 warning pré-existant sans rapport, vérifié). `npm run build` sans
+erreur. Suite Jest complète revalidée : `16 passed, 16 total`. Déployé en production.
+Commit `8032c01`.
+
+## Bilan session 13
+
+Les 3 points de la mission traités dans l'ordre demandé :
+1. **Vérification prioritaire** : bug confirmé en conditions réelles (compte refusé via le vrai
+   flux n8n, jamais bloqué à la connexion) — correctif proposé mais **non appliqué**,
+   `AuthContext.jsx` en attente de confirmation explicite de l'utilisateur.
+2. **Flash visuel avant blocage** : corrigé sans toucher `AuthContext.jsx` (nouvelle RPC +
+   pré-vérification dans `Login.jsx`), déployé et vérifié en conditions réelles.
+3. **Incohérence de seuil Stock entrepôt** : corrigé, déployé et vérifié en conditions réelles.
+
+Commits : `a7a03e5` (Point 2), `8032c01` (Point 3). Point 1 documenté uniquement (`c4e2920`),
+aucune modification de code appliquée.
