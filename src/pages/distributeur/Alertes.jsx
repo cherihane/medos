@@ -20,12 +20,30 @@ function fmt(iso) {
 
 // Mêmes seuils que Alertes.jsx côté pharmacie et FicheClient de Réseau
 // clients — un médicament sous 50% de son seuil minimum est "alerte", sous
-// 20% "critique".
+// 20% "critique". Utilisé pour l'onglet "Stock clients" (Point 3, session 13 :
+// resté volontairement inchangé, seul l'onglet "Stock entrepôt" a été
+// unifié avec le seuil réel — voir statutStockEntrepot ci-dessous).
 function statutStock(m) {
   if (!m.stock_minimum || m.stock_minimum === 0) return "normal";
   const ratio = m.stock_actuel / m.stock_minimum;
   if (ratio <= 0.2) return "critique";
   if (ratio <= 0.5) return "alerte";
+  return "normal";
+}
+
+// Seuil identique à celui qui déclenche réellement l'alerte en base et
+// l'email (trigger trg_stock_alert / Edge Function check-stock-alert :
+// stock_actuel < stock_minimum, sans ratio de marge) — un produit visible
+// dans l'onglet "Stock entrepôt" correspond désormais exactement à un
+// produit qui a généré ou générerait une alerte email. Avant ce correctif,
+// ce tableau utilisait le même seuil ratio que statutStock() ci-dessus,
+// masquant des alertes déjà actives en base (ex: 70% du seuil déjà en
+// alerte email, mais invisible ici avant 50%) — voir DEBUG_PROGRESS.md,
+// Point 11 session 12 / Point 3 session 13.
+function statutStockEntrepot(m) {
+  if (!m.stock_minimum || m.stock_minimum === 0) return "normal";
+  if (m.stock_actuel === 0) return "critique";
+  if (m.stock_actuel < m.stock_minimum) return "alerte";
   return "normal";
 }
 
@@ -49,7 +67,7 @@ function StockEntrepotTab({ etablissement_id }) {
 
   const alertes = useMemo(() => {
     return medicaments
-      .map((m) => ({ ...m, statut: statutStock(m) }))
+      .map((m) => ({ ...m, statut: statutStockEntrepot(m) }))
       .filter((m) => m.statut !== "normal")
       .sort((a, b) => (a.stock_actuel / (a.stock_minimum || 1)) - (b.stock_actuel / (b.stock_minimum || 1)));
   }, [medicaments]);
