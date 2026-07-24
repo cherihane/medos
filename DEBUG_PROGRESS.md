@@ -2473,3 +2473,36 @@ Nettoyage : commande, lignes, fiche médicament et fabricant de test supprimés,
 
 `CI=true npx eslint` propre. `npm run build` sans erreur. Suite Jest complète revalidée :
 `16 passed, 16 total` (aucune régression).
+
+## Point 7 — Scan-pour-enregistrer accessible à la réception d'une commande fabricant
+
+**Diagnostic** : le scan-pour-enregistrer (`ModalScanEnregistrer`, Vague 1) n'existait que dans
+l'écran Traçacilité isolé (`src/pages/distributeur/Tracabilite.jsx`) — aucun lien vers cette
+fonctionnalité depuis l'écran de réception d'une commande fabricant (`Entrepôt.jsx`, onglet
+"Commandes"). Pour scanner un produit reçu d'un fabricant et générer un lot MedOS certifié,
+l'utilisatrice devait quitter la commande, aller sur Traçabilité, scanner, puis revenir — exactement
+l'aller-retour entre écrans que la mission demande d'éviter.
+
+**Corrigé** : `ModalScanEnregistrer` exporté depuis `Tracabilite.jsx` (même pattern de composant
+partagé que `NouvelleLivraisonModal`), avec un nouveau prop optionnel `fabricantInitial` (préremplit
+le champ fabricant — sans casser l'appel existant dans `Tracabilite.jsx`, qui ne le passe pas). Un
+bouton **"Scanner pour réceptionner"** apparaît maintenant directement sur chaque
+`CommandeFabricantCard` dont le statut est `"en_transit"` (exactement les commandes pour lesquelles
+"Marquer reçue" est déjà proposé) — ouvre la caméra (`QrScanner`, déjà existant) puis le même
+formulaire de réception que Traçabilité, avec le fabricant déjà pré-rempli depuis la commande en
+cours (`commande.fabricants?.nom`) et, si la commande n'a qu'une seule ligne, le nom du médicament
+aussi. Le scan génère un vrai lot MedOS certifié (traçabilité complète), contrairement au bouton
+"Marquer reçue" qui ne fait qu'incrémenter le stock sans lot — les deux mécanismes restent
+indépendants et complémentaires, l'un pour la traçabilité produit par produit, l'autre pour la
+simple mise à jour de statut de la commande.
+
+**Preuve concrète (script authentifié, base de production, nettoyé après coup)** : connecté en tant
+que Poto-Poto. Fabricant + commande "en_transit" réels créés (contexte où le bouton est visible).
+Reproduit exactement `ModalScanEnregistrer.handleSubmit` tel qu'il serait déclenché depuis ce
+bouton (`fabricantInitial` = nom du fabricant de la commande) : fiche médicament créée, lot MedOS
+généré, stock incrémenté. Vérifié que le fabricant du lot ET de la fiche médicament correspondent
+bien à celui de la commande d'origine (`"Test Point7 Fabricant"`), et que le stock final est correct
+(15 unités). Nettoyage : lot, fiche médicament, commande et fabricant de test supprimés.
+
+`CI=true npx eslint` propre sur les 2 fichiers modifiés. `npm run build` sans erreur. Suite Jest
+complète revalidée : `16 passed, 16 total` (aucune régression).
