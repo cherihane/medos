@@ -525,7 +525,7 @@ export function AuthProvider({ children }) {
         );
       }
 
-      if (etab?.statut_inscription === "refuse") {
+      if (etab?.statut_inscription === "refusee") {
         await supabase.auth.signOut();
         throw new Error(
           "Votre demande d'accès a été refusée. Contactez contact@kelagroup.org pour plus d'informations.",
