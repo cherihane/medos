@@ -2760,3 +2760,79 @@ supplémentaire identifié par lecture de code dans `AuthContext.jsx` (comparais
 "refusee"), non corrigé car hors du fichier autorisé, à vérifier séparément si besoin.
 
 Commits : `41efb05` (bug visuel + nom générique dans les emails, déployé en production).
+
+# Session 13 (2026-07-24) — Vérification prioritaire : compte refusé, bug AuthContext.jsx
+
+**Mission** : vérifier EN CONDITIONS RÉELLES (pas par lecture de code) le bug suspecté à la fin de
+la session 12 — un compte refusé pourrait ne jamais être bloqué à la connexion. Créer un compte de
+test, le faire refuser via le **vrai** flux n8n (pas une simulation), tenter une vraie connexion.
+**Règle absolue respectée : AuthContext.jsx n'a pas été modifié.** Le correctif proposé ci-dessous
+attend une confirmation explicite avant application.
+
+## BUG CONFIRMÉ EN CONDITIONS RÉELLES — gravité haute
+
+**Preuve concrète, de bout en bout, sur production** :
+1. Compte distributeur créé de zéro via le vrai formulaire d'inscription
+   (`cherihaneadam123+refuseaudit@gmail.com`, "Distributeur Refuse Audit") — ligne `etablissements`
+   confirmée en base avec `statut_inscription='en_attente'`.
+2. **Refus déclenché via le vrai workflow n8n de production** ("MedOS — Onboarding Etablissements
+   v2", id `jtCI9vFeyh6SCm34`, actif) — appel réel du webhook `Webhook Refuser`
+   (path `refuser-compte`, celui-là même que le bouton "Refuser" du vrai email admin appelle),
+   avec les query params `id`/`email`/`nom` de ce compte réel. Réponse HTTP 200 reçue :
+   `"Demande refusee"` / "L'etablissement a ete informe par email."
+3. **Vérifié en base après le vrai webhook** : `statut_inscription = "refusee"` **exactement**
+   (orthographe complète, conforme à la contrainte `CHECK (statut_inscription IN ('en_attente',
+   'validee', 'refusee'))`) — le nœud n8n `Mettre a jour statut refuse` écrit la bonne valeur, sans
+   erreur de ce côté-là.
+4. **Tentative de connexion réelle** (Playwright, formulaire de connexion, ce compte, ce mot de
+   passe) : **le compte accède intégralement au Dashboard Distributeur** — sidebar complète,
+   toutes les pages accessibles, aucun message de refus affiché, aucun blocage. Capture d'écran à
+   l'appui : "Dashboard Distributeur — Vue d'ensemble — MedDistrib Congo", utilisateur connecté
+   "Distributeur Refuse A[udit]", pleinement fonctionnel.
+
+**Cause exacte, ligne par ligne** — [src/context/AuthContext.jsx:528](src/context/AuthContext.jsx#L528) :
+
+```js
+if (etab?.statut_inscription === "refuse") {   // ligne 528 — "refuse" n'existe dans AUCUN état réel
+  await supabase.auth.signOut();
+  throw new Error(
+    "Votre demande d'accès a été refusée. Contactez contact@kelagroup.org pour plus d'informations.",
+  );
+}
+```
+
+La contrainte SQL et le vrai flux n8n de production utilisent tous les deux `"refusee"` (avec le
+"e" final). Cette comparaison ne matche donc **jamais** en conditions réelles — la condition est
+du code mort qui ne s'exécute jamais, quel que soit le compte testé. Un compte refusé traverse ce
+bloc sans être intercepté et obtient une session pleinement active, exactement comme un compte
+validé.
+
+**Correctif précis proposé (NON APPLIQUÉ — attend confirmation explicite)** :
+
+```diff
+- if (etab?.statut_inscription === "refuse") {
++ if (etab?.statut_inscription === "refusee") {
+```
+
+Changement d'un seul caractère, à la ligne 528 de `AuthContext.jsx`, dans le bloc déjà cité
+ci-dessus. Aucune autre ligne de ce fichier n'a besoin de changer pour ce point précis. Ne touche
+à aucune des fonctions protégées (`setLoading`, `buildAuthBase`, `enrichWithEtablissement`,
+`mountedRef`, `getSession`, `onAuthStateChange`) — uniquement cette comparaison de chaîne dans
+`login()`.
+
+**Nettoyage** : compte de test et ligne `etablissements` supprimés après vérification.
+
+**Bugs de la même famille repérés en chemin, hors périmètre de cette vérification (non testés en
+conditions réelles, non corrigés)** — trouvés en inspectant le flux n8n réel pour préparer ce test :
+- `supabase/functions/send-activation-email/index.ts` (lignes ~330-331) compare aussi à `"refuse"`
+  (sans le "e") pour décider d'envoyer l'email de refus — probablement la même faute de frappe,
+  même symptôme potentiel (email de refus jamais envoyé par ce chemin-là), mais ce fichier n'est
+  pas `AuthContext.jsx` et n'est pas concerné par la règle absolue.
+- `supabase/migrations/20240112000000_inscription_email_trigger.sql` (trigger
+  `trg_inscription_email`) compare également `NEW.statut_inscription = 'refuse'`.
+- Le lien "Refuser" du bouton dans `supabase/functions/send-inscription-email/index.ts` (ouvre
+  l'éditeur SQL Supabase pré-rempli) écrit lui aussi `'refuse'` — **mais ce chemin manuel n'est
+  probablement plus le chemin réellement utilisé**, le vrai flux de refus passe par le webhook n8n
+  testé ci-dessus, qui écrit correctement `'refusee'`.
+Ces trois points n'ont pas été vérifiés en conditions réelles dans cette session — à traiter
+séparément si l'utilisateur le souhaite.
