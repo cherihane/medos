@@ -381,7 +381,7 @@ function ModalReception({ medicaments, etablissement_id, onClose, onSuccess }) {
 }
 
 // ── Modal Nouvelle commande fabricant (bon de commande multi-médicaments) ──────
-const LIGNE_VIDE = () => ({ id: Date.now() + Math.random(), medicament_id: "", quantite: "" });
+const LIGNE_VIDE = () => ({ id: Date.now() + Math.random(), medicament_id: "", nom: "", dosage: "", quantite: "" });
 
 function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id, auth, prefillLignes, onClose, onSuccess }) {
   const { data: fabricants } = useFabricants();
@@ -389,7 +389,10 @@ function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id
   const [header, setHeader] = useState({ email_fabricant: "", fabricant: "", telephone: "", date_livraison: "", notes: "" });
   const [lignes, setLignes] = useState(() =>
     prefillLignes && prefillLignes.length > 0
-      ? prefillLignes.map((l) => ({ id: Date.now() + Math.random(), medicament_id: l.medicament_id, quantite: String(l.quantite) }))
+      ? prefillLignes.map((l) => {
+          const med = medicaments.find((m) => m.id === l.medicament_id);
+          return { id: Date.now() + Math.random(), medicament_id: l.medicament_id, nom: med?.nom ?? "", dosage: med?.dosage ?? "", quantite: String(l.quantite) };
+        })
       : [LIGNE_VIDE()]
   );
   const [saving, setSaving] = useState(false);
@@ -408,7 +411,15 @@ function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id
   const addLigne  = () => setLignes((ls) => [...ls, LIGNE_VIDE()]);
   const delLigne  = (id) => setLignes((ls) => ls.filter((l) => l.id !== id));
 
-  const totalRefs = lignes.filter((l) => l.medicament_id).length;
+  // Un médicament déjà au catalogue est retrouvé par nom (insensible à la
+  // casse, même logique que ModalReception) — sinon la ligne commande un
+  // produit hors entrepôt : elle ne rejoint le catalogue qu'à la réception
+  // (voir CommandeFabricantCard.handleStatutChange), jamais avant, pour ne
+  // pas créer une fiche pour un produit jamais livré si la commande échoue.
+  const resolveMedicament = (nom) =>
+    medicaments.find((m) => m.nom.trim().toLowerCase() === nom.trim().toLowerCase());
+
+  const totalRefs = lignes.filter((l) => l.nom.trim()).length;
   const totalQty  = lignes.reduce((s, l) => s + (parseInt(l.quantite, 10) || 0), 0);
 
   const handleSubmit = async () => {
@@ -417,7 +428,7 @@ function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id
     if (!header.email_fabricant.trim() || !header.email_fabricant.includes("@")) {
       setErr("Email du fabricant invalide."); return;
     }
-    const lignesValides = lignes.filter((l) => l.medicament_id && parseInt(l.quantite, 10) > 0);
+    const lignesValides = lignes.filter((l) => l.nom.trim() && parseInt(l.quantite, 10) > 0);
     if (lignesValides.length === 0) {
       setErr("Ajoutez au moins un médicament avec une quantité valide."); return;
     }
@@ -425,9 +436,22 @@ function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id
     setSaving(true);
     try {
       const lignesPayload = lignesValides.map((l) => {
-        const med = medicaments.find((m) => m.id === l.medicament_id);
-        return { medicament_id: l.medicament_id, medicamentNom: med?.nom ?? "", quantite: parseInt(l.quantite, 10) };
+        const existant = resolveMedicament(l.nom);
+        const dosage = l.dosage.trim() || null;
+        return {
+          medicament_id: existant?.id ?? null,
+          medicamentNom: existant ? existant.nom : l.nom.trim(),
+          dosage: existant ? null : dosage,
+          quantite: parseInt(l.quantite, 10),
+        };
       });
+      // Le bon de commande / email n'a qu'un seul champ nom (pas de colonne
+      // dosage dédiée) — le dosage saisi y est donc affiché en suffixe,
+      // séparément du nom plat conservé en base (medicament_nom) pour ne pas
+      // le dupliquer plus tard dans la fiche médicament créée à la réception.
+      const lignesAffichage = lignesPayload.map((l) =>
+        l.dosage ? { ...l, medicamentNom: `${l.medicamentNom} ${l.dosage}` } : l
+      );
 
       // Résout le fabricant : contact existant sélectionné (ou retrouvé par
       // email), sinon nouvelle fiche créée à la volée — réutilisable pour les
@@ -466,13 +490,14 @@ function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id
         etablissement_id: etablissement_id ?? null,
         medicament_id:    l.medicament_id,
         medicament_nom:   l.medicamentNom,
+        dosage:           l.dosage,
         quantite:         l.quantite,
       })));
 
       const etab = await fetchEtabFromAuth(auth);
       const pieceJointe = await genererPieceJointeBonCommandeFabricant({
         fabricantNom: header.fabricant.trim(), emailFabricant: header.email_fabricant.trim(),
-        lignes: lignesPayload, dateLivraison: header.date_livraison, notes: header.notes.trim(),
+        lignes: lignesAffichage, dateLivraison: header.date_livraison, notes: header.notes.trim(),
         etabNom: etab.nom, reference,
       });
 
@@ -485,7 +510,7 @@ function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id
         await sendCommandeEmail({
           emailFabricant: header.email_fabricant.trim(),
           fabricant:      header.fabricant.trim(),
-          lignes:         lignesPayload,
+          lignes:         lignesAffichage,
           dateLivraison:  header.date_livraison,
           notes:          header.notes.trim(),
           distributeur:   distributeurNom,
@@ -576,18 +601,32 @@ function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id
         {/* ── Lignes défilables ── */}
         <div style={{ overflowY: "auto", flexGrow: 1, padding: "0 28px", borderLeft: "none" }}>
           <div style={{ border: "1px solid var(--border)", borderTop: "none", borderRadius: "0 0 8px 8px", overflow: "hidden" }}>
-            {lignes.map((l, i) => (
-              <div key={l.id} style={{ display: "grid", gridTemplateColumns: "1fr 130px 36px", gap: 8, padding: "8px 12px", borderBottom: i < lignes.length - 1 ? "1px solid var(--border-light)" : "none", alignItems: "center", backgroundColor: i % 2 === 0 ? "white" : "#FAFAFA" }}>
-                <select
-                  value={l.medicament_id}
-                  onChange={(e) => setLigne(l.id, "medicament_id", e.target.value)}
-                  style={{ ...inputStyle, fontSize: 12, padding: "7px 10px", backgroundColor: colors.bgCard }}
-                >
-                  <option value="">— Médicament —</option>
-                  {medicaments.map((m) => (
-                    <option key={m.id} value={m.id}>{m.nom}{m.dosage ? ` ${m.dosage}` : ""}</option>
-                  ))}
-                </select>
+            {lignes.map((l, i) => {
+              const existant = l.nom.trim() ? resolveMedicament(l.nom) : null;
+              return (
+              <div key={l.id} style={{ display: "grid", gridTemplateColumns: "1fr 130px 36px", gap: 8, padding: "8px 12px", borderBottom: i < lignes.length - 1 ? "1px solid var(--border-light)" : "none", alignItems: "start", backgroundColor: i % 2 === 0 ? "white" : "#FAFAFA" }}>
+                <div>
+                  <input
+                    value={l.nom}
+                    onChange={(e) => setLigne(l.id, "nom", e.target.value)}
+                    placeholder="Médicament — nouveau ou déjà à l'entrepôt"
+                    list="entrepot-fabricant-medicaments-existants"
+                    style={{ ...inputStyle, fontSize: 12, padding: "7px 10px", backgroundColor: colors.bgCard }}
+                  />
+                  {l.nom.trim() && (
+                    <div style={{ fontSize: 10, color: existant ? "#2563EB" : "#16A34A", marginTop: 3 }}>
+                      {existant ? "Déjà à l'entrepôt." : "Hors entrepôt — ajouté au catalogue à la réception."}
+                    </div>
+                  )}
+                  {l.nom.trim() && !existant && (
+                    <input
+                      value={l.dosage}
+                      onChange={(e) => setLigne(l.id, "dosage", e.target.value)}
+                      placeholder="Dosage (ex: 500mg)"
+                      style={{ ...inputStyle, fontSize: 12, padding: "6px 10px", marginTop: 4 }}
+                    />
+                  )}
+                </div>
                 <input
                   type="number" min="1"
                   value={l.quantite}
@@ -602,8 +641,12 @@ function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id
                   title="Supprimer cette ligne"
                 >×</button>
               </div>
-            ))}
+              );
+            })}
           </div>
+          <datalist id="entrepot-fabricant-medicaments-existants">
+            {medicaments.map((m) => <option key={m.id} value={m.nom} />)}
+          </datalist>
 
           <button
             onClick={addLigne}
@@ -638,11 +681,12 @@ function ModalCommandeFabricant({ medicaments, distributeurNom, etablissement_id
             </button>
             <button
               onClick={async () => {
-                const lignesValides = lignes.filter((l) => l.medicament_id && parseInt(l.quantite, 10) > 0);
+                const lignesValides = lignes.filter((l) => l.nom.trim() && parseInt(l.quantite, 10) > 0);
                 if (lignesValides.length === 0) return;
                 const lignesPrint = lignesValides.map((l) => {
-                  const med = medicaments.find((m) => m.id === l.medicament_id);
-                  return { medicamentNom: med?.nom ?? "—", quantite: parseInt(l.quantite, 10) };
+                  const existant = resolveMedicament(l.nom);
+                  const dosage = l.dosage.trim() || null;
+                  return { medicamentNom: existant ? existant.nom : `${l.nom.trim()}${dosage ? " " + dosage : ""}`, quantite: parseInt(l.quantite, 10) };
                 });
                 const etab = await fetchEtabFromAuth(auth);
                 printBonCommandeFabricant({ header, lignes: lignesPrint, etab });
@@ -1175,7 +1219,8 @@ function CommandeFabricantCard({ commande, auth, success, toastError, onChanged 
   const s = STATUT_STYLE[commande.statut] || { bg: "#F3F4F6", color: colors.textSecondary, label: commande.statut };
   const actions = STATUT_ACTIONS[commande.statut] || [];
   const lignes = commande.commande_lignes ?? [];
-  const medicamentLabel = lignes.length === 1 ? `${lignes[0].medicament_nom} × ${lignes[0].quantite}` : `${lignes.length} produits`;
+  const ligneNom = (l) => `${l.medicament_nom}${l.dosage ? ` ${l.dosage}` : ""}`;
+  const medicamentLabel = lignes.length === 1 ? `${ligneNom(lignes[0])} × ${lignes[0].quantite}` : `${lignes.length} produits`;
 
   const handleStatutChange = async (next, label) => {
     if (next === "annulee" && !window.confirm(`Confirmer l'annulation de la commande ${commande.reference ?? ""} ?`)) return;
@@ -1184,9 +1229,24 @@ function CommandeFabricantCard({ commande, auth, success, toastError, onChanged 
       // "Reçue" incrémente le stock de l'entrepôt pour chaque ligne — le
       // fabricant est un tiers externe, il n'y a pas de flux `livraisons` côté
       // client pour cette réception, contrairement aux clients MedOS.
+      // Une ligne "hors entrepôt" (medicament_id nul, voir ModalCommandeFabricant)
+      // rejoint le catalogue seulement maintenant — jamais avant, pour ne pas
+      // créer de fiche pour un produit jamais reçu si la commande est annulée.
       if (next === "livree") {
         for (const l of lignes) {
-          if (l.medicament_id) await incrementStock(l.medicament_id, l.quantite);
+          let medicamentId = l.medicament_id;
+          if (!medicamentId) {
+            const nouveau = await insertMedicament({
+              nom: l.medicament_nom,
+              dosage: l.dosage || null,
+              fabricant: commande.fabricants?.nom || null,
+              etablissement_id: auth?.etablissement_id,
+              stock_actuel: 0,
+              stock_minimum: 10,
+            });
+            medicamentId = nouveau.id;
+          }
+          await incrementStock(medicamentId, l.quantite);
         }
       }
       await updateCommande(commande.id, { statut: next });
@@ -1215,7 +1275,7 @@ function CommandeFabricantCard({ commande, auth, success, toastError, onChanged 
 
   const handlePrint = () => {
     const header = { fabricant: commande.fabricants?.nom, email_fabricant: commande.fabricants?.email, date_livraison: commande.date_livraison_prevue, notes: commande.notes };
-    fetchEtabFromAuth(auth).then((etab) => printBonCommandeFabricant({ header, lignes: lignes.map((l) => ({ medicamentNom: l.medicament_nom, quantite: l.quantite })), etab }));
+    fetchEtabFromAuth(auth).then((etab) => printBonCommandeFabricant({ header, lignes: lignes.map((l) => ({ medicamentNom: ligneNom(l), quantite: l.quantite })), etab }));
   };
 
   return (
@@ -1242,7 +1302,7 @@ function CommandeFabricantCard({ commande, auth, success, toastError, onChanged 
         <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 3 }}>
           {lignes.map((l) => (
             <div key={l.id} style={{ fontSize: 12, color: colors.text, display: "flex", justifyContent: "space-between", padding: "4px 10px", backgroundColor: colors.bgSurface, borderRadius: 6 }}>
-              <span>{l.medicament_nom}</span>
+              <span>{ligneNom(l)}{!l.medicament_id && <span style={{ marginLeft: 6, fontSize: 10, color: "#2563EB" }}>(hors entrepôt)</span>}</span>
               <span style={{ fontWeight: 700 }}>× {l.quantite}</span>
             </div>
           ))}
