@@ -367,15 +367,25 @@ export function useDistributeurClients() {
       .select(`
         id, source, created_at,
         nom_manuel, adresse_manuel, ville_manuel, contact_manuel, telephone_manuel, email_manuel,
+        contact_nom, horaires_ouverture, numero_licence, notes_internes, type_etablissement_precis,
         client:client_etablissement_id ( id, nom, ville, type, email, telephone, actif, derniere_connexion )
       `)
       .order("created_at", { ascending: false })
   );
+  // Annotations de la relation (Point 8) — communes aux clients MedOS et
+  // manuels, éditables depuis Clients.jsx quel que soit le type de client.
+  const fiche = (r) => ({
+    contact_nom:               r.contact_nom || r.contact_manuel || "",
+    horaires_ouverture:        r.horaires_ouverture || "",
+    numero_licence:            r.numero_licence || "",
+    notes_internes:            r.notes_internes || "",
+    type_etablissement_precis: r.type_etablissement_precis || "",
+  });
   return {
     ...result,
     data: result.data.map((r) => ({
       ...r,
-      client: r.client ? { ...r.client, relationId: r.id } : {
+      client: r.client ? { ...r.client, relationId: r.id, ...fiche(r) } : {
         id: r.id,
         relationId: r.id,
         nom: r.nom_manuel,
@@ -384,10 +394,10 @@ export function useDistributeurClients() {
         type: "manuel",
         email: r.email_manuel,
         telephone: r.telephone_manuel,
-        contact_nom: r.contact_manuel,
         actif: true,
         derniere_connexion: null,
         estManuel: true,
+        ...fiche(r),
       },
     })),
   };

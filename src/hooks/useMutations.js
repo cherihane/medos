@@ -221,6 +221,10 @@ export async function insertDistributeurClient(fields) {
   return run(supabase.from("distributeur_clients").insert({ ...fields, source: "manuel" }).select().single());
 }
 
+export async function updateDistributeurClient(id, fields) {
+  return run(supabase.from("distributeur_clients").update(fields).eq("id", id).select().single());
+}
+
 // Recherche exacte par email (pas un annuaire parcourable) — ne renvoie un
 // résultat que pour un établissement pharmacie/hôpital/clinique existant.
 export async function rechercherClientParEmail(email) {
