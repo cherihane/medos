@@ -2836,3 +2836,46 @@ conditions réelles, non corrigés)** — trouvés en inspectant le flux n8n ré
   testé ci-dessus, qui écrit correctement `'refusee'`.
 Ces trois points n'ont pas été vérifiés en conditions réelles dans cette session — à traiter
 séparément si l'utilisateur le souhaite.
+
+## Point 2 — Flash visuel avant blocage (compte en_attente) — corrigé SANS toucher AuthContext.jsx
+
+**MARCHE (corrigé).** Cause exacte (voir Point 2 de la session 12) : `Login.jsx` appelait
+`login()` (AuthContext.jsx) qui exécute `supabase.auth.signInWithPassword()` en premier — succès
+immédiat, session active créée, `onAuthStateChange` (SIGNED_IN) bascule brièvement le routing —
+PUIS le code vérifie `statut_inscription` et appelle `signOut()` (SIGNED_OUT), démontant le
+formulaire de connexion (avec son message d'erreur pas encore affiché) et en remontant un neuf,
+vidé.
+
+**Correctif appliqué** — ne touche à aucune ligne d'`AuthContext.jsx`, ni à aucune des fonctions
+protégées (`setLoading`, `buildAuthBase`, `enrichWithEtablissement`, `mountedRef`, `getSession`,
+`onAuthStateChange`) :
+1. Nouvelle fonction `SECURITY DEFINER` `statut_inscription_par_email(p_email)` (migration
+   [20260724c_statut_inscription_par_email_rpc.sql](supabase/migrations/20260724c_statut_inscription_par_email_rpc.sql)) —
+   même schéma que `email_etablissement_deja_utilise()` déjà existante : un utilisateur anonyme ne
+   peut pas lire `etablissements` directement (RLS réservée à `authenticated`), cette fonction
+   n'expose que le strict nécessaire (le statut seul, jamais les données de l'établissement).
+2. `Login.jsx` : appel de cette RPC **avant** tout appel à `login()`. Si `statut === "en_attente"`,
+   affiche l'erreur immédiatement et retourne, **sans jamais appeler `signInWithPassword()`** —
+   aucune session n'est créée, donc aucun flash. Best-effort : si la RPC échoue (réseau), le flux
+   normal continue sans bloquer — `AuthContext.jsx` reste le filet de sécurité final, inchangé.
+
+Volontairement scopé au seul cas `en_attente` (objet de ce point) — le cas `refusee` reste
+entièrement dépendant du correctif du Point 1 (non appliqué, en attente de confirmation), pour ne
+pas mélanger les deux décisions.
+
+**Preuve concrète (Playwright réel, production, après déploiement)** : nouveau compte créé de zéro
+via le vrai formulaire d'inscription, tentative de connexion réelle immédiatement après :
+- Message "Votre compte est en cours de validation..." affiché en **207 ms**.
+- Formulaire **non réinitialisé** (email et mot de passe toujours remplis, rôle toujours
+  "Distributeur").
+- **Zéro appel réseau** vers `/auth/v1/token` (confirmé via l'écoute des requêtes réseau du
+  navigateur) — preuve que `signInWithPassword()` n'est jamais invoqué dans ce cas.
+- Pas de redirection vers un dashboard.
+- Capture d'écran à l'appui : bandeau d'erreur rouge propre, formulaire intact.
+
+**Non-régression vérifiée** : connexion normale avec un compte déjà validé (Distributeur Audit
+Final) toujours fonctionnelle après le correctif — redirection `/distributeur/dashboard` confirmée.
+
+`CI=true npx eslint` propre (warnings restants pré-existants, imports inutilisés déjà présents
+avant ce correctif, vérifié). `npm run build` sans erreur. Suite Jest complète revalidée :
+`16 passed, 16 total`. Déployé en production. Commit `a7a03e5`.
