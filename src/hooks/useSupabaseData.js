@@ -160,7 +160,7 @@ export function useCommandesFabricantPaginated(etablissement_id = null, pageSize
       id, reference, statut, date_commande, date_livraison_prevue, montant_total, notes,
       email_statut, email_erreur,
       fabricants ( id, nom, telephone, email ),
-      commande_lignes ( id, medicament_id, medicament_nom, quantite, prix_unitaire )
+      commande_lignes ( id, medicament_id, medicament_nom, dosage, quantite, prix_unitaire )
     `, { count: "exact" }).not("fabricant_id", "is", null).order("date_commande", { ascending: false });
     if (etablissement_id) q = q.eq("etablissement_id", etablissement_id);
     if (statut) q = q.eq("statut", statut);

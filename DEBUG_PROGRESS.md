@@ -2426,3 +2426,50 @@ explicite de ne pas retester si déjà prouvé).
 `CI=true npx eslint` propre sur les 7 fichiers modifiés. `npm run build` sans erreur. Suite Jest
 complète revalidée après le correctif du piège de double-toast : `16 passed, 16 total` (aucune
 régression).
+
+## Point 6 — Médicament hors entrepôt dans une commande fabricant
+
+**Diagnostic** : `ModalCommandeFabricant` (Entrepôt.jsx) n'offrait qu'un `<select>` limité aux
+médicaments déjà dans l'entrepôt pour chaque ligne — impossible de commander un produit jamais reçu
+avant. Signe que ce cas était déjà anticipé ailleurs dans le code : `CommandeFabricantCard.
+handleStatutChange` avait déjà une garde `if (l.medicament_id) await incrementStock(...)` à la
+réception, du code mort puisque le formulaire ne pouvait jamais produire une ligne sans
+`medicament_id`. La colonne `commande_lignes.medicament_id` est d'ailleurs nullable depuis l'origine
+(`medicament_nom`, elle, ne l'est pas) — le schéma permettait déjà ce cas, seul le formulaire le
+bloquait.
+
+**Corrigé** :
+1. Migration [20260724_commande_lignes_dosage.sql](supabase/migrations/20260724_commande_lignes_dosage.sql) —
+   ajoute `commande_lignes.dosage` (text, nullable). Le fabricant n'a pas besoin d'un champ dédié par
+   ligne : c'est déjà celui de l'en-tête de la commande.
+2. `ModalCommandeFabricant` : chaque ligne passe d'un `<select>` figé à un champ texte libre avec
+   `<datalist>` (même pattern que `ModalReception`, déjà existant pour la réception manuelle) —
+   retrouve automatiquement un médicament déjà au catalogue par nom (insensible à la casse), sinon
+   révèle un champ "Dosage" et affiche "Hors entrepôt — ajouté au catalogue à la réception."
+3. **Important, pour éviter de polluer l'entrepôt** : la fiche médicament n'est PAS créée à la
+   commande — seulement `medicament_nom`/`dosage` sont enregistrés sur la ligne, `medicament_id`
+   reste `null`. Si la commande est annulée, aucune fiche fantôme ne traîne dans le catalogue.
+4. `CommandeFabricantCard.handleStatutChange` (passage à "livree") : pour chaque ligne sans
+   `medicament_id`, une vraie fiche est créée maintenant (`insertMedicament`, `stock_actuel: 0`,
+   fabricant = celui de la commande) puis le stock incrémenté normalement — exactement le même
+   enchaînement que `ModalReception` pour un produit jamais vu.
+5. **Bug de duplication évité en cours de route** : le nom affiché sur le bon de commande/email
+   (un seul champ, pas de colonne dosage dédiée côté PDF) doit inclure le dosage en suffixe pour
+   rester informatif pour le fabricant — mais `commande_lignes.medicament_nom` doit lui rester le
+   nom PLAT, sinon la fiche créée à la réception aurait fini avec `nom = "Amoxicilline 500mg"` ET
+   `dosage = "500mg"`, doublant l'affichage partout ailleurs (`"Amoxicilline 500mg 500mg"`). Séparé
+   en deux tableaux distincts : `lignesPayload` (nom plat, pour la base) et `lignesAffichage` (nom +
+   dosage combinés, pour le PDF/email uniquement).
+
+**Preuve concrète (script authentifié, base de production, nettoyé après coup)** : connecté en tant
+que Poto-Poto. Commande créée avec 2 lignes : une sur un médicament déjà au catalogue
+("Ceftriaxone 1g" × 5) et une hors entrepôt ("Test Point6 Médicament Hors Entrepôt" 250mg × 8,
+`medicament_id` nul). Confirmé qu'aucune fiche médicament n'existe pour le nouveau produit avant
+réception. Réception simulée (passage "livree", reproduisant exactement la logique de
+`handleStatutChange`) : une fiche est créée avec `nom="Test Point6 Médicament Hors Entrepôt"`,
+`dosage="250mg"` (pas dupliqué dans le nom), `fabricant="Test Point6 Fabricant"`, `stock_actuel=8`
+(pas 0) — et le stock du médicament déjà existant est bien incrémenté en parallèle (160 → 165).
+Nettoyage : commande, lignes, fiche médicament et fabricant de test supprimés, stock restitué.
+
+`CI=true npx eslint` propre. `npm run build` sans erreur. Suite Jest complète revalidée :
+`16 passed, 16 total` (aucune régression).
