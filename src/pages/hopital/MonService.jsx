@@ -27,6 +27,14 @@ function fmtDate(iso) {
   return new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" });
 }
 
+// Format un Date en chaine "locale naive" (YYYY-MM-DDTHH:mm) pour les inputs
+// datetime-local — contrairement à toISOString() (toujours en UTC), ceci
+// respecte l'heure murale de l'utilisateur, comme l'attend ce type d'input.
+function toLocalDatetimeValue(date) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 function tempsRestantPerfusion(heure_fin_prevue) {
   if (!heure_fin_prevue) return null;
   const diff = Math.round((new Date(heure_fin_prevue) - Date.now()) / 60000);
@@ -142,7 +150,7 @@ function ModalNote({ hospi, auth, onClose, onSaved }) {
         etablissement_id: auth?.etablissement_id ?? null,
         auteur: auth?.user?.email ?? "",
         contenu: contenu.trim(),
-        type: "transmission_infirmiere",
+        type: "transmission",
       });
       onSaved(); onClose();
     } catch (e) { showError(e.message); }
@@ -170,11 +178,10 @@ function ModalNote({ hospi, auth, onClose, onSaved }) {
 }
 
 // ── Modal poser perfusion ──────────────────────────────────────────────────────
-function ModalPerfusion({ hospi, auth, onClose, onSaved }) {
-  const { error: showError } = useToast();
+function ModalPerfusion({ hospi, auth, onClose, onSaved, showError }) {
   const [form, setForm] = useState({
     type_solute: "Ringer Lactate", volume_ml: "", debit_ml_h: "",
-    heure_debut: new Date().toISOString().slice(0, 16),
+    heure_debut: toLocalDatetimeValue(new Date()),
     heure_fin_prevue: "", notes: "",
   });
   const [saving, setSaving] = useState(false);
@@ -184,7 +191,7 @@ function ModalPerfusion({ hospi, auth, onClose, onSaved }) {
     if (form.volume_ml && form.debit_ml_h && form.heure_debut) {
       const dureeHeures = Number(form.volume_ml) / Number(form.debit_ml_h);
       const fin = new Date(new Date(form.heure_debut).getTime() + dureeHeures * 3600000);
-      setForm((f) => ({ ...f, heure_fin_prevue: fin.toISOString().slice(0, 16) }));
+      setForm((f) => ({ ...f, heure_fin_prevue: toLocalDatetimeValue(fin) }));
     }
   }, [form.volume_ml, form.debit_ml_h, form.heure_debut]); // eslint-disable-line
 
@@ -265,8 +272,7 @@ function ModalPerfusion({ hospi, auth, onClose, onSaved }) {
 }
 
 // ── Modal ajouter plan de soins ────────────────────────────────────────────────
-function ModalPlanSoins({ litsOccupes, auth, onClose, onSaved }) {
-  const { error: showError } = useToast();
+function ModalPlanSoins({ litsOccupes, auth, onClose, onSaved, showError }) {
   const [form, setForm] = useState({ patient_id: "", medicament_nom: "", dose: "", voie: "Oral", horaires: [], date_debut: new Date().toISOString().slice(0,10), date_fin: "", prescripteur: "" });
   const [saving, setSaving] = useState(false);
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
@@ -292,15 +298,21 @@ function ModalPlanSoins({ litsOccupes, auth, onClose, onSaved }) {
         prescripteur: form.prescripteur || null,
         actif: true,
       });
-      supabase.from("alertes").insert({
-        etablissement_id: auth?.etablissement_id ?? null,
-        patient_id: form.patient_id ?? null,
-        titre: "Nouveau medicament au plan de soins",
-        message: `${form.medicament_nom} — ${form.horaires?.join(", ") || ""}`,
-        type: "soins",
-        statut: "non_lu",
-        resolu: false,
-      }).catch(() => {});
+      // Best-effort : une alerte informative, ne doit jamais bloquer l'ajout au plan
+      // si elle echoue (le builder Supabase n'est pas un vrai Promise ⇒ pas de .catch()).
+      try {
+        await supabase.from("alertes").insert({
+          etablissement_id: auth?.etablissement_id ?? null,
+          patient_id: form.patient_id ?? null,
+          titre: "Nouveau medicament au plan de soins",
+          message: `${form.medicament_nom} — ${form.horaires?.join(", ") || ""}`,
+          type: "soins",
+          statut: "non_lu",
+          resolu: false,
+        });
+      } catch {
+        // ignore — l'alerte est secondaire par rapport a l'ajout au plan de soins
+      }
       onSaved(); onClose();
     } catch (e) { showError(e.message); }
     finally { setSaving(false); }
@@ -500,7 +512,7 @@ function OngletPatients({ litsOccupes, perfusionsActives, loading, auth, onRefre
     <div>
       {modalConst && <ModalConstantes hospi={modalConst} auth={auth} onClose={() => setModalConst(null)} onSaved={() => { onRefresh(); success("Constantes enregistrees"); }} />}
       {modalNote  && <ModalNote hospi={modalNote} auth={auth} onClose={() => setModalNote(null)} onSaved={() => { onRefresh(); success("Note enregistree"); }} />}
-      {modalPerf  && <ModalPerfusion hospi={modalPerf} auth={auth} onClose={() => setModalPerf(null)} onSaved={() => { onRefresh(); success("Perfusion posee"); }} />}
+      {modalPerf  && <ModalPerfusion hospi={modalPerf} auth={auth} showError={showError} onClose={() => setModalPerf(null)} onSaved={() => { onRefresh(); success("Perfusion posee"); }} />}
 
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
         <button onClick={() => setServiceFil("")} style={{ padding: "5px 12px", borderRadius: 8, border: `1.5px solid ${!serviceFil ? ACCENT : colors.border}`, backgroundColor: !serviceFil ? ACCENT : colors.bgSurface, color: !serviceFil ? "white" : colors.text, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Tous</button>
@@ -554,8 +566,7 @@ function OngletPatients({ litsOccupes, perfusionsActives, loading, auth, onRefre
 }
 
 // ── Onglet 2 — Plan de soins ───────────────────────────────────────────────────
-function OngletPlanSoins({ litsOccupes, auth, etabId }) {
-  const { success, error: showError } = useToast();
+function OngletPlanSoins({ litsOccupes, auth, etabId, success, showError }) {
   const [planJour, setPlanJour] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -605,7 +616,7 @@ function OngletPlanSoins({ litsOccupes, auth, etabId }) {
 
   return (
     <div>
-      {showModal && <ModalPlanSoins litsOccupes={litsOccupes} auth={auth} onClose={() => setShowModal(false)} onSaved={() => { load(); success("Medicament ajoute au plan"); }} />}
+      {showModal && <ModalPlanSoins litsOccupes={litsOccupes} auth={auth} showError={showError} onClose={() => setShowModal(false)} onSaved={() => { success("Medicament ajoute au plan"); load(); setShowModal(false); }} />}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: colors.navy }}>Plan de soins du jour — {new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</div>
@@ -666,8 +677,7 @@ function OngletPlanSoins({ litsOccupes, auth, etabId }) {
 }
 
 // ── Onglet 3 — Perfusions ──────────────────────────────────────────────────────
-function OngletPerfusions({ perfusionsActives, litsOccupes, loading, auth, etabId, onRefresh }) {
-  const { success, error: showError } = useToast();
+function OngletPerfusions({ perfusionsActives, litsOccupes, loading, auth, etabId, onRefresh, success, showError }) {
   const [showModal, setShowModal] = useState(false);
   const [editDebit, setEditDebit] = useState(null);
   const [newDebit, setNewDebit] = useState("");
@@ -721,6 +731,7 @@ function OngletPerfusions({ perfusionsActives, litsOccupes, loading, auth, etabI
         <ModalPerfusion
           hospi={litsOccupes[0] ?? { patient_id: "", patients: null, id: null }}
           auth={auth}
+          showError={showError}
           onClose={() => setShowModal(false)}
           onSaved={() => { success("Perfusion posee"); onRefresh(); setShowModal(false); }}
         />
@@ -826,7 +837,7 @@ function OngletTransmissions({ litsOccupes, auth, etabId }) {
   const load = useCallback(async () => {
     if (!etabId) return;
     setLoading(true);
-    const { data } = await supabase.from("notes_evolution").select("*, patients(prenom, nom)").eq("etablissement_id", etabId).eq("type", "transmission_infirmiere").order("created_at", { ascending: false }).limit(20);
+    const { data } = await supabase.from("notes_evolution").select("*, patients(prenom, nom)").eq("etablissement_id", etabId).eq("type", "transmission").order("created_at", { ascending: false }).limit(20);
     setTransmissions(data ?? []);
     setLoading(false);
   }, [etabId]);
@@ -844,7 +855,7 @@ function OngletTransmissions({ litsOccupes, auth, etabId }) {
         etablissement_id: etabId,
         auteur: auth?.user?.email ?? "",
         contenu: message.trim(),
-        type: "transmission_infirmiere",
+        type: "transmission",
       });
       success("Transmission enregistree"); setMessage(""); setPatientId(""); load();
     } catch (e) { showError(e.message); }
@@ -905,7 +916,7 @@ function OngletTransmissions({ litsOccupes, auth, etabId }) {
 // ── Page principale ────────────────────────────────────────────────────────────
 export default function MonService() {
   const { auth } = useAuth();
-  const { toasts, error: showError } = useToast();
+  const { toasts, success, error: showError } = useToast();
   const [litsOccupes, setLitsOccupes]       = useState([]);
   const [perfusionsActives, setPerfusionsActives] = useState([]);
   const [loading, setLoading]               = useState(true);
@@ -975,8 +986,8 @@ export default function MonService() {
       </div>
 
       {onglet === "patients"      && <OngletPatients litsOccupes={litsOccupes} perfusionsActives={perfusionsActives} loading={loading} auth={auth} onRefresh={load} />}
-      {onglet === "plan"          && <OngletPlanSoins litsOccupes={litsOccupes} auth={auth} etabId={etabId} />}
-      {onglet === "perfusions"    && <OngletPerfusions perfusionsActives={perfusionsActives} litsOccupes={litsOccupes} loading={loading} auth={auth} etabId={etabId} onRefresh={load} />}
+      {onglet === "plan"          && <OngletPlanSoins litsOccupes={litsOccupes} auth={auth} etabId={etabId} success={success} showError={showError} />}
+      {onglet === "perfusions"    && <OngletPerfusions perfusionsActives={perfusionsActives} litsOccupes={litsOccupes} loading={loading} auth={auth} etabId={etabId} onRefresh={load} success={success} showError={showError} />}
       {onglet === "transmissions" && <OngletTransmissions litsOccupes={litsOccupes} auth={auth} etabId={etabId} />}
     </Layout>
   );

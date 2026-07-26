@@ -3720,10 +3720,77 @@ confirmation explicite (changer soit la valeur envoyée en `"transmission"`, soi
 `CHECK` pour inclure `"transmission_infirmiere"` — à trancher selon si d'autres écrans utilisent
 déjà le type `"transmission"` pour un usage différent).
 
-**Bilan Infirmière** : Dashboard ✅, Mes patients ✅, Plan de soins ✅ (fonctionnel, UX à
-améliorer), Perfusions ✅ (fonctionnel, bug de calcul mineur), Transmissions ❌ **cassé pour tout
-le monde** (contrainte de base de données jamais alignée avec le code applicatif). Lits, Urgences,
-Maternité, Bloc : chargement confirmé plus tôt dans la session, pas de nouvelle action testée ici.
+**Bilan Infirmière (avant les 3 correctifs ci-dessous)** : Dashboard ✅, Mes patients ✅, Plan de
+soins ✅ (fonctionnel, UX à améliorer), Perfusions ✅ (fonctionnel, bug de calcul mineur),
+Transmissions ❌ **cassé pour tout le monde** (contrainte de base de données jamais alignée avec
+le code applicatif). Lits, Urgences, Maternité, Bloc : chargement confirmé plus tôt dans la
+session, pas de nouvelle action testée ici.
+
+### Trois correctifs appliqués sur les trouvailles ci-dessus (aucun ne touche `AuthContext.jsx`)
+
+**1. Transmissions infirmières jamais enregistrées — corrigé.** Vérifié au préalable qu'aucun
+autre écran du code n'utilise la valeur générique `"transmission"` avec un sens différent (seule
+`Patients.jsx` utilise `"evolution"` pour les notes d'évolution médecin, un type distinct et déjà
+autorisé). Correctif choisi : aligner le code sur la valeur déjà permise par la contrainte
+`CHECK` (`"transmission"`), plutôt que modifier le schéma — aucune migration nécessaire, risque
+nul sur les autres données. Corrigé aux **3 emplacements** utilisant l'ancienne valeur
+`"transmission_infirmiere"` dans [MonService.jsx](src/pages/hopital/MonService.jsx) :
+`ModalNote.handleSave` (bouton "Note" rapide sur une fiche patient — cassé par le même bug, pas
+repéré initialement), `OngletTransmissions.load` (lecture) et `OngletTransmissions.handleSave`
+(écriture). **Testé réellement** : transmission "Patient stable, constantes normales." laissée
+pour Fatou Kone avec le compte Infirmière — apparaît immédiatement dans "Transmissions recentes
+du service" avec badge "Nouveau", horodatage et email de l'auteure, formulaire vidé
+automatiquement.
+
+**2. Retour visuel manquant (Plan de soins, Perfusions) — corrigé, cause réelle différente de
+l'hypothèse initiale.** En traçant l'exécution pas à pas (`window.__debugLog` posé directement
+dans `handleSave`, plus fiable que la console qui accumule des logs d'anciens builds), la vraie
+cause n'était **pas** l'absence de fermeture de modale mais une exception synchrone plus tôt dans
+le flux : `supabase.from("alertes").insert({...}).catch(() => {})` — le constructeur de requête
+Supabase n'est pas un vrai `Promise` et n'expose pas `.catch()` directement, ce qui levait
+`TypeError: ...insert(...).catch is not a function` **après** l'écriture réussie du médicament
+mais **avant** `onSaved(); onClose();`, empêchant systématiquement la fermeture de la modale et
+le rafraîchissement — tout en laissant chaque tentative écrire silencieusement en base (5
+doublons réels créés pendant les tests, nettoyés). Corrigé en enveloppant cet appel secondaire
+dans son propre `try { await ... } catch {}` plutôt qu'un `.catch()` invalide.
+
+En parallèle, un bug réel et distinct a été trouvé et corrigé : `useToast()` instancie un état
+`toasts` **local** à chaque composant qui l'appelle — seul `MonService` (le composant racine)
+rend effectivement `<Toast toasts={toasts} />` ; tout `success()`/`showError()` appelé depuis un
+composant enfant avec son propre `useToast()` local (dont `ModalPlanSoins`, `ModalPerfusion`,
+`OngletPlanSoins`, `OngletPerfusions`) mettait à jour un état jamais affiché. Corrigé en
+remontant `success`/`showError` de `MonService` et en les transmettant en props à ces composants,
+au lieu de rappeler `useToast()` localement (limité aux écrans Plan de soins et Perfusions
+demandés — `OngletPatients`, `ModalNote` et `OngletTransmissions` gardent leur `useToast()`
+local, non traité ici, hors périmètre demandé).
+
+**Testé réellement** : "Ajouter au plan" (Paracetamol 1g) — la modale se ferme immédiatement, la
+liste affiche l'entrée sans rechargement de page. "Administrer" sur cette même entrée — texte
+barré, badge vert, écriture confirmée dans `administrations_medicament`. "Poser une perfusion"
+(1000 mL, 100 mL/h) — modale fermée, perfusion visible immédiatement dans "Perfusions en cours"
+avec "9h58min restantes" (calcul correct, voir point 3).
+
+**3. Calcul de fin de perfusion incorrect — corrigé.** Cause : `fin.toISOString().slice(0, 16)`
+retourne toujours l'heure UTC, mais cette chaîne est utilisée comme valeur d'un champ
+`datetime-local`, qui interprète toute chaîne sans suffixe comme une heure **locale naive** —
+sans conversion. À l'affichage puis à la resoumission du formulaire, cette confusion UTC/locale
+se produit deux fois, absorbant silencieusement le décalage horaire (2h pour GMT+0200) dans la
+durée réelle stockée (4h réclamées → 2h stockées). Le même bug affectait aussi la valeur par
+défaut de "Heure de debut" à l'ouverture de la modale (`new Date().toISOString().slice(0, 16)`),
+affichant une heure de départ elle-même déjà décalée de 2h avant toute saisie. Corrigé en
+ajoutant un formateur `toLocalDatetimeValue()` (format `YYYY-MM-DDTHH:mm` en heure murale, sans
+passer par `toISOString()`) et en l'utilisant aux deux endroits.
+
+**Testé réellement avec 3 durées différentes** (build de production locale, servie en statique,
+contre les vraies données) : 500 mL / 125 mL/h (4h attendues) → 01:35 à 05:35 ✅ ; 500 mL / 250
+mL/h (2h attendues) → 01:35 à 03:35 ✅ ; 1000 mL / 100 mL/h (10h attendues) → 01:35 à 11:35 ✅ —
+soumis, confirmé "9h58min restantes" (pas "Fin dépassée") immédiatement après création.
+
+**Bilan Infirmière (après correctifs)** : Dashboard ✅, Mes patients ✅, Plan de soins ✅
+(fonctionnel ET retour visuel correct), Perfusions ✅ (fonctionnel, calcul de durée correct),
+Transmissions ✅ (fonctionnel, y compris la Note rapide patient). Point non traité, en attente de
+décision produit : la policy RLS `DELETE` manquante sur `plan_soins` (un `DELETE` retourne `204`
+sans supprimer aucune ligne pour le rôle Infirmière).
 
 ## Point 4 — Tableau de bord final (module Hôpital)
 
