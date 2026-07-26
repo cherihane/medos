@@ -2976,3 +2976,276 @@ d'`AuthContext.jsx` n'ait été modifiée sans autorisation explicite préalable
 
 Commits session 14 : `ef34a39` (AuthContext.jsx, 1 ligne, autorisé), `df4765a` (extension
 Login.jsx au cas refusee).
+
+# Session 15 (2026-07-26) — Hôpital : Audit initial (mission en cours)
+
+**Mission** : cartographier ce qui fonctionne, ce qui est cassé, ce qui manque dans le module
+Hôpital (24 écrans, 9 rôles), avant tout sprint de correction. Pas de correctif sauf Point 1 si
+trivial et sûr. `AuthContext.jsx` non touché (uniquement lu pour cartographier `NAV_INTERNE`).
+
+## Point 1 — Dépendance alertes hôpital : couverture confirmée + 1 bug résiduel trouvé et corrigé
+
+**Le mécanisme partagé fonctionne pour l'hôpital, sans code spécifique séparé.**
+[hopital/Stock.jsx](src/pages/hopital/Stock.jsx) utilise exactement les mêmes hooks
+(`useMedicaments`, `updateMedicament`, `insertMedicament`) et la même table `medicaments` que
+pharmacie/distributeur — pas de table de stock séparée pour l'hôpital. Le trigger
+`trg_stock_alert` ([20240102000000_stock_alert_trigger.sql](supabase/migrations/20240102000000_stock_alert_trigger.sql))
+se déclenche sur la table `medicaments` elle-même, indépendamment du type d'établissement
+propriétaire de la ligne. Le correctif du 401 (session 11, `check-stock-alert/index.ts`) et la
+correction `etablissement_id` manquant s'appliquent donc identiquement, sans distinction de rôle
+ni d'établissement — confirmé par lecture de code, la même Edge Function traite tous les
+établissements. [hopital/Alertes.jsx](src/pages/hopital/Alertes.jsx) lit bien la table `alertes`
+(`useAlertesPaginated`) comme indiqué dans la mission, contrairement à `pharmacie/Alertes.jsx`
+(calcul client, déjà noté hors scope en session 11).
+
+**Bug résiduel trouvé, spécifique à l'expérience hôpital (et distributeur), trivial et corrigé** :
+l'email d'alerte stock (`envoyerEmail` dans
+[check-stock-alert/index.ts](supabase/functions/check-stock-alert/index.ts)) avait un lien
+"Voir la page Stock dans MedOS" et un texte de pied de page ("Système de gestion pharmaceutique")
+**codés en dur pour la pharmacie**, quel que soit l'établissement réellement concerné. Un
+gestionnaire d'hôpital recevant une alerte stock bas cliquait sur un lien qui l'envoyait vers
+`/pharmacie/inventaire` — page à laquelle son compte hôpital n'a de toute façon pas accès — au lieu
+de `/hopital/stock`. Idem pour un distributeur, envoyé vers la mauvaise page au lieu de
+`/distributeur/entrepot`.
+
+**Corrigé** : nouvelle table `STOCK_PATH_BY_TYPE` et fonction `resoudreEtablissement()` (remplace
+`resoudreDestinataire()`) qui récupère aussi `etablissements.type` en plus de l'email, pour calculer
+le bon lien selon le type réel de l'établissement (`pharmacie` / `hopital` / `distributeur`, avec
+`/pharmacie/inventaire` comme repli si type absent/inconnu — comportement identique à avant pour
+tous les cas déjà couverts). Texte de pied de page neutralisé ("Système de gestion médicale" au
+lieu de "...pharmaceutique"). Fonction redéployée (`supabase functions deploy check-stock-alert`).
+Changement isolé à ce seul fichier, aucune migration, aucun risque pour `AuthContext.jsx` ni pour
+les policies RLS.
+
+**Non vérifié en conditions réelles dans cette session** (pas de compte hôpital de test disponible
+avec identifiants connus pour déclencher un vrai scénario stock bas + réception d'email — voir
+Point 3) — corrigé par lecture de code et logique, à confirmer de bout en bout dès qu'un compte
+hôpital de test sera disponible.
+
+## Point 2 — Audit sécurité RLS : plusieurs failles critiques confirmées, aucune corrigée (hors scope)
+
+Aucune fonction `is_membre_hopital` n'existe dans le code (grep vide) — l'isolation multi-hôpital
+repose entièrement sur `mes_etablissements()` (générique, partagée par tous les types
+d'établissement) et sur des policies posées table par table. Résultat : **plusieurs tables du
+module Hôpital n'ont jamais reçu de policy RLS correcte, certaines n'ont même jamais activé RLS du
+tout** — trouvé par grep systématique (`ALTER/alter table ... ENABLE/enable row level security`) et
+lecture des migrations correspondantes.
+
+### CRITIQUE — `comptes_rendus` (comptes rendus médicaux : diagnostic, examen clinique, traitement)
+
+[20240109000000_comptes_rendus.sql:26-27](supabase/migrations/20240109000000_comptes_rendus.sql#L26-L27) :
+```sql
+create policy "comptes_rendus_select" on public.comptes_rendus
+  for select using (true);
+```
+**`using (true)` sans aucune condition** : n'importe quel compte authentifié de toute la plateforme
+— une pharmacie, un distributeur, une autorité sanitaire, un autre hôpital — peut lire le
+`diagnostic`, l'`examen_clinique` et le `traitement` de **tous les patients de tous les
+établissements**. Les policies INSERT/UPDATE (`auth.role() = 'authenticated'`) ne sont pas
+meilleures : aucune vérification d'établissement, n'importe quel compte authentifié peut créer ou
+modifier le compte rendu médical d'un patient qui n'est pas le sien. Aucune migration ultérieure ne
+corrige cela (vérifié — `comptes_rendus` n'apparaît dans aucun autre fichier de migration).
+Confirmé par lecture directe du fichier de migration (méthode demandée par la mission), pas encore
+confirmé par requête live sur la base (Docker indisponible pour `supabase db dump`, voir note
+méthode ci-dessous) — mais aucune migration ultérieure ne modifie cette policy, donc à très haute
+confiance qu'elle est toujours active telle quelle en production.
+
+### CRITIQUE — `factures_hopital` (facturation patient : montants, taux de couverture assurance/CNSS)
+
+[20260603_hopital_module.sql:102-107](supabase/migrations/20260603_hopital_module.sql#L102-L107) :
+```sql
+alter table public.factures_hopital enable row level security;
+create policy "Etablissement propre — factures_hopital"
+  on public.factures_hopital for all
+  using (etablissement_id = (select auth.uid() from auth.users limit 0)
+      or etablissement_id is null
+      or true);  -- RLS simplifie: filtrer cote application
+```
+Le `OR true` final rend toute la condition toujours vraie, quel que soit `etablissement_id` — RLS
+activée mais totalement inopérante, exactement le même schéma que la faille distributeur déjà
+trouvée et corrigée (session 12). N'importe quel compte authentifié peut lire/modifier/supprimer
+**toutes les factures de tous les hôpitaux** de la plateforme (montants, couverture assurance,
+reste à charge patient). Le commentaire ("RLS simplifie: filtrer cote application") confirme que
+c'était une décision consciente mais jamais accompagnée du filtrage applicatif promis dans les
+écrans (`Facturation.jsx`, `CaissePage.jsx` filtrent par établissement côté UI, mais rien n'empêche
+un appel API direct de contourner ce filtre — c'est précisément le rôle de RLS). Aucune migration
+ultérieure ne corrige cette policy (vérifié : seules `20260604_caisse_columns.sql` et
+`20260604_caisse_phase2.sql` touchent encore `factures_hopital`, uniquement pour ajouter des
+colonnes).
+
+### CRITIQUE — 8 tables créées sans jamais activer RLS (aucune policy, aucune restriction)
+
+Grep exhaustif de tous les `CREATE TABLE` du module Hôpital contre tous les
+`ENABLE ROW LEVEL SECURITY` de tout l'historique de migrations — ces tables n'apparaissent **dans
+aucun des deux résultats en commun** :
+
+| Table | Migration de création | Contenu exposé | Écran(s) concerné(s) |
+|---|---|---|---|
+| `sessions_caisse` | [20260604_caisse_phase2.sql](supabase/migrations/20260604_caisse_phase2.sql) | Fond de caisse, totaux par mode de paiement, écarts | CaissePage (Caissier, Secrétaire médicale) |
+| `paiements_facture` | idem | Montants payés, numéros de reçu, mode de paiement par facture | CaissePage, Facturation |
+| `compteurs_recu` | idem | Numérotation des reçus | CaissePage |
+| `config_caisse` | idem | Taux TVA, liste des assureurs, mentions légales | CaissePage |
+| `perfusions` | [20260604_infirmiere_soins.sql](supabase/migrations/20260604_infirmiere_soins.sql) | Perfusions en cours par patient (soluté, débit, horaires) | MonService (Infirmière) |
+| `plan_soins` | idem | Plan de soins nominatif (médicament, dose, voie, horaires) | MonService (Infirmière) |
+| `administrations_medicament` | idem | Traçabilité de chaque administration de médicament à un patient | MonService (Infirmière) |
+| `commandes_internes` | [20260608_phase2_pharma_labo.sql](supabase/migrations/20260608_phase2_pharma_labo.sql) | Demandes internes de médicaments par service | Stock (Pharmacien hospitalier), MonService |
+| `transmissions_garde` | [20260604_transmissions_garde.sql](supabase/migrations/20260604_transmissions_garde.sql) | Transmissions de garde, `patients_critiques` (JSON), message général | TransmissionGarde (Médecin) |
+
+Sans RLS activée, PostgREST (l'API auto-générée par Supabase que le frontend appelle directement)
+applique les GRANT par défaut du projet — les mêmes qui obligent déjà RLS partout ailleurs dans ce
+schéma pour empêcher l'accès inter-établissement. Concrètement : **tout compte authentifié de
+n'importe quel établissement (hôpital, pharmacie, distributeur, autorité) peut lire, insérer,
+modifier et supprimer directement, via l'API, l'intégralité de ces 9 tables, pour tous les
+établissements**, en contournant totalement les écrans et leurs filtres côté client. C'est un
+problème strictement plus grave qu'une policy `using (true)` : il n'y a même pas de policy à
+corriger, RLS n'a jamais été activée sur ces tables depuis leur création (05-08 juin 2026) — donc
+depuis près de 2 mois en production au moment de cet audit.
+
+**Comparaison utile** : `transferts_stock` (créée le même jour, même vague de fonctionnalités,
+[20260604_transferts_stock.sql](supabase/migrations/20260604_transferts_stock.sql)) a, elle, reçu
+une policy RLS correcte scopée par établissement source/destination — la preuve que le schéma de
+protection standard était connu et appliqué ailleurs la même semaine, ce qui exclut l'hypothèse
+d'un oubli architectural global et pointe plutôt vers un oubli ponctuel par table/migration.
+
+### MOYEN — `consultations`, `examens`, `configuration_lits` : clause `OR etablissement_id IS NULL`
+
+[20260604_hopital_features.sql](supabase/migrations/20260604_hopital_features.sql) : les 3 policies
+(`consultations_all`, `examens_all`, `configuration_lits_all`) suivent le motif
+`etablissement_id IN (mes_etablissements()) OR etablissement_id IS NULL`, **y compris dans la
+clause `WITH CHECK`** de l'INSERT — donc un compte de n'importe quel établissement peut
+délibérément insérer une ligne avec `etablissement_id = NULL` (elle passera le `WITH CHECK`), et
+cette ligne devient ensuite lisible/modifiable par absolument tout le monde sur la plateforme. Pour
+`examens`, cela concerne potentiellement `resultat_texte` et `interpretation` (résultats
+d'analyses). Moins immédiatement exploitable que les deux failles précédentes (suppose une ligne
+avec `etablissement_id` NULL, ce qui ne devrait normalement pas arriver via l'UI normale), mais
+reste un vecteur réel si un bug applicatif ou un appel direct à l'API omet ce champ.
+
+### OBSERVATION — `patients_select` : `autorité sanitaire` voit tous les patients de tous les hôpitaux
+
+[20240110000000_rls_by_etablissement.sql:236-241](supabase/migrations/20240110000000_rls_by_etablissement.sql#L236-L241) :
+`patients_select` inclut `OR public.is_autorite_sanitaire()` — un compte du module Autorité
+sanitaire peut lire l'identité complète (nom, prénom, date de naissance, téléphone, email,
+antécédents) de **tous les patients de tous les hôpitaux du pays**, sans agrégation ni anonymisation.
+Possiblement une décision produit assumée (surveillance épidémiologique nationale — cohérent avec
+le module Autorité sanitaire de la roadmap), mais mérite une clarification explicite : est-ce que
+ce niveau de granularité (dossier nominatif complet) est réellement nécessaire pour ce rôle, ou
+seulement des agrégats seraient suffisants ? Signalé pour décision produit, pas traité comme un bug
+en soi.
+
+### Méthode et limite
+
+Audit fait par grep systématique + lecture des migrations (`grep -rn "hopital\|is_membre_hopital"
+supabase/migrations/*.sql`, puis recoupement de tous les `CREATE TABLE` contre tous les
+`ENABLE ROW LEVEL SECURITY` de l'historique complet), conformément à la méthode demandée dans la
+mission. `supabase db dump --linked` échoue (`Docker is not running`), donc la confirmation
+définitive s'est faite directement en base via `supabase db query --linked` (voir ci-dessous),
+pas seulement par lecture des fichiers de migration.
+
+**Décision utilisateur : correctif appliqué immédiatement**, en dérogation explicite du scope
+"audit only" de la mission, vu la gravité (diagnostics patients et facturation lisibles par tout
+compte authentifié de la plateforme). Migration
+[20260726_hopital_rls_critical_fix.sql](supabase/migrations/20260726_hopital_rls_critical_fix.sql),
+appliquée en production via `supabase db query --linked --file ...` (jamais `db push` sur ce
+projet — historique de migrations distant désynchronisé, règle déjà établie, voir plus bas dans ce
+fichier).
+
+**Découverte en vérifiant l'état réel de la base (avant d'écrire le correctif définitif)** : l'audit
+par lecture des seuls fichiers de migration, bien que conforme à la méthode demandée par la
+mission, ne racontait pas toute l'histoire pour `comptes_rendus` — une requête sur `pg_policies` a
+révélé des policies `cr_select` / `cr_insert` / `cr_update` / `cr_delete` déjà correctement scopées
+par `mes_etablissements()` (incluant une dérogation `is_autorite_sanitaire()` cohérente avec le
+motif de `patients_select`), **appliquées manuellement en base à un moment non documenté, jamais
+capturées dans un fichier de migration commité**. Cela n'annule PAS le bug : en PostgreSQL, les
+policies permissives pour une même commande se combinent en OR — la policy `comptes_rendus_select`
+(`using (true)`, issue de la migration de 2024) restait active en parallèle de `cr_select` et
+suffisait à elle seule à rendre l'accès universel, quelle que soit la qualité de `cr_select`. Le
+bug était donc bien réel et actif en production jusqu'à ce correctif, malgré l'existence partielle
+d'une meilleure policy à côté. Idem pour `sessions_caisse` : une policy `sessions_caisse_all`
+correctement scopée existait déjà, mais RLS n'était jamais activée sur la table — donc totalement
+inopérante, quelle que soit sa qualité. **Complément à la note "État des migrations" de ce
+fichier** : le drift documenté plus bas ne concerne pas que d'anciennes migrations de janvier 2024
+rejouées à la main — au moins ces deux corrections partielles et non documentées existaient aussi
+pour le module Hôpital.
+
+**Vérifié en base après application** (`pg_policies` + `pg_class.relrowsecurity`) : les 11 tables
+(`comptes_rendus`, `factures_hopital`, `sessions_caisse`, `paiements_facture`, `compteurs_recu`,
+`config_caisse`, `perfusions`, `plan_soins`, `administrations_medicament`, `commandes_internes`,
+`transmissions_garde`) ont toutes désormais `relrowsecurity = true` et des policies SELECT/
+INSERT/UPDATE scopées par `etablissement_id = ANY(mes_etablissements())` (aucune n'a de policy
+avec un `qual` nul ou `true`). Les policies pré-existantes non documentées (`cr_*`,
+`sessions_caisse_all`) ont été conservées telles quelles (déjà correctement scopées, redondance
+inoffensive plutôt que remplacement) plutôt que supprimées, pour limiter le risque de casser un
+usage qui en dépendrait déjà.
+
+**Non re-testé en conditions réelles avec un compte applicatif** (formulaire réel, pas
+`service_role`) dans cette session — sera couvert naturellement par le parcours live du Point 3
+avec les 9 nouveaux comptes de test (si un rôle ne peut plus créer/lire une facture ou un compte
+rendu qui devrait lui être accessible, ça apparaîtra immédiatement). Tous les points d'insertion
+côté application pour ces 11 tables ont été vérifiés au préalable dans le code
+(`CaissePage.jsx`, `Facturation.jsx`, `MonService.jsx`, `TransmissionGarde.jsx`, `Patients.jsx`) —
+`etablissement_id` y est systématiquement renseigné depuis `auth.etablissement_id`, donc aucune
+régression attendue.
+
+DELETE volontairement non accordé sur ces 11 tables (sauf `comptes_rendus` et `sessions_caisse` où
+des policies DELETE pré-existantes ont été conservées) : aucun endroit du code applicatif
+n'appelle `.delete()` sur ces tables — moindre privilège, capacité non utilisée non ajoutée.
+
+## Point 3 — Parcours par rôle : cartographie statique faite, parcours live en attente d'identifiants
+
+**Cartographie des 9 rôles → écrans accessibles, faite par lecture de code** (`NAV_INTERNE` dans
+[AuthContext.jsx:36-106](src/context/AuthContext.jsx#L36-L106), lu mais non modifié) :
+
+| Rôle mission | Clé `role_interne` | Écrans autorisés (nav) |
+|---|---|---|
+| Direction | `directeur` | `null` = accès complet à tous les écrans hôpital |
+| Médecin | `medecin` | Dashboard, Mes consultations, Patients, Examens, Renouvellements, Transmission de garde, Assistant IA, Alertes, Urgences, Maternité, Bloc opératoire, Diététique |
+| Infirmière | `infirmiere` | Dashboard, Mon service, Patients, Lits, Alertes, Urgences, Maternité, Bloc opératoire |
+| Secrétaire médicale | `Secrétaire médicale` | Dashboard, Consultations, Agenda, Patients, Facturation, Caisse |
+| Laborantin | `laborantin` | Dashboard, Examens, Alertes |
+| Caissier | `caissier` | Dashboard, Caisse, Facturation |
+| Pharmacien hospitalier | `pharmacien_hospitalier` | Dashboard, Stock, Patients, Scanner, Alertes |
+| Aide-soignant | `Aide-soignant` | Dashboard, Mon service, Lits, Alertes |
+| Sage-femme | `Sage-femme` | Dashboard, Maternité, Patients, Alertes |
+
+Rôles additionnels présents dans le code mais absents de la liste des 9 de la mission :
+`Dieteticien`, `Cuisiniere` (Diététique), `Agent de sterilisation` (Stérilisation) — probablement à
+inclure dans une vague ultérieure si la mission doit couvrir Diététique/Stérilisation par rôle
+dédié plutôt que par Médecin/Direction.
+
+**Important — ceci ne remplace pas le parcours live demandé par la mission.** `NAV_INTERNE` ne
+garantit que ce que l'interface *affiche* à chaque rôle ; il ne prouve ni que les actions
+principales fonctionnent réellement en base, ni que les notifications inter-rôles (ex. médecin
+prescrit → pharmacien hospitalier voit) fonctionnent de bout en bout, ni qu'aucune erreur ne
+survient au chargement. Cela nécessite de se connecter réellement avec un compte de chaque rôle, ce
+qui nécessite des identifiants de test.
+
+**Bloquant pour continuer ce point** : pas de compte de test hôpital avec identifiants connus
+disponible dans cette session pour les 9 rôles. `hopital@medos.test` existe en base (établissement
+"Hôpital Central" créé par
+[20260603_hopital_test_etablissement.sql](supabase/migrations/20260603_hopital_test_etablissement.sql))
+mais sans mot de passe connu ni confirmation qu'il a des sous-comptes `membres_personnel` pour
+chacun des 9 rôles. Question posée à l'utilisateur (voir échange de chat) : comptes existants à
+réutiliser, ou création de nouveaux comptes de test par rôle — dans les deux cas, tout mot de passe
+réinitialisé ou créé sera communiqué immédiatement, comme convenu.
+
+## Bilan session 15 (partiel — mission en cours)
+
+- **Point 1** : couverture confirmée (mécanisme partagé, pas de code hôpital séparé) + 1 bug
+  résiduel trouvé et corrigé (lien email pointait vers la mauvaise page selon le type
+  d'établissement). Déployé (`check-stock-alert`). Non re-testé en conditions réelles pour
+  l'instant (sera couvert par le Point 3).
+- **Point 2** : audit terminé, **3 failles critiques confirmées ET corrigées** sur décision
+  explicite de l'utilisateur (dérogation du scope audit-only) : `comptes_rendus` (lecture libre à
+  tous), `factures_hopital` (policy `OR true`), 9 tables jamais protégées par RLS. Migration
+  [20260726_hopital_rls_critical_fix.sql](supabase/migrations/20260726_hopital_rls_critical_fix.sql)
+  appliquée et vérifiée en base de production (`pg_policies`, `pg_class.relrowsecurity`). Restent
+  documentées mais **non corrigées** (hors décision utilisateur, scope limité aux 3 failles
+  critiques) : 1 faille moyenne (`OR etablissement_id IS NULL` sur `consultations`/`examens`/
+  `configuration_lits`) + 1 observation produit (autorité sanitaire voit tous les patients
+  nominativement).
+- **Point 3** : cartographie statique des 9 rôles faite. Parcours live en cours — création de 9
+  comptes de test (un par rôle) sur décision utilisateur, mots de passe communiqués immédiatement.
+- **Point 4** (tableau de bord final) : en attente de la fin du Point 3 pour être complet.
+
+Commits à venir (fix `check-stock-alert` + migration RLS) une fois cette session validée par
+l'utilisateur.

@@ -69,39 +69,40 @@ async function sendAlertEmail({ nomMedicament, numerolot, scannePar }) {
 }
 
 // ── Vérification Supabase ─────────────────────────────────────────────────────
+// Passe par la RPC verifier_lot_public (SECURITY DEFINER) plutôt que par un
+// select direct sur `lots` : la registre anti-contrefaçon reste public par
+// nom/code de médicament uniquement, sans dépendre d'une policy RLS
+// table-level qui exposerait toute la ligne `medicaments` (stock, prix,
+// établissement) de tout établissement dès qu'un lot existe (faille trouvée
+// et corrigée en session 15 — voir 20260726b_medicaments_lot_public_fix.sql).
 async function verifierSupabase(numerolot, nomMedicament) {
-  let query = supabase
-    .from("lots")
-    .select("id, numero_lot, fabricant, date_fabrication, date_expiration, quantite_initiale, medicaments(nom, code)")
-    .limit(10);
+  if (!numerolot && !nomMedicament) return null;
 
-  // Filtrer par numéro de lot si fourni
-  if (numerolot && numerolot.length > 2) {
-    query = query.ilike("numero_lot", `%${numerolot}%`);
-  } else if (nomMedicament) {
-    // Pas de lot : on ne peut pas filtrer efficacement sans join côté Supabase
-    // On récupère tous les lots et on filtre en JS
-    query = query.order("created_at", { ascending: false });
-  } else {
-    return null;
-  }
-
-  const { data, error } = await query;
+  const { data, error } = await supabase.rpc("verifier_lot_public", {
+    p_numero_lot: numerolot && numerolot.length > 2 ? numerolot : null,
+  });
   if (error || !data || data.length === 0) return null;
+
+  const toLotShape = (l) => ({
+    numero_lot: l.numero_lot,
+    fabricant: l.fabricant,
+    date_fabrication: l.date_fabrication,
+    date_expiration: l.date_expiration,
+    quantite_initiale: l.quantite_initiale,
+    medicaments: { nom: l.med_nom, code: l.med_code },
+  });
 
   // Si un nom de médicament est fourni, le lot ET le nom doivent correspondre
   if (nomMedicament) {
     const slug = principalActif(nomMedicament);
-    if (!slug) return data[0]; // nom trop vague, on accepte le premier lot trouvé
+    if (!slug) return toLotShape(data[0]); // nom trop vague, on accepte le premier lot trouvé
 
-    const match = data.find((l) =>
-      l.medicaments && normalise(l.medicaments.nom).includes(slug)
-    );
+    const match = data.find((l) => l.med_nom && normalise(l.med_nom).includes(slug));
     // Si le nom ne correspond à aucun lot → null (pas certifié pour ce médicament)
-    return match || null;
+    return match ? toLotShape(match) : null;
   }
 
-  return data[0];
+  return toLotShape(data[0]);
 }
 
 // ── Vérification BDPM ─────────────────────────────────────────────────────────
@@ -171,29 +172,26 @@ export async function rechercherLotPourPrefill(codeScanne) {
   const code = (codeScanne || "").trim();
   if (!code) return null;
 
-  const selectCols = "numero_lot, qr_code, fabricant, date_expiration, medicaments(id, nom, dosage, forme, categorie, fabricant, prix_unitaire, prix_achat, dci, code)";
+  // RPC SECURITY DEFINER (prefill_medicament_via_lot) plutôt qu'un select
+  // direct sur `lots` avec jointure `medicaments(...)` — même correctif que
+  // verifierSupabase() ci-dessus, voir 20260726b_medicaments_lot_public_fix.sql.
+  const { data: med } = await supabase.rpc("prefill_medicament_via_lot", { p_code: code }).maybeSingle();
+  if (!med) return null;
 
-  let { data } = await supabase.from("lots").select(selectCols).eq("qr_code", code).limit(1).maybeSingle();
-  if (!data) {
-    ({ data } = await supabase.from("lots").select(selectCols).eq("numero_lot", code).limit(1).maybeSingle());
-  }
-  if (!data || !data.medicaments) return null;
-
-  const med = data.medicaments;
   const nom = med.dosage && !normalise(med.nom).includes(normalise(med.dosage))
     ? `${med.nom} ${med.dosage}`.trim()
     : med.nom;
 
   return {
-    medicament_id:    med.id ?? null,
+    medicament_id:    med.medicament_id ?? null,
     nom:              nom || "",
     categorie:        med.categorie ?? "",
     forme:            med.forme ?? "",
-    fabricant:        med.fabricant || data.fabricant || "",
+    fabricant:        med.fabricant || "",
     dci:              med.dci ?? "",
     prix_achat:       med.prix_achat ?? "",
     prix_unitaire:    med.prix_unitaire ?? "",
-    date_peremption:  data.date_expiration ? data.date_expiration.slice(0, 10) : "",
+    date_peremption:  med.date_expiration ? med.date_expiration.slice(0, 10) : "",
   };
 }
 

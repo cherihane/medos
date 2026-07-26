@@ -71,17 +71,27 @@ async function insererAlerte(med: Medicament): Promise<void> {
   if (error) console.error("[alerte] Erreur insertion:", error.message);
 }
 
+/** Chemin de la page Stock selon le type d'établissement — le lien de l'email
+ *  doit renvoyer vers l'écran Stock réellement accessible à ce type de compte,
+ *  pas systématiquement vers celui de la pharmacie. */
+const STOCK_PATH_BY_TYPE: Record<string, string> = {
+  pharmacie: "/pharmacie/inventaire",
+  hopital: "/hopital/stock",
+  distributeur: "/distributeur/entrepot",
+};
+
 /** Email réel de l'établissement propriétaire du médicament — jamais un compte
  *  MedOS générique. Retombe sur ADMIN_EMAIL seulement si l'établissement n'a
- *  aucune adresse renseignée. */
-async function resoudreDestinataire(etablissementId?: string): Promise<string> {
-  if (!etablissementId) return ADMIN_EMAIL;
+ *  aucune adresse renseignée. Le type est utilisé pour pointer le lien de
+ *  l'email vers le bon écran Stock (pharmacie/hôpital/distributeur). */
+async function resoudreEtablissement(etablissementId?: string): Promise<{ email: string; type?: string }> {
+  if (!etablissementId) return { email: ADMIN_EMAIL };
   const { data } = await supabase
     .from("etablissements")
-    .select("email")
+    .select("email, type")
     .eq("id", etablissementId)
     .maybeSingle();
-  return data?.email || ADMIN_EMAIL;
+  return { email: data?.email || ADMIN_EMAIL, type: data?.type };
 }
 
 /** Résout les alertes rupture si le stock est repassé au-dessus du seuil */
@@ -96,8 +106,8 @@ async function resoudreAlertes(medicamentId: string): Promise<void> {
 }
 
 /** Construit et envoie l'email via Resend */
-async function envoyerEmail(med: Medicament, destinataire: string): Promise<void> {
-  const stockUrl = `${APP_URL}/pharmacie/inventaire`;
+async function envoyerEmail(med: Medicament, destinataire: string, etablissementType?: string): Promise<void> {
+  const stockUrl = `${APP_URL}${STOCK_PATH_BY_TYPE[etablissementType ?? ""] ?? "/pharmacie/inventaire"}`;
   const severite = med.stock_actuel === 0 ? "RUPTURE TOTALE" : "STOCK CRITIQUE";
   const couleur  = med.stock_actuel === 0 ? "#DC2626" : "#D97706";
   const bgCouleur = med.stock_actuel === 0 ? "#FEF2F2" : "#FFFBEB";
@@ -236,7 +246,7 @@ async function envoyerEmail(med: Medicament, destinataire: string): Promise<void
           <tr>
             <td style="background:#F8FAFC;padding:20px 36px;border-top:1px solid #E5E7EB;">
               <p style="margin:0;font-size:11px;color:#9CA3AF;text-align:center;line-height:1.8;">
-                Cet email a été envoyé automatiquement par <strong style="color:#6B7280;">MedOS</strong> — Système de gestion pharmaceutique.<br/>
+                Cet email a été envoyé automatiquement par <strong style="color:#6B7280;">MedOS</strong> — Système de gestion médicale.<br/>
                 Alerte générée le ${new Date().toLocaleString("fr-FR", { timeZone: "Africa/Kinshasa", day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })} (heure Kinshasa)
               </p>
             </td>
@@ -338,8 +348,8 @@ Deno.serve(async (req: Request) => {
 
   if (stockChange) {
     try {
-      const destinataire = await resoudreDestinataire(med.etablissement_id);
-      await envoyerEmail(med, destinataire);
+      const { email: destinataire, type } = await resoudreEtablissement(med.etablissement_id);
+      await envoyerEmail(med, destinataire, type);
     } catch (err) {
       console.error("[email] Échec envoi:", err);
       // On ne fail pas la fonction si l'email échoue
