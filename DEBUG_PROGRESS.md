@@ -3590,6 +3590,85 @@ Renouvellements, Assistant IA, Alertes — correspond exactement à `NAV_INTERNE
 **Reste à parcourir** : Infirmière, Secrétaire médicale, Laborantin (avec retest précis des boutons
 En cours/Résultat), Pharmacien hospitalier, Aide-soignant, Sage-femme.
 
+### TROUVAILLE LA PLUS CRITIQUE DE TOUTE LA SESSION — écran blanc permanent au rechargement, pour **toute** session hôpital déjà connectée
+
+Découverte par accident en testant le bouton "Ajouter au plan" (Infirmière, Mon service) : après
+plusieurs rechargements de page pendant le diagnostic, l'écran est resté **totalement blanc**
+(`<div id="root">` vide, aucune erreur console, aucune requête réseau en échec) — impossible de
+récupérer sans vider `localStorage`/`sessionStorage` et se reconnecter.
+
+**Reproduit à 100%, systématiquement, sur deux comptes indépendants** (Direction
+`hopitalaudit2@gmail.com` ET Infirmière `r2infirmiere@gmail.com`) :
+1. Connexion fraîche → fonctionne parfaitement.
+2. N'importe quel rechargement de la page (ou réouverture dans un nouvel onglet) tant que la
+   session reste valide → écran blanc permanent.
+
+Cela concerne potentiellement **tout utilisateur réel de MedOS en production** qui rafraîchit son
+navigateur ou referme/rouvre son onglet en restant connecté — un geste extrêmement courant.
+
+**Premier diagnostic (insuffisant) — hypothèse du timeout `getSession()`.** En tracant pas à pas
+(logs de rendu, `MutationObserver` sur `#root`, `ErrorBoundary` de test, build de production
+locale servie en statique pour éliminer tout artefact du serveur de dev), l'hypothèse initiale
+("`supabase.auth.getSession()` reste bloquée indéfiniment sans jamais résoudre ni rejeter") s'est
+révélée **fausse** : `getSession()` résout en fait normalement et rapidement, y compris au
+rechargement. Le correctif de timeout de 10s posé sur ce point (voir plus bas) est donc resté en
+place par prudence (filet de sécurité inoffensif, utile si un vrai blocage réseau survient un
+jour) mais **ne réglait pas le bug observé** — il aurait fallu ne pas s'arrêter là.
+
+**Cause réelle trouvée ensuite** — [AuthContext.jsx:369](src/context/AuthContext.jsx#L369)
+(`buildAuthBase`) et sa copie dans `enrichWithEtablissement`
+([AuthContext.jsx:427-429](src/context/AuthContext.jsx#L427-L429)) :
+```js
+const firstNav = nav.find((item) => item.path !== "/parametres");
+const dashboardPath = firstNav ? firstNav.path : config.dashboardPath;
+```
+La nav hôpital commence toujours par un séparateur (`{ type: "separator", label: "Vue globale" }`)
+juste avant l'item Dashboard. Un séparateur n'a pas de propriété `.path` — donc
+`undefined !== "/parametres"` vaut `true`, et `.find()` retourne **le séparateur lui-même** comme
+« premier élément de nav », ce qui donne `dashboardPath = undefined`.
+
+Or [App.js](src/App.js) redirige la route racine avec
+`auth ? <Navigate to={auth.dashboardPath} replace /> : <Login />`. Avec `dashboardPath` à
+`undefined`, ce `<Navigate>` boucle indéfiniment sur "/" (confirmé par traçage : `AppRoutes`
+se re-rendait en continu avec `pathname=/` figé et `dashboardPath=undefined`) — sans jamais
+lever d'exception ni rien afficher, d'où l'écran blanc silencieux. La connexion fraîche
+fonctionne uniquement parce que [Login.jsx:101](src/pages/Login.jsx#L101) navigue avec
+`roleConfig[form.role].dashboardPath` (la valeur statique par défaut), contournant sans le savoir
+le calcul buggé — ce qui explique pourquoi le bug est resté invisible tout au long de cette
+session malgré des dizaines de connexions réussies.
+
+**Vérifié par le code (script Node reproduisant `NAV_INTERNE` + la logique de filtrage) que les
+12 variantes du rôle hôpital sont TOUTES concernées** (Directeur + les 11 valeurs de
+`role_interne`, y compris Radiologue qui hérite du nav complet) : chacune a Dashboard comme
+premier élément autorisé, et Dashboard est systématiquement précédé du séparateur "Vue globale"
+dans `roleConfig.hopital.nav`. Pharmacie, Distributeur et Autorité ne sont **pas** concernés — leur
+nav ne contient aucun séparateur.
+
+**Correctif appliqué** (2 lignes, même fichier) :
+```js
+const firstNav = nav.find((item) => item.type !== "separator" && item.path !== "/parametres");
+```
+appliqué aux deux occurrences (`buildAuthBase` et `enrichWithEtablissement`).
+
+**Tests de non-régression** (build de production locale, servie en statique, contre les vraies
+données Supabase — pas le serveur de dev, pour éliminer tout artefact) :
+1. Connexion fraîche (Direction) : ✅ inchangée.
+2. Rechargement, réseau normal (Direction) : ✅ **le bug est réglé** — dashboard affiché
+   immédiatement, `location.pathname` résolu correctement (`/hopital/dashboard`), plus de boucle.
+3. Rechargement avec réseau lent simulé (fetch des appels `/auth/v1/*` retardé artificiellement ;
+   testé avec un vrai refresh token forcé — `expires_at` ramené à 30s pour déclencher un
+   rafraîchissement réseau réel, retardé de 6s, sous le seuil de 10s) : ✅ la session lente mais
+   valide n'est **pas** expulsée à tort — dashboard affiché après le délai, sans repasser par
+   Login.
+4. Trois cycles de rechargement consécutifs (Direction) : ✅ stables, aucune régression.
+5. Session réellement expirée/invalide (`expires_at` passé + `refresh_token` corrompu) : ✅
+   redirection propre vers l'écran de connexion, pas d'état ambigu.
+6. Répété intégralement avec **Infirmière** (`r2infirmiere@gmail.com`, nav filtrée via
+   `NAV_INTERNE`, donc chemin de code différent de Direction) : ✅ mêmes résultats — rechargement
+   fonctionnel, nav toujours correctement restreinte aux écrans autorisés après le correctif.
+
+Déployé en production après validation. Aucune autre ligne d'`AuthContext.jsx` modifiée.
+
 ## Point 4 — Tableau de bord final (module Hôpital)
 
 ### Ordre de priorité des trouvailles (sécurité > cassé bloquant > incomplet > cosmétique)

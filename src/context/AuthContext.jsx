@@ -364,8 +364,8 @@ export function AuthProvider({ children }) {
       return result;
     })();
 
-    // dashboardPath = premier item de nav autorisé (hors /parametres)
-    const firstNav = nav.find((item) => item.path !== "/parametres");
+    // dashboardPath = premier item de nav autorisé (hors séparateurs et /parametres)
+    const firstNav = nav.find((item) => item.type !== "separator" && item.path !== "/parametres");
     const dashboardPath = firstNav ? firstNav.path : config.dashboardPath;
 
     return {
@@ -424,7 +424,7 @@ export function AuthProvider({ children }) {
           }
           patch.nav = enrichNav;
           const firstNav = patch.nav.find(
-            (item) => item.path !== "/parametres",
+            (item) => item.type !== "separator" && item.path !== "/parametres",
           );
           if (firstNav) patch.dashboardPath = firstNav.path;
         }
@@ -438,14 +438,29 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const mountedRef = { current: true };
 
-    supabase.auth
-      .getSession()
-      .then(({ data: { session } }) => {
+    // Filet de sécurité : getSession() ne doit jamais bloquer l'affichage
+    // indéfiniment. Fixé à 10s (et non 5s) car le public cible utilise parfois
+    // des connexions lentes/instables — un délai trop court expulserait à
+    // tort des sessions valides simplement lentes à confirmer.
+    const timeout = new Promise((resolve) =>
+      setTimeout(() => resolve({ timedOut: true }), 10000),
+    );
+
+    Promise.race([
+      supabase.auth.getSession().then(({ data: { session } }) => ({ session })),
+      timeout,
+    ])
+      .then((result) => {
         if (!mountedRef.current) return;
-        const base = session?.user ? buildAuthBase(session.user) : null;
+        if (result.timedOut) {
+          setAuth(null);
+          setLoading(false);
+          return;
+        }
+        const base = result.session?.user ? buildAuthBase(result.session.user) : null;
         setAuth(base);
         setLoading(false); // ← immédiat, l'app s'affiche tout de suite
-        if (base) enrichWithEtablissement(session.user, mountedRef);
+        if (base) enrichWithEtablissement(result.session.user, mountedRef);
       })
       .catch(() => {
         if (mountedRef.current) setLoading(false);
