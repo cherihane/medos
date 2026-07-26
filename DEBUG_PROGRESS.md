@@ -3219,16 +3219,162 @@ prescrit → pharmacien hospitalier voit) fonctionnent de bout en bout, ni qu'au
 survient au chargement. Cela nécessite de se connecter réellement avec un compte de chaque rôle, ce
 qui nécessite des identifiants de test.
 
-**Bloquant pour continuer ce point** : pas de compte de test hôpital avec identifiants connus
-disponible dans cette session pour les 9 rôles. `hopital@medos.test` existe en base (établissement
-"Hôpital Central" créé par
-[20260603_hopital_test_etablissement.sql](supabase/migrations/20260603_hopital_test_etablissement.sql))
-mais sans mot de passe connu ni confirmation qu'il a des sous-comptes `membres_personnel` pour
-chacun des 9 rôles. Question posée à l'utilisateur (voir échange de chat) : comptes existants à
-réutiliser, ou création de nouveaux comptes de test par rôle — dans les deux cas, tout mot de passe
-réinitialisé ou créé sera communiqué immédiatement, comme convenu.
+**Débloqué — 9 comptes de test créés** (décision utilisateur, méthode identique à l'audit
+distributeur de session 12) : nouvel établissement "Hôpital Audit Test" créé via le vrai formulaire
+d'inscription (`cherihaneadam123+hopitalaudit@gmail.com`, statut approuvé manuellement en base pour
+débloquer la connexion, comme pour les comptes de test précédents), puis 8 comptes `role_interne`
+créés via l'API Admin Supabase (`auth.admin` — même mécanisme que
+[scripts/create-staff-users.js](scripts/create-staff-users.js) déjà présent dans le repo, car la
+fonctionnalité "Nouvelle invitation" de `Paramètres.jsx` ne fait qu'insérer une ligne
+`membres_personnel` : elle ne provisionne aucun compte Supabase Auth réel ni n'envoie d'email —
+constat qui est lui-même une trouvaille du Point 3/4, voir plus bas). Mot de passe unique
+`medos2026` pour les 9 comptes, communiqué à l'utilisateur dans le chat au moment de la création.
+Lignes `membres_personnel` (une par rôle, `actif=true`, `invitation_acceptee=true`) insérées
+directement en base pour 7 des 8 rôles ; le flux réel d'invitation UI a été testé séparément pour le
+rôle Médecin (voir plus bas) pour valider — et documenter les limites de — ce mécanisme.
 
-## Bilan session 15 (partiel — mission en cours)
+## Découverte pendant le parcours live — 2e faille critique, confirmée en direct (pas seulement par lecture de migration)
+
+En ouvrant `/hopital/stock` avec le compte Direction flambant neuf (aucune activité créée), l'écran
+affichait déjà 5 médicaments avec stocks et prix réels — alors qu'aucune donnée n'avait encore été
+saisie pour cet établissement. Vérification en base : ces 5 lignes appartiennent à **3
+établissements totalement différents** (aucun n'étant "Hôpital Audit Test"). C'est une fuite
+distincte de celles du Point 2, plus large : elle touche `medicaments`, la table d'inventaire
+partagée par Pharmacie ET Hôpital (donc l'ensemble de la base clients existante, pas seulement le
+module Hôpital).
+
+**Cause** : la policy `med_select_via_lot_public`
+([20260721i_medicaments_visible_via_lot_public.sql](supabase/migrations/20260721i_medicaments_visible_via_lot_public.sql)),
+ajoutée pour un besoin légitime (registre anti-contrefaçon : un scan de lot doit pouvoir afficher le
+nom/code du médicament même s'il n'appartient pas à son propre établissement), donnait accès à la
+ligne **entière** dès qu'au moins un lot existait pour ce médicament — RLS ne restreint jamais par
+colonne, donc n'importe quel `select("*")` ailleurs dans l'app (ex. `useMedicaments()` utilisé par
+l'écran Stock) récupérait `stock_actuel`, `stock_minimum`, `prix_unitaire`, `etablissement_id` de
+tout médicament référencé par un lot, pour n'importe quel établissement de la plateforme — y
+compris toutes les pharmacies clientes existantes de MedOS.
+
+**Décision utilisateur : corrigé immédiatement** (déviation supplémentaire du scope initial, motivée
+par la gravité et le fait que ce soit confirmé en direct). Migration
+[20260726b_medicaments_lot_public_fix.sql](supabase/migrations/20260726b_medicaments_lot_public_fix.sql) :
+1. Suppression pure et simple de la policy `med_select_via_lot_public`.
+2. Deux fonctions `SECURITY DEFINER` de remplacement, ne renvoyant que les colonnes déjà utilisées
+   par le frontend (jamais stock/etablissement_id) : `verifier_lot_public(p_numero_lot)` pour le
+   scanner d'authenticité, `prefill_medicament_via_lot(p_code)` pour le pré-remplissage à la
+   réception via QR/code-barres.
+3. [src/hooks/useVerificationLot.js](src/hooks/useVerificationLot.js) : `verifierSupabase()` et
+   `rechercherLotPourPrefill()` réécrits pour appeler ces RPC au lieu du `select` direct sur `lots`
+   avec jointure `medicaments(...)`.
+
+Vérifié en base après application : `med_select_via_lot_public` disparue de `pg_policies`,
+`prefill_medicament_via_lot()` testée directement (RPC) sur un vrai lot existant — ne renvoie que
+`nom, dosage, categorie, forme, fabricant, dci, prix_achat, prix_unitaire, date_expiration`, jamais
+`stock_actuel`/`stock_minimum`/`etablissement_id`. `CI=true npx eslint` propre (2 warnings
+pré-existants sans rapport, vérifiés via `git diff`). `npm run build` sans erreur. Suite de tests
+complète (`react-scripts test`, pas `npx jest` directement — configuration Babel/CRA non reprise
+sinon) : `16 passed, 16 total`. Déployé en production (`git push` + SSH
+`root@81.17.98.80` → `git pull && npm install && npm run build && systemctl restart nginx`,
+commit `1f6de81`, confirmé actif). **Non re-testé avec un vrai scan physique de QR/code-barres**
+dans cette session (hors périmètre du matériel disponible) — la RPC de remplacement a été vérifiée
+directement en base, reproduisant exactement la requête d'origine.
+
+## Découverte pendant le parcours live — bug bloquant : création de patient impossible
+
+En parcourant l'écran **Patients** avec le compte Direction (premier écran testé avec une action
+réelle de création), l'ajout d'un patient échouait systématiquement avec l'erreur PostgREST
+`Could not find the 'medecin_referent' column of 'patients' in the schema cache`. Vérifié en base :
+la colonne `medecin_referent` n'a jamais existé sur la table `patients`, alors que
+[Patients.jsx](src/pages/hopital/Patients.jsx#L288) l'envoie systématiquement dans le payload
+d'insertion (`medecin_referent: form.medecin_referent.trim() || null`) — donc **toute création de
+patient échouait, pour tout établissement hôpital existant, pas seulement le nouveau compte de
+test**. Bug pré-existant de l'audit, pas une régression introduite cette session.
+
+**Corrigé** (autorisation explicite de l'utilisateur) : migration
+[20260726c_patients_medecin_referent.sql](supabase/migrations/20260726c_patients_medecin_referent.sql) —
+`ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS medecin_referent text;`, purement additive,
+nullable, aucun risque pour les données existantes. Appliquée via `supabase db query --linked`.
+
+**Vérifié en conditions réelles** : patiente de test "Awa Traoré" (36 ans, F, Médecine générale)
+créée avec succès via le vrai formulaire une fois la colonne ajoutée — "Patient enregistré."
+confirmé, la fiche apparaît correctement dans la liste avec toutes ses données. Pas de déploiement
+frontend nécessaire pour ce correctif (changement de schéma seul, le code de `Patients.jsx` était
+déjà correct, c'est la base qui était en retard).
+
+## TROUVAILLE LA PLUS CRITIQUE DE L'AUDIT — restriction de rôle jamais fonctionnelle pour les vrais comptes invités
+
+Trouvée en testant en direct le compte Laborantin (Point 3) : le bouton spécifique laborantin
+("Traiter cet examen") n'apparaissait jamais, remplacé par le libellé générique "Resultat" — sans
+erreur visible. Investigation : [Examens.jsx:389](src/pages/hopital/Examens.jsx#L389)
+(`const isLaborantin = ri === "Laborantin";`, avec un L majuscule) ne pouvait jamais correspondre à
+mon compte de test (créé à la main avec `role_interne = "laborantin"`, minuscule, pour correspondre
+à `NAV_INTERNE`). Ce petit décalage a mené à la découverte d'un bug bien plus grave et bien plus
+large, présent depuis la création du module.
+
+**Cause racine — deux listes de rôles internes, jamais synchronisées, dans deux fichiers différents** :
+- [Parametres.jsx:94-99](src/pages/Parametres.jsx#L94-L99) (`ROLES_INTERNES`) — la SEULE source
+  utilisée par le vrai formulaire "Nouvelle invitation", donc la seule qui compte pour n'importe quel
+  vrai compte de membre du personnel jamais créé sur la plateforme. Toutes les valeurs sont en
+  Title Case : `"Médecin", "Infirmière", "Pharmacien hospitalier", "Laborantin", "Caissier",
+  "Radiologue"`, etc.
+- `NAV_INTERNE` dans [AuthContext.jsx:24-126](src/context/AuthContext.jsx#L24-L126) — la liste qui
+  restreint réellement la navigation visible. Avant correctif, ses clés étaient en minuscules pour
+  exactement les rôles ci-dessus (`medecin`, `infirmiere`, `pharmacien_hospitalier`, `laborantin`,
+  `caissier`), et `Radiologue` n'y figurait même pas.
+
+`buildAuthBase()` calcule `NAV_INTERNE[role]?.[role_interne] ?? null` : si le `role_interne` stocké
+(Title Case, forcément, puisque c'est tout ce que `ROLES_INTERNES` peut produire) ne correspond à
+aucune clé de `NAV_INTERNE`, le résultat est `undefined → null`, et le code retombe alors sur
+`config.nav` — **le menu complet, non filtré, identique à celui d'un compte Directeur.**
+
+**Conséquence réelle, vérifiée par comparaison exacte des deux listes** : pour **Médecin,
+Infirmière, Pharmacien hospitalier, Laborantin, Caissier et Radiologue** — 5 des 9 rôles de la
+mission, plus un 6ᵉ rôle du même module — tout membre du personnel réellement invité depuis
+Paramètres (le seul mécanisme d'invitation qui fonctionne, cf. plus haut) obtient un accès complet
+et non restreint à tout le module Hôpital, au lieu du sous-ensemble d'écrans prévu pour son rôle.
+Seuls Sage-femme, Secrétaire médicale, Aide-soignant, Dieteticien, Cuisiniere et Agent de
+sterilisation avaient — par coïncidence de casse — une clé correspondante et étaient donc
+correctement restreints. Même schéma de bug confirmé, en creusant, sur les modules **Pharmacie**
+(Pharmacien, Caissier) et **Distributeur** (Commercial, Logistique) — seuls Gérant/Directeur/
+Ministre/Inspecteur/Analyste étaient épargnés, mais uniquement parce que leur valeur est `null`
+(accès complet voulu) des deux côtés, rendant le décalage de casse invisible dans leur cas précis.
+
+**Mes propres comptes de test (créés à la main par SQL avec des `role_interne` en minuscules,
+justement pour correspondre à l'ancien `NAV_INTERNE`) masquaient totalement ce bug** — c'est
+précisément pourquoi le Point 3 n'a été fiable qu'une fois retesté avec de vrais comptes invités via
+le vrai formulaire (voir plus bas). Une bonne partie de la cartographie statique de rôles faite plus
+tôt dans cette session restait donc correcte sur le papier (`NAV_INTERNE` décrit bien l'intention),
+mais ne reflétait jamais la réalité vécue par un vrai compte de la plateforme.
+
+**Corrigé** (autorisation explicite de l'utilisateur, périmètre strict respecté — uniquement les
+clés littérales de l'objet `NAV_INTERNE`, aucune des fonctions protégées de `AuthContext.jsx`
+touchée : `setLoading`, `buildAuthBase`, `enrichWithEtablissement`, `mountedRef`, `getSession`,
+`onAuthStateChange` restent identiques) : toutes les clés de `NAV_INTERNE` alignées sur les valeurs
+réelles de `ROLES_INTERNES` (Title Case) — `pharmacie` (Gérant, Pharmacien, Caissier), `hopital`
+(Directeur, Médecin, Infirmière, Pharmacien hospitalier, Laborantin, Caissier), `distributeur`
+(Directeur, Commercial, Logistique), `autorite` (Ministre, Inspecteur, Analyste). `ROLES_INTERNES`
+et le formulaire d'invitation n'ont pas été touchés (déjà corrects). **`Radiologue` volontairement
+laissé sans entrée dans `NAV_INTERNE`** — décision produit en attente (quels écrans un radiologue
+doit-il voir ? probablement proche de Laborantin, à confirmer), pas un simple alignement de casse ;
+un compte invité comme Radiologue continuera donc, pour l'instant, à recevoir l'accès complet par
+défaut (comportement inchangé, pas une régression de ce correctif).
+
+`CI=true npx eslint src/context/AuthContext.jsx` propre. `npm run build` sans erreur. Suite de tests
+complète (`react-scripts test`) : `16 passed, 16 total`, y compris `AuthContext.test.js`
+spécifiquement. Déployé en production (`git push` + SSH `root@81.17.98.80` →
+`git pull && npm install && npm run build && systemctl restart nginx`).
+
+**Vérifié en conditions réelles avec de VRAIS comptes invités** (pas des lignes SQL manuelles cette
+fois — exigence explicite de l'utilisateur, puisque c'est justement ce qui avait caché le bug) :
+comptes Médecin, Infirmière, Laborantin, Caissier et Pharmacien hospitalier créés via le vrai
+formulaire "Nouvelle invitation" dans Paramètres (compte Direction "Hôpital Audit Test"), connexion
+Supabase Auth provisionnée ensuite via l'API Admin (le seul moyen possible — l'invitation
+elle-même ne crée aucun compte de connexion, cf. constat séparé plus bas). Pour chacun des 5 :
+connexion réelle confirmée, navigation bien restreinte au sous-ensemble d'écrans attendu — **plus de
+menu complet** (voir détail par rôle dans le tableau de bord final, Point 4).
+
+**Note pour vague dédiée** : la même incohérence de casse pourrait exister ailleurs dans le code
+(recherché uniquement dans `Examens.jsx` à ce stade — `isMedecin = ri === "Médecin"` à la même
+ligne, désormais correct grâce à ce correctif, mais d'autres écrans utilisant des comparaisons
+similaires sur `role_interne` n'ont pas été audités un par un dans cette session).
 
 - **Point 1** : couverture confirmée (mécanisme partagé, pas de code hôpital séparé) + 1 bug
   résiduel trouvé et corrigé (lien email pointait vers la mauvaise page selon le type

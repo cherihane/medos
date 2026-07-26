@@ -23,19 +23,19 @@ function effacerRoleSession() {
 // /parametres est toujours inclus pour tous les rôles internes.
 const NAV_INTERNE = {
   pharmacie: {
-    gerant: null, // accès complet
-    pharmacien: [
+    "Gérant": null, // accès complet
+    "Pharmacien": [
       "/pharmacie/dashboard",
       "/pharmacie/inventaire",
       "/pharmacie/ordonnances",
       "/pharmacie/patients",
       "/pharmacie/scanner",
     ],
-    caissier: ["/pharmacie/caisse", "/pharmacie/scanner"],
+    "Caissier": ["/pharmacie/caisse", "/pharmacie/scanner"],
   },
   hopital: {
-    directeur: null,
-    medecin: [
+    "Directeur": null,
+    "Médecin": [
       "/hopital/dashboard",
       "/hopital/mes-consultations",
       "/hopital/patients",
@@ -49,7 +49,7 @@ const NAV_INTERNE = {
       "/hopital/bloc",
       "/hopital/dietetique",
     ],
-    infirmiere: [
+    "Infirmière": [
       "/hopital/dashboard",
       "/hopital/mon-service",
       "/hopital/patients",
@@ -73,15 +73,15 @@ const NAV_INTERNE = {
       "/hopital/facturation",
       "/hopital/caisse",
     ],
-    pharmacien_hospitalier: [
+    "Pharmacien hospitalier": [
       "/hopital/dashboard",
       "/hopital/stock",
       "/hopital/patients",
       "/hopital/scanner",
       "/hopital/alertes",
     ],
-    laborantin: ["/hopital/dashboard", "/hopital/examens", "/hopital/alertes"],
-    caissier: ["/hopital/dashboard", "/hopital/caisse", "/hopital/facturation"],
+    "Laborantin": ["/hopital/dashboard", "/hopital/examens", "/hopital/alertes"],
+    "Caissier": ["/hopital/dashboard", "/hopital/caisse", "/hopital/facturation"],
     "Aide-soignant": [
       "/hopital/dashboard",
       "/hopital/mon-service",
@@ -105,23 +105,23 @@ const NAV_INTERNE = {
     ],
   },
   distributeur: {
-    directeur: null,
-    commercial: [
+    "Directeur": null,
+    "Commercial": [
       "/distributeur/dashboard",
       "/distributeur/reseau-clients",
       "/distributeur/clients",
       "/distributeur/previsions",
     ],
-    logistique: [
+    "Logistique": [
       "/distributeur/entrepot",
       "/distributeur/livraisons",
       "/distributeur/tracabilite",
     ],
   },
   autorite: {
-    ministre: null,
-    inspecteur: null,
-    analyste: null,
+    "Ministre": null,
+    "Inspecteur": null,
+    "Analyste": null,
   },
 };
 
