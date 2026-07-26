@@ -3546,6 +3546,50 @@ Recherche `ri === "..."`, `role_interne === "..."`, `const is[A-Z]...`, `peut[A-
 | `Planning.jsx` | **Bug de contenu trouvé** : `roleMap` (ligne 101-105) mappe `role_interne.toLowerCase()` vers un `personnel_role` pour `planning_gardes`, mais la clé attendue pour Infirmière est `"infirmier"` (masculin, sans accent) alors que `"Infirmière".toLowerCase()` donne `"infirmière"` — ne correspond jamais. Résultat : sélectionner une vraie Infirmière dans le formulaire de garde assigne silencieusement `personnel_role = "Medecin"` (repli par défaut). Idem pour tout rôle absent de `roleMap` (Secrétaire médicale, Caissier, Pharmacien hospitalier, Dieteticien, Cuisiniere, Agent de sterilisation, Radiologue) — tous retombent sur "Medecin". Bug de contenu/affichage dans l'écran Planning gardes, pas un risque de sécurité — non corrigé, à faire dans une vague dédiée |
 | Tous les autres fichiers hôpital (Alertes, AssistantIA, CaissePage, Facturation, Fournisseurs, Lits, Maternite, MesConsultations, Pediatrie, Predictions, Rapports, Renouvellements, Reseau, Sterilisation, Urgences) | Aucune logique conditionnelle par rôle trouvée — rendu identique quel que soit `role_interne` |
 
+### Parcours réel écran par écran — 8 rôles restants (en cours, mis à jour au fur et à mesure)
+
+Comptes réellement invités via Paramètres sur "Hopital Audit Test 2"
+(`cherihaneadam123+hopitalaudit2@gmail.com`), connexions provisionnées via l'API Admin. Chaque
+écran cliqué réellement sous le compte du rôle concerné (pas d'inférence depuis Direction).
+
+**Caissier** (`cherihaneadam123+r2caissier@gmail.com`, nav réelle : Caisse, Facturation) :
+- Caisse : ✅ ouverture de session réelle ("Session ouverte par Caissier Test R2", fond initial
+  30 000 FCFA), confirmée après le correctif `etablissement_id`.
+- Facturation : ✅ cycle complet testé — création facture (10 000 FCFA), émission, paiement direct
+  via le bouton "Payer" de l'écran Facturation lui-même (sans repasser par Caisse) → statut "Payee"
+  confirmé, "Encaisse" mis à jour.
+- Accès direct par URL à `/hopital/patients` (hors nav) : lecture confirmée fonctionnelle, écriture
+  (créer un patient) d'abord bloquée par le bug `etablissement_id` (voir plus haut), confirmée
+  fonctionnelle après correctif ("Ibrahim CaissierApresFix" créé avec succès).
+
+**Médecin** (`cherihaneadam123+r2medecin@gmail.com`, nav réelle : Dashboard, Patients,
+Mes consultations, Examens/Labo, Urgences, Maternité, Bloc, Diététique, Transmission garde,
+Renouvellements, Assistant IA, Alertes — correspond exactement à `NAV_INTERNE` post-correctif) :
+- Dashboard : ✅ `DashboardMedecin` distinct confirmé (Patients en attente, Résultats disponibles,
+  Patients hospitalisés, Ordonnances à renouveler, bouton "Commencer les consultations").
+- Patients : ✅ chargement, liste correcte.
+- Mes consultations : ✅ cycle complet — file d'attente, "Appeler" (passe la consultation en
+  "en_cours", ouvre le dossier avec Nouvelle ordonnance/Prescrire un examen/Constantes), "Terminer".
+  **Point d'attention trouvé en testant** : le rattachement d'une consultation au bon médecin dans
+  cet écran se fait par correspondance texte libre entre `consultations.medecin_nom` et l'email du
+  médecin connecté (`medecinNom.split("@")[0]`,
+  [MesConsultations.jsx:376,405-407](src/pages/hopital/MesConsultations.jsx#L376)) — pas un
+  identifiant stable. Un médecin_nom saisi comme "Dr Dupont" au lieu de l'email/pseudo exact du
+  compte ne fera jamais apparaître la consultation dans la file du bon médecin. Fragile en usage
+  réel (une secrétaire tape naturellement un nom, pas un email) — pas un bug au sens strict, plutôt
+  une fragilité de conception à signaler.
+- Examens/Labo : ✅ prescription réelle testée (Bilan sanguin pour Fatou Kone).
+- Urgences, Maternité, Diététique, Renouvellements, Assistant IA, Alertes : ✅ chargement sans
+  erreur console, pas d'action d'écriture testée sur ces 6 écrans par manque de temps restant.
+- Bloc opératoire : ✅ chargement, onglets complets visibles (dont "Compte rendu", cohérent avec
+  le gate `ri === "Médecin"` trouvé dans le grep).
+- Transmission de garde : ✅ **écran jamais testé même par Direction en première partie de
+  session** — transmission réelle créée et retrouvée dans l'historique, confirme au passage que le
+  correctif RLS sur `transmissions_garde` (Point 2) n'a pas cassé l'écriture légitime.
+
+**Reste à parcourir** : Infirmière, Secrétaire médicale, Laborantin (avec retest précis des boutons
+En cours/Résultat), Pharmacien hospitalier, Aide-soignant, Sage-femme.
+
 ## Point 4 — Tableau de bord final (module Hôpital)
 
 ### Ordre de priorité des trouvailles (sécurité > cassé bloquant > incomplet > cosmétique)
