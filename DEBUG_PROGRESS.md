@@ -3411,6 +3411,84 @@ besoin (Mon service pour l'infirmière, notamment).
 ligne, désormais correct grâce à ce correctif, mais d'autres écrans utilisant des comparaisons
 similaires sur `role_interne` n'ont pas été audités un par un dans cette session).
 
+## SESSION 15 (SUITE) — Parcours complet des 8 rôles restants + recherche exhaustive des branches par rôle
+
+Reprise sur demande explicite de l'utilisateur : combler les 46+ cases restées ⬜ dans le tableau
+de bord, en se connectant réellement sous chacun des 8 comptes restants (Médecin, Infirmière,
+Secrétaire médicale, Laborantin, Caissier, Pharmacien hospitalier, Aide-soignant, Sage-femme) et en
+cliquant réellement dans chaque écran de sa nav. Nouvel établissement de test créé
+("Hopital Audit Test 2", `cherihaneadam123+hopitalaudit2@gmail.com`), 8 comptes invités via le vrai
+formulaire "Nouvelle invitation" (emails `cherihaneadam123+r2<role>@gmail.com`), connexions
+provisionnées via l'API Admin comme précédemment. Mot de passe unique `medos2026`.
+
+### TROUVAILLE MAJEURE — la restriction de nav par rôle n'est qu'une convenance d'interface, pas un contrôle d'accès
+
+En testant le compte Caissier (nav réduite à Caisse + Facturation, confirmée), j'ai testé la
+navigation directe par URL vers `/hopital/patients` — écran absent de sa nav. **La page s'est
+chargée intégralement** (liste des patients, bouton "Ajouter un patient", tous les filtres),
+exactement comme pour n'importe quel autre rôle.
+
+**Cause confirmée dans le code** : [App.js:124-130](src/App.js#L124-L130) —
+```js
+function ProtectedRoute({ children, requiredRole }) {
+  const { auth } = useAuth();
+  if (!auth) return <Navigate to="/" replace />;
+  if (requiredRole && auth.role !== requiredRole)
+    return <Navigate to={auth.dashboardPath} replace />;
+  return children;
+}
+```
+`ProtectedRoute` vérifie uniquement `auth.role` (le type de compte global : hopital / pharmacie /
+distributeur / autorite), **jamais le chemin demandé contre `auth.nav`/`allowedPaths`**. Autrement
+dit : `NAV_INTERNE` et `permissions_nav` ne servent qu'à décider quels liens apparaissent dans la
+barre latérale — ils ne bloquent absolument rien au niveau des routes elles-mêmes.
+
+**Conséquence réelle** : n'importe quel compte hôpital authentifié, quel que soit son
+`role_interne`, peut atteindre n'importe quel écran `/hopital/*` en tapant directement l'URL —
+Caissier peut ouvrir Stock, Laborantin peut ouvrir Caisse, Aide-soignant peut ouvrir Facturation,
+etc. La seule protection réelle et confirmée reste :
+1. `requiredRole` (empêche un compte pharmacie/distributeur/autorite d'atteindre `/hopital/*`) — OK.
+2. RLS en base, qui scope par **établissement**, pas par rôle — donc aucune fuite inter-établissement
+   liée à ce point précis, mais aucune barrière non plus entre les rôles d'un même établissement.
+
+**Deuxième ligne de défense trouvée en creusant (`Patients.jsx`)** : de nombreux indicateurs
+`peutVoirDossier`, `peutVoirConst`, `peutVoirOrd`, `peutVoirHospi`, `peutVoirComptes`,
+`peutVoirHistorique`, `peutSaisirConst`, `peutCreerOrd`, `peutVoirSoins`, `peutVoirDeces` (lignes
+1349-1357 et 2249) restreignent l'affichage **à l'intérieur** de la page Patients selon `role_interne`
+— c'est donc là, et uniquement là (pas au niveau de la route), que se joue la vraie protection
+contre "un aide-soignant qui verrait des diagnostics complets réservés aux médecins" évoquée dans
+la mission initiale. **Reste à vérifier concrètement, avec un vrai patient et un vrai dossier
+détaillé, que ces indicateurs empêchent bien l'affichage effectif du contenu sensible** (pas encore
+fait au moment de cette note — en cours).
+
+**Portée du problème, hors Patients.jsx** : sans route guard, TOUTE page accessible en URL directe
+qui n'a pas son propre filtre interne par rôle expose sans restriction tout ce que RLS autorise pour
+l'établissement — ce qui, pour la plupart des écrans hôpital (Stock, Caisse, Facturation, Examens,
+etc.), est la totalité des données de l'établissement, quel que soit le rôle qui les consulte.
+
+Non corrigé à ce stade (trouvaille, pas encore de correctif demandé) — signalé immédiatement à
+l'utilisateur dès confirmation, avant de poursuivre le parcours des 8 rôles.
+
+### Recherche exhaustive des branches conditionnelles par rôle (grep systématique)
+
+Recherche `ri === "..."`, `role_interne === "..."`, `const is[A-Z]...`, `peut[A-Z]...` dans tout
+`src/pages/hopital/*.jsx`, `src/hooks/*.js`, `src/components/*.jsx` :
+
+| Fichier | Logique par rôle trouvée |
+|---|---|
+| `Dashboard.jsx` | **Chaque rôle a un composant de tableau de bord entièrement différent** : `DashboardDirecteur`, `DashboardMedecin`, `DashboardInfirmiere`, `DashboardSecretaire`, `DashboardLaborantin`, `DashboardCaissier`, `DashboardPharmacien`, `DashboardAideSoignant`. **Aucun cas pour Sage-femme** ([Dashboard.jsx:980-988](src/pages/hopital/Dashboard.jsx#L980-L988)) — la chaîne de `if` ne la matche jamais et retombe sur le `return <DashboardDirecteur .../>` final : **une Sage-femme voit le tableau de bord Direction** (CA du jour, encaissé, en attente de paiement, personnel de garde global) au lieu d'un dashboard adapté à son rôle. Écart de contenu confirmé, pas une fuite de données inter-établissement (RLS scope toujours par établissement), mais expose des informations financières globales à un rôle qui n'en a normalement pas besoin |
+| `Patients.jsx` | 10 indicateurs `peutXxx` par rôle (voir ci-dessus) — cœur du contrôle d'accès aux données sensibles |
+| `Examens.jsx` | `isLaborantin`, `isMedecin` — libellé de bouton et filtre par défaut |
+| `Stock.jsx` | Section spécifique si `role_interne === "Infirmière"` (Infirmière n'a normalement pas accès à Stock via la nav — code mort sauf accès direct par URL) ; `isPharmacien` pour une section dédiée |
+| `Consultations.jsx` | Comportement différent pour Médecin (`voirTout` toggle, filtre par défaut sur ses propres consultations) |
+| `BlocOperatoire.jsx` | Onglets visibles différents pour Directeur/Médecin vs Infirmière |
+| `Dietetique.jsx` | `canPrescribe` limité à médecin/directeur |
+| `MonService.jsx` | Bouton "Demander un médicament" masqué pour Caissier/Laborantin/Aide-soignant |
+| `TransmissionGarde.jsx` | Liste des médecins filtrée par `role_interne === "Médecin"` (dropdown "médecin entrant") |
+| `Agenda.jsx` | Liste des médecins filtrée par `role_interne === "Médecin"` (comparaison exacte Title Case, cohérente avec le correctif NAV_INTERNE) |
+| `Planning.jsx` | **Bug de contenu trouvé** : `roleMap` (ligne 101-105) mappe `role_interne.toLowerCase()` vers un `personnel_role` pour `planning_gardes`, mais la clé attendue pour Infirmière est `"infirmier"` (masculin, sans accent) alors que `"Infirmière".toLowerCase()` donne `"infirmière"` — ne correspond jamais. Résultat : sélectionner une vraie Infirmière dans le formulaire de garde assigne silencieusement `personnel_role = "Medecin"` (repli par défaut). Idem pour tout rôle absent de `roleMap` (Secrétaire médicale, Caissier, Pharmacien hospitalier, Dieteticien, Cuisiniere, Agent de sterilisation, Radiologue) — tous retombent sur "Medecin". Bug de contenu/affichage dans l'écran Planning gardes, pas un risque de sécurité — non corrigé, à faire dans une vague dédiée |
+| Tous les autres fichiers hôpital (Alertes, AssistantIA, CaissePage, Facturation, Fournisseurs, Lits, Maternite, MesConsultations, Pediatrie, Predictions, Rapports, Renouvellements, Reseau, Sterilisation, Urgences) | Aucune logique conditionnelle par rôle trouvée — rendu identique quel que soit `role_interne` |
+
 ## Point 4 — Tableau de bord final (module Hôpital)
 
 ### Ordre de priorité des trouvailles (sécurité > cassé bloquant > incomplet > cosmétique)
