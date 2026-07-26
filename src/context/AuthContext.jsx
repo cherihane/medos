@@ -390,7 +390,7 @@ export function AuthProvider({ children }) {
           .maybeSingle(),
         supabase
           .from("membres_personnel")
-          .select("permissions_nav, actif")
+          .select("etablissement_id, permissions_nav, actif")
           .eq("email", user.email)
           .eq("actif", true)
           .maybeSingle(),
@@ -399,7 +399,13 @@ export function AuthProvider({ children }) {
       setAuth((prev) => {
         if (!prev) return prev;
         const patch = {};
+        // Propriétaire de l'établissement (email = etablissements.email) en priorité,
+        // sinon membre du personnel invité (email = membres_personnel.email) — sans ce
+        // repli, tout compte invité gardait etablissement_id à null pour toute la
+        // session, bloquant en écriture (RLS) sans jamais pouvoir créer le moindre
+        // enregistrement. Trouvé et corrigé en session 15 (audit Hôpital).
         if (etabRes.data?.id) patch.etablissement_id = etabRes.data.id;
+        else if (membreRes.data?.etablissement_id) patch.etablissement_id = membreRes.data.etablissement_id;
         // Si le membre a des permissions custom, on filtre le nav selon celles-ci
         const perms = membreRes.data?.permissions_nav;
         if (Array.isArray(perms) && perms.length > 0) {

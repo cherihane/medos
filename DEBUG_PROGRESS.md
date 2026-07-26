@@ -3469,6 +3469,61 @@ etc.), est la totalité des données de l'établissement, quel que soit le rôle
 Non corrigé à ce stade (trouvaille, pas encore de correctif demandé) — signalé immédiatement à
 l'utilisateur dès confirmation, avant de poursuivre le parcours des 8 rôles.
 
+### TROUVAILLE LA PLUS CRITIQUE DE CETTE REPRISE — `etablissement_id` jamais résolu pour un compte invité, sur toute la plateforme
+
+Trouvée en testant Caissier (compte réellement invité) : la lecture de la page Patients fonctionne
+(voit bien "Fatou Kone" créée par Direction), mais la création d'un nouveau patient échoue avec
+"Acces refuse. Verifiez que vous etes bien connecte a votre etablissement." — un message qui
+correspond exactement au mapping d'erreur RLS (`error.code === "42501"` /
+`error.message.includes("row-level security")`) dans
+[useMutations.js:10-12](src/hooks/useMutations.js#L10-L12). Reproduit deux fois, avec un délai
+d'attente généreux après connexion pour exclure une simple course de chargement, puis confirmé que
+Direction (propriétaire du même établissement) peut créer un patient sans problème au même moment
+— donc bien spécifique au type de compte (invité vs propriétaire), pas à l'établissement.
+
+**Cause racine, confirmée dans le code** — `enrichWithEtablissement()` dans
+[AuthContext.jsx:382-430](src/context/AuthContext.jsx#L382-L430) : la requête vers
+`membres_personnel` (celle qui concerne justement les comptes invités) ne sélectionnait que
+`permissions_nav, actif` — **jamais `etablissement_id`**, alors que la colonne existe sur cette
+table et est exactement ce dont la fonction a besoin. `patch.etablissement_id` n'était renseigné
+que depuis la requête `etablissements` (qui ne matche que si l'email du compte connecté EST
+l'email de l'établissement, donc uniquement le compte propriétaire/Direction). **Conséquence : pour
+tout compte invité — les 8 rôles autres que Direction, sur hôpital, pharmacie ET distributeur
+puisque `AuthContext.jsx` est partagé par toute la plateforme — `auth.etablissement_id` restait
+`null` pendant toute la session**, sans jamais se résoudre (pas une course de chargement
+transitoire : un état durable). Or la quasi-totalité des mutations d'écriture vues dans cette
+session (`Patients.jsx`, et par le même schéma quasi certainement `Consultations.jsx`,
+`Examens.jsx`, `Facturation.jsx`, `CaissePage.jsx`, `MonService.jsx`, `TransmissionGarde.jsx`,
+`commandes_internes`, etc.) construisent leur payload d'insertion avec
+`...(etablissement_id ? { etablissement_id } : {})` à partir de `auth?.etablissement_id` — donc
+omettent purement et simplement ce champ quand il vaut `null`, ce qui viole ensuite le `WITH CHECK`
+RLS de la table cible et échoue avec ce même message opaque, peu importe l'écran ou le rôle.
+
+**Ampleur** : potentiellement le bug fonctionnel le plus large de tout cet audit — pas limité au
+module Hôpital. N'importe quel membre du personnel réellement invité (pas le compte propriétaire),
+sur n'importe quel module de la plateforme, n'a jamais pu créer le moindre enregistrement nécessitant
+un `etablissement_id`, depuis que ce code existe. Les lectures fonctionnent normalement (RLS filtre
+côté serveur indépendamment de ce que le client connaît), ce qui masque le problème tant qu'on ne
+teste pas une vraie action d'écriture avec un vrai compte invité — exactement ce que cette reprise de
+session visait à corriger.
+
+**Corrigé** (autorisation explicite de l'utilisateur, périmètre strict — uniquement l'ajout de
+`etablissement_id` à la requête `membres_personnel` et un repli dans le calcul de
+`patch.etablissement_id`, propriétaire toujours prioritaire ; aucune des fonctions protégées
+(`setLoading`, `buildAuthBase`, `mountedRef`, `getSession`, `onAuthStateChange`) touchée) :
+```js
+.select("etablissement_id, permissions_nav, actif")   // + etablissement_id
+...
+if (etabRes.data?.id) patch.etablissement_id = etabRes.data.id;
+else if (membreRes.data?.etablissement_id) patch.etablissement_id = membreRes.data.etablissement_id;
+```
+`CI=true npx eslint src/context/AuthContext.jsx` propre. `npm run build` sans erreur. Suite de
+tests complète : `16 passed, 16 total`, y compris `AuthContext.test.js`. Déployé en production
+(`git push` + SSH → `git pull && npm install && npm run build && systemctl restart nginx`).
+
+**Vérification en conditions réelles** : en cours, juste après ce correctif — retest de la création
+de patient avec le même compte Caissier.
+
 ### Recherche exhaustive des branches conditionnelles par rôle (grep systématique)
 
 Recherche `ri === "..."`, `role_interne === "..."`, `const is[A-Z]...`, `peut[A-Z]...` dans tout
