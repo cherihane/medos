@@ -3669,6 +3669,62 @@ données Supabase — pas le serveur de dev, pour éliminer tout artefact) :
 
 Déployé en production après validation. Aucune autre ligne d'`AuthContext.jsx` modifiée.
 
+### Infirmière — parcours Mon service terminé (suite à la reprise après correctif)
+
+**Plan de soins** :
+- "Ajouter au plan" : ✅ **fonctionne réellement** (écriture confirmée en base à chaque tentative)
+  mais **aucun retour visuel** — pas de toast, la modale ne se ferme pas, la liste ne se
+  rafraîchit pas sans rechargement complet de la page. C'est ce qui avait rendu le test
+  précédent (avant la coupure de session) ambigu : en croyant l'action sans effet, j'ai
+  recliqué plusieurs fois, créant **5 doublons réels** en base (confirmé, puis nettoyés). Risque
+  concret en usage réel : une infirmière peut légitimement croire que sa saisie a échoué et
+  la retaper, dupliquant une prescription. Digne d'un correctif de confort/sécurité, pas testé
+  plus avant faute d'instruction explicite en ce sens.
+- "Administrer" / "Terminer" (via clic correctement positionné) : ✅ fonctionne parfaitement,
+  retour visuel immédiat (texte barré, badge, écriture confirmée dans
+  `administrations_medicament` avec `infirmiere_email`, `heure_reelle`, `statut` corrects). Mon
+  premier essai n'avait montré aucun effet à cause d'un simple problème de coordonnées de clic
+  côté outil de test, pas d'un bug applicatif — reproduit avec succès en ciblant le bon élément.
+- **Faille RLS mineure trouvée** : un `DELETE` sur `plan_soins` avec la clé anonyme + session
+  Infirmière retourne `204` (succès apparent) mais **ne supprime aucune ligne** — aucune policy
+  RLS `DELETE` n'existe pour ce rôle sur cette table (confirmé : les mêmes lignes réapparaissent
+  après rechargement ; suppression uniquement possible avec la clé de service). Pas un risque de
+  sécurité en soi (aucune fuite, aucune écriture non autorisée), mais un comportement trompeur —
+  soit un oubli de policy, soit une restriction volontaire non documentée.
+
+**Perfusions** : ✅ "Poser une perfusion" et "Terminer" fonctionnent avec retour visuel immédiat
+(barre de progression, statut, compteurs "En cours/Fin dépassée/Terminées"). **Bug de calcul
+trouvé** : `MonService.jsx` calcule `heure_fin_prevue = heure_debut + (volume_ml / debit_ml_h)
+heures` ([MonService.jsx:184-187](src/pages/hopital/MonService.jsx#L184-L187)) — logique correcte
+en apparence, mais une perfusion de 500 mL à 125 mL/h (soit 4h) posée à 23h08 s'est vue attribuer
+une fin prévue à 01h08 (2h plus tard, pas 4h), affichant "Fin dépassée" immédiatement après sa
+création. Cause exacte non confirmée (piste : le recalcul réactif du formulaire tourne avant que
+les deux champs volume/débit soient tous deux à jour) — documenté sans correctif, à
+creuser si le temps le permet.
+
+**Transmissions — BUG BLOQUANT CONFIRMÉ, jamais fonctionnel** : "Laisser une transmission" ne
+sauvegarde **jamais** aucune transmission, pour personne, depuis le déploiement de cette
+fonctionnalité. Cause root-causée avec certitude (testé par insertion SQL directe, indépendante
+de tout problème de clic ou de synchronisation d'état React) :
+`OngletTransmissions` insère `type: "transmission_infirmiere"`
+([MonService.jsx:847](src/pages/hopital/MonService.jsx#L847), et relit avec le même filtre en
+ligne 829), mais la contrainte `CHECK` de la table en production
+(`notes_evolution_type_check`) n'autorise que
+`ARRAY['evolution', 'observation', 'transmission', 'sortie']` — **`"transmission_infirmiere"` n'en
+fait pas partie**. Chaque tentative échoue silencieusement côté serveur avec une erreur Postgres
+`23514` (violation de contrainte CHECK), capturée par le `catch` du composant sans qu'aucun toast
+visible n'ait été observé pendant les tests. Confirmé par écriture SQL directe reproduisant
+exactement l'insertion de l'app. **Non corrigé** — touche le code (`MonService.jsx`, pas
+`AuthContext.jsx`) et sort du périmètre explicitement autorisé pour cette reprise ; à traiter sur
+confirmation explicite (changer soit la valeur envoyée en `"transmission"`, soit la contrainte
+`CHECK` pour inclure `"transmission_infirmiere"` — à trancher selon si d'autres écrans utilisent
+déjà le type `"transmission"` pour un usage différent).
+
+**Bilan Infirmière** : Dashboard ✅, Mes patients ✅, Plan de soins ✅ (fonctionnel, UX à
+améliorer), Perfusions ✅ (fonctionnel, bug de calcul mineur), Transmissions ❌ **cassé pour tout
+le monde** (contrainte de base de données jamais alignée avec le code applicatif). Lits, Urgences,
+Maternité, Bloc : chargement confirmé plus tôt dans la session, pas de nouvelle action testée ici.
+
 ## Point 4 — Tableau de bord final (module Hôpital)
 
 ### Ordre de priorité des trouvailles (sécurité > cassé bloquant > incomplet > cosmétique)
