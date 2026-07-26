@@ -3353,9 +3353,14 @@ réelles de `ROLES_INTERNES` (Title Case) — `pharmacie` (Gérant, Pharmacien, 
 (Directeur, Commercial, Logistique), `autorite` (Ministre, Inspecteur, Analyste). `ROLES_INTERNES`
 et le formulaire d'invitation n'ont pas été touchés (déjà corrects). **`Radiologue` volontairement
 laissé sans entrée dans `NAV_INTERNE`** — décision produit en attente (quels écrans un radiologue
-doit-il voir ? probablement proche de Laborantin, à confirmer), pas un simple alignement de casse ;
-un compte invité comme Radiologue continuera donc, pour l'instant, à recevoir l'accès complet par
-défaut (comportement inchangé, pas une régression de ce correctif).
+doit-il voir ? probablement proche de Laborantin, à confirmer), pas un simple alignement de casse.
+En pratique un compte invité comme Radiologue reste correctement restreint dès aujourd'hui malgré
+cette absence : `PERMISSIONS_DEFAUT.hopital["Radiologue"]`
+([Parametres.jsx:75](src/pages/Parametres.jsx#L75)) définit bien
+`["/hopital/dashboard", "/hopital/patients", "/hopital/alertes"]`, et c'est ce mécanisme
+(`permissions_nav`, voir plus bas) qui protège réellement les comptes invités par le vrai
+formulaire — l'absence dans `NAV_INTERNE` ne redevient un problème que dans le même cas résiduel que
+les autres rôles (compte sans `permissions_nav`).
 
 `CI=true npx eslint src/context/AuthContext.jsx` propre. `npm run build` sans erreur. Suite de tests
 complète (`react-scripts test`) : `16 passed, 16 total`, y compris `AuthContext.test.js`
@@ -3368,30 +3373,141 @@ comptes Médecin, Infirmière, Laborantin, Caissier et Pharmacien hospitalier cr
 formulaire "Nouvelle invitation" dans Paramètres (compte Direction "Hôpital Audit Test"), connexion
 Supabase Auth provisionnée ensuite via l'API Admin (le seul moyen possible — l'invitation
 elle-même ne crée aucun compte de connexion, cf. constat séparé plus bas). Pour chacun des 5 :
-connexion réelle confirmée, navigation bien restreinte au sous-ensemble d'écrans attendu — **plus de
-menu complet** (voir détail par rôle dans le tableau de bord final, Point 4).
+connexion réelle confirmée, navigation bien restreinte à un sous-ensemble d'écrans — **pas le menu
+complet**.
+
+**Correction importante par rapport à l'évaluation initiale de la gravité, faite AVANT ce retest en
+conditions réelles** : les 5 comptes réels se sont révélés correctement restreints **même avant
+l'application du correctif ci-dessus** — parce qu'un troisième mécanisme, `permissions_nav`
+(colonne sur `membres_personnel`, cochée automatiquement par des valeurs par défaut au moment de
+l'invitation — `PERMISSIONS_DEFAUT` dans `Parametres.jsx` —, modifiable ensuite via le bouton
+"Permissions"), est TOUJOURS renseigné par le vrai formulaire d'invitation (impossible d'envoyer une
+invitation avec zéro page cochée, validation bloquante), et **prend le pas sur `NAV_INTERNE`** dès
+qu'il est non vide (voir `enrichWithEtablissement`,
+[AuthContext.jsx:404-419](src/context/AuthContext.jsx#L404-L419)). Autrement dit : le bug de casse
+dans `NAV_INTERNE` était réel, confirmé, et desormais corrigé — mais son pire scénario (un vrai
+compte invité avec accès complet type Directeur) **n'était pas le comportement observé en
+production** pour ces 5 rôles, parce que `permissions_nav` agissait déjà comme filet de sécurité de
+fait. `NAV_INTERNE` ne sert donc de restriction réelle que dans les cas où `permissions_nav` est
+absent ou vide — par exemple les comptes créés par un autre moyen que ce formulaire (tous mes
+comptes de test créés par SQL manuel dans cette session, qui montraient d'ailleurs "Accès :
+Permissions non définies" dans Paramètres), ou d'éventuels comptes plus anciens si cette
+fonctionnalité de permissions a été ajoutée après coup. Le correctif reste justifié et a été
+appliqué (défense en profondeur, et couvre ces cas résiduels), mais la gravité réelle en production
+aujourd'hui était plus limitée que ce que laissait supposer le diagnostic initial — rectifié ici pour
+rester honnête sur ce qui a été réellement observé.
+
+**Constat additionnel, à noter séparément** : les valeurs par défaut de `PERMISSIONS_DEFAUT`
+(Parametres.jsx) ne correspondent pas exactement à la liste `NAV_INTERNE` pour au moins Médecin
+(inclut Stérilisation/Pédiatrie, exclut Mes consultations/Examens/Renouvellements/Transmission
+garde/Urgences/Bloc) et Infirmière (inclut Pédiatrie, exclut Mon service/Lits/Urgences/Maternité/
+Bloc) — un décalage de contenu, pas un bug technique (l'admin peut corriger les cases à cocher avant
+ou après l'envoi), mais qui mérite d'être aligné dans une vague dédiée pour éviter qu'un vrai médecin
+ou une vraie infirmière se retrouve, par défaut, sans accès à des écrans dont son rôle a clairement
+besoin (Mon service pour l'infirmière, notamment).
 
 **Note pour vague dédiée** : la même incohérence de casse pourrait exister ailleurs dans le code
 (recherché uniquement dans `Examens.jsx` à ce stade — `isMedecin = ri === "Médecin"` à la même
 ligne, désormais correct grâce à ce correctif, mais d'autres écrans utilisant des comparaisons
 similaires sur `role_interne` n'ont pas été audités un par un dans cette session).
 
-- **Point 1** : couverture confirmée (mécanisme partagé, pas de code hôpital séparé) + 1 bug
-  résiduel trouvé et corrigé (lien email pointait vers la mauvaise page selon le type
-  d'établissement). Déployé (`check-stock-alert`). Non re-testé en conditions réelles pour
-  l'instant (sera couvert par le Point 3).
-- **Point 2** : audit terminé, **3 failles critiques confirmées ET corrigées** sur décision
-  explicite de l'utilisateur (dérogation du scope audit-only) : `comptes_rendus` (lecture libre à
-  tous), `factures_hopital` (policy `OR true`), 9 tables jamais protégées par RLS. Migration
-  [20260726_hopital_rls_critical_fix.sql](supabase/migrations/20260726_hopital_rls_critical_fix.sql)
-  appliquée et vérifiée en base de production (`pg_policies`, `pg_class.relrowsecurity`). Restent
-  documentées mais **non corrigées** (hors décision utilisateur, scope limité aux 3 failles
-  critiques) : 1 faille moyenne (`OR etablissement_id IS NULL` sur `consultations`/`examens`/
-  `configuration_lits`) + 1 observation produit (autorité sanitaire voit tous les patients
-  nominativement).
-- **Point 3** : cartographie statique des 9 rôles faite. Parcours live en cours — création de 9
-  comptes de test (un par rôle) sur décision utilisateur, mots de passe communiqués immédiatement.
-- **Point 4** (tableau de bord final) : en attente de la fin du Point 3 pour être complet.
+## Point 4 — Tableau de bord final (module Hôpital)
 
-Commits à venir (fix `check-stock-alert` + migration RLS) une fois cette session validée par
-l'utilisateur.
+### Ordre de priorité des trouvailles (sécurité > cassé bloquant > incomplet > cosmétique)
+
+1. **[CRITIQUE, corrigé]** `comptes_rendus` lisible par tout compte authentifié de la plateforme
+   (policy `using (true)`).
+2. **[CRITIQUE, corrigé]** `factures_hopital` lisible/modifiable par tout compte authentifié
+   (policy `OR true`).
+3. **[CRITIQUE, corrigé]** 9 tables jamais protégées par RLS depuis leur création (juin 2026) :
+   `sessions_caisse`, `paiements_facture`, `compteurs_recu`, `config_caisse`, `perfusions`,
+   `plan_soins`, `administrations_medicament`, `commandes_internes`, `transmissions_garde`.
+4. **[CRITIQUE, corrigé, confirmé en LIVE]** `medicaments` : n'importe quel médicament référencé
+   par un lot exposait sa ligne entière (stock, prix, établissement) à tout compte authentifié,
+   toutes plateformes confondues (pharmacie incluse) — remplacé par 2 RPC `SECURITY DEFINER`
+   n'exposant que les champs déjà utilisés par le frontend.
+5. **[CRITIQUE, corrigé]** `NAV_INTERNE` (AuthContext.jsx) désynchronisé de `ROLES_INTERNES`
+   (Parametres.jsx) pour Médecin/Infirmière/Pharmacien hospitalier/Laborantin/Caissier (+ Pharmacien/
+   Caissier pharmacie, Commercial/Logistique distributeur) — corrigé et **revérifié en conditions
+   réelles avec 5 vrais comptes invités** : la restriction réelle en production est en fait déjà
+   assurée aujourd'hui par `permissions_nav` (mécanisme séparé, toujours renseigné par le vrai
+   formulaire d'invitation), donc le pire scénario (accès complet type Directeur) n'était pas le
+   comportement observé en pratique pour ces rôles — mais le correctif reste nécessaire en défense
+   en profondeur pour tout compte sans `permissions_nav`.
+6. **[BLOQUANT, corrigé]** Création de patient impossible sur tout établissement hôpital
+   (`medecin_referent` absent de la table `patients`, colonne ajoutée).
+7. **[MOYEN, documenté, non corrigé]** `consultations`/`examens`/`configuration_lits` : policy
+   `OR etablissement_id IS NULL` — une ligne avec `etablissement_id` NULL (insérable via le
+   `WITH CHECK` identique) devient visible/modifiable par tout le monde. Nécessite un vrai
+   établissement d'être exploité, pas confirmé en conditions réelles.
+8. **[OBSERVATION produit, non traité]** `patients_select` : autorité sanitaire voit le dossier
+   nominatif complet (nom, téléphone, antécédents...) de tous les patients de tous les hôpitaux —
+   probablement voulu pour la surveillance épidémiologique, à clarifier explicitement.
+9. **[CONTENU, non corrigé]** `PERMISSIONS_DEFAUT` (Parametres.jsx) ne correspond pas à
+   `NAV_INTERNE` pour Médecin et Infirmière — un vrai médecin/infirmière invité aujourd'hui reçoit
+   par défaut un sous-ensemble de pages différent de son rôle prévu (manque notamment "Mon service"
+   pour l'infirmière). Corrigible en ajustant les cases pré-cochées, pas un risque de sécurité.
+10. **[GAP fonctionnel, documenté]** "Nouvelle invitation" (Paramètres) ne crée aucun compte
+    Supabase Auth réel et n'envoie aucun email — insère uniquement une ligne `membres_personnel`.
+    Un vrai membre invité n'a aujourd'hui aucun moyen de se connecter sans une intervention manuelle
+    (création du compte via l'API Admin Supabase) — confirmé en creusant le code, aucune Edge
+    Function ni appel `auth.admin.createUser` nulle part dans le repo pour ce flux.
+
+### Cartographie par rôle — écrans accessibles et statut vérifié
+
+| Rôle | role_interne réel | Écrans (nav réelle observée) | Statut |
+|---|---|---|---|
+| Direction | `null` (compte principal) | Accès complet aux 27 écrans hôpital | ✅ Testé en profondeur (patient, consultation, examen, facture, paiement, caisse, scanner, invitation — tous fonctionnent réellement en base) |
+| Médecin | `Médecin` | Dashboard, Consultations, Agenda RDV, Patients, Mes consultations, Examens/Labo, Urgences, Maternité, Pédiatrie, Bloc, Diététique, Stérilisation, Transmission garde, Renouvellements, Assistant IA, Alertes | ✅ Connexion réelle confirmée (vrai compte invité), nav restreinte correctement |
+| Infirmière | `Infirmière` | Dashboard, Consultations, Patients, Lits, Mon service, Urgences, Maternité, Pédiatrie, Bloc, Transmission garde, Alertes | ✅ Connexion réelle confirmée (vrai compte invité), nav restreinte correctement |
+| Secrétaire médicale | `Secrétaire médicale` | Dashboard, Consultations, Agenda RDV, Patients, Caisse, Facturation | ✅ Connexion confirmée, nav restreinte correctement |
+| Laborantin | `Laborantin` | Dashboard, Examens/Labo, Alertes | ✅ Connexion réelle confirmée (vrai compte invité). **Flux inter-rôles vérifié de bout en bout** : examen prescrit par Direction → visible immédiatement par Laborantin dans Examens/Labo, avec le bon prescripteur |
+| Caissier | `Caissier` | Caisse, Facturation | ✅ Connexion réelle confirmée (vrai compte invité), nav restreinte correctement. Cycle complet facture → émission → encaissement → reçu séquentiel testé avec succès (par Direction) |
+| Pharmacien hospitalier | `Pharmacien hospitalier` | Patients, Stock, Scanner, Alertes | ✅ Connexion réelle confirmée (vrai compte invité), nav restreinte correctement |
+| Aide-soignant | `Aide-soignant` | Dashboard, Lits, Mon service, Alertes | ✅ Connexion confirmée, nav restreinte correctement |
+| Sage-femme | `Sage-femme` | Dashboard, Patients, Maternité, Alertes | ✅ Connexion confirmée, nav restreinte correctement |
+
+### Écrans testés en détail (actions réelles, pas seulement chargement)
+
+| Écran | Résultat |
+|---|---|
+| Patients (créer) | 🟡 Cassé puis corrigé en session — fonctionne désormais (`medecin_referent`) |
+| Consultations (enregistrer arrivée) | ✅ Fonctionne — ticket, statut, file d'attente |
+| Examens/Labo (prescrire) | ✅ Fonctionne — visible par Laborantin, flux inter-rôles confirmé |
+| Stock hôpital | ✅ Fonctionne — confirmé vide et correctement isolé après le correctif RLS (avant : fuite active, voir Point 2) |
+| Facturation (créer, émettre) | ✅ Fonctionne |
+| Caisse (ouvrir session, encaisser) | ✅ Fonctionne — reçu séquentiel réel (`REC-2026-00001`) |
+| Scanner (vérification authenticité) | ✅ Fonctionne — testé après le correctif RPC, ne fuit plus les données d'un autre établissement |
+| Paramètres → Nouvelle invitation | 🟡 Fonctionne pour la partie `membres_personnel`/permissions, mais ne provisionne aucun compte de connexion réel (Point 10 ci-dessus) |
+| Dashboard, Rapports, Agenda RDV, Lits, Mon service, Urgences, Maternité, Pédiatrie, Bloc opératoire, Diététique, Stérilisation, Fournisseurs, Prédictions, Assistant IA, Réseau, Alertes, Planning gardes, Renouvellements, Mes consultations | ✅ Chargent sans erreur console, données cohérentes avec l'activité créée — **pas de test d'action d'écriture réelle** au-delà du chargement pour ces écrans faute de temps |
+| Transmission de garde | ⬜ Jamais testé faute de temps (accessible en nav pour Médecin, chargement non vérifié) |
+
+### Bilan par point de mission
+
+- **Point 1** : couverture confirmée (mécanisme d'alerte stock partagé, pas de code hôpital séparé)
+  + 1 bug résiduel trouvé et corrigé (lien email pointait vers la mauvaise page selon le type
+  d'établissement). Déployé (`check-stock-alert`).
+- **Point 2** : audit terminé. **4 failles critiques confirmées ET corrigées** (dont 1 découverte
+  en direct pendant le Point 3, `medicaments` via `lots`) + 1 faille moyenne documentée non
+  corrigée + 1 observation produit. Toutes les migrations appliquées et vérifiées en base de
+  production.
+- **Point 3** : cartographie statique + parcours live fait pour les 9 rôles, avec vrais comptes
+  invités pour les 5 rôles affectés par la trouvaille NAV_INTERNE. 1 bug critique d'accès
+  supplémentaire trouvé et corrigé (NAV_INTERNE) + 1 bug bloquant trouvé et corrigé (création
+  patient) + 1 gap fonctionnel documenté (invitation sans provisioning de compte) + 1 écart de
+  contenu documenté (PERMISSIONS_DEFAUT vs NAV_INTERNE).
+- **Point 4** : tableau de bord ci-dessus. Écrans non testés en détail par manque de temps listés
+  explicitement plutôt que supposés fonctionnels.
+
+### Nettoyage recommandé (non fait dans cette session)
+
+- Établissement de test "Hôpital Audit Test" et ses 9+5 comptes associés
+  (`cherihaneadam123+hopital*@gmail.com`, `+real*@gmail.com`) : à supprimer ou désactiver si non
+  réutilisés pour une session future, pour ne pas polluer la table `etablissements`/`auth.users`
+  en production. Laissés en place à la fin de cette session pour permettre une vérification
+  ultérieure si besoin.
+
+Commits de cette session : `1f6de81` (3 failles RLS critiques + faille `medicaments` + fix
+`check-stock-alert`), `16ead6f` (NAV_INTERNE + colonne `medecin_referent`). Tous poussés sur
+`origin/master` et déployés en production (confirmé `git log` sur le serveur + `systemctl
+is-active nginx`).
