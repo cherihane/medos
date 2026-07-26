@@ -3499,15 +3499,17 @@ similaires sur `role_interne` n'ont pas été audités un par un dans cette sess
 - **Point 4** : tableau de bord ci-dessus. Écrans non testés en détail par manque de temps listés
   explicitement plutôt que supposés fonctionnels.
 
-### Nettoyage recommandé (non fait dans cette session)
+### Nettoyage effectué en fin de session
 
-- Établissement de test "Hôpital Audit Test" et ses 9+5 comptes associés
-  (`cherihaneadam123+hopital*@gmail.com`, `+real*@gmail.com`) : à supprimer ou désactiver si non
-  réutilisés pour une session future, pour ne pas polluer la table `etablissements`/`auth.users`
-  en production. Laissés en place à la fin de cette session pour permettre une vérification
-  ultérieure si besoin.
+Établissement de test "Hôpital Audit Test" et ses 14 comptes associés
+(`cherihaneadam123+hopital*@gmail.com` ×9, `+real*@gmail.com` ×5) supprimés sur confirmation
+explicite de l'utilisateur : toutes les données liées (patients, consultations, examens,
+factures, paiements, sessions de caisse, journal de caisse, configuration des lits, membres du
+personnel) supprimées en base dans l'ordre des dépendances, puis l'établissement lui-même, puis
+les 14 comptes `auth.users` via l'API Admin. Vérifié : `SELECT count(*) FROM etablissements WHERE
+id = ...` retourne `0`, les 14 suppressions de compte confirmées une par une (`[OK] Supprime`).
 
 Commits de cette session : `1f6de81` (3 failles RLS critiques + faille `medicaments` + fix
-`check-stock-alert`), `16ead6f` (NAV_INTERNE + colonne `medecin_referent`). Tous poussés sur
-`origin/master` et déployés en production (confirmé `git log` sur le serveur + `systemctl
-is-active nginx`).
+`check-stock-alert`), `16ead6f` (NAV_INTERNE + colonne `medecin_referent`), `3e6f4ff` (tableau de
+bord final). Tous poussés sur `origin/master` et déployés en production (confirmé `git log` sur
+le serveur + `systemctl is-active nginx`).
