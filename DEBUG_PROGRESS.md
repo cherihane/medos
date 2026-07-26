@@ -3521,8 +3521,10 @@ else if (membreRes.data?.etablissement_id) patch.etablissement_id = membreRes.da
 tests complète : `16 passed, 16 total`, y compris `AuthContext.test.js`. Déployé en production
 (`git push` + SSH → `git pull && npm install && npm run build && systemctl restart nginx`).
 
-**Vérification en conditions réelles** : en cours, juste après ce correctif — retest de la création
-de patient avec le même compte Caissier.
+**Vérifié en conditions réelles, corrigé confirmé** : même compte Caissier, même écran Patients
+(toujours en URL directe), création d'un nouveau patient ("Ibrahim CaissierApresFix") réussie sans
+erreur juste après le déploiement du correctif — confirmé apparaître dans la liste aux côtés de
+Fatou Kone. Le bug est bien résolu à la racine, pas seulement contourné.
 
 ### Recherche exhaustive des branches conditionnelles par rôle (grep systématique)
 
