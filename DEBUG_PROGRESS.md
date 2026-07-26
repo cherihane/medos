@@ -3786,11 +3786,13 @@ contre les vraies données) : 500 mL / 125 mL/h (4h attendues) → 01:35 à 05:3
 mL/h (2h attendues) → 01:35 à 03:35 ✅ ; 1000 mL / 100 mL/h (10h attendues) → 01:35 à 11:35 ✅ —
 soumis, confirmé "9h58min restantes" (pas "Fin dépassée") immédiatement après création.
 
-**Bilan Infirmière (après correctifs)** : Dashboard ✅, Mes patients ✅, Plan de soins ✅
-(fonctionnel ET retour visuel correct), Perfusions ✅ (fonctionnel, calcul de durée correct),
-Transmissions ✅ (fonctionnel, y compris la Note rapide patient). Point non traité, en attente de
-décision produit : la policy RLS `DELETE` manquante sur `plan_soins` (un `DELETE` retourne `204`
-sans supprimer aucune ligne pour le rôle Infirmière).
+**Bilan Infirmière (après correctifs) — rôle terminé** : Dashboard ✅, Mes patients ✅, Plan de
+soins ✅ (fonctionnel ET retour visuel correct), Perfusions ✅ (fonctionnel, calcul de durée
+correct), Transmissions ✅ (fonctionnel, y compris la Note rapide patient), Alertes ✅ (chargement
+et "Actualiser alertes cliniques" fonctionnels, aucune erreur). Lits, Urgences, Maternité, Bloc :
+chargement confirmé, pas d'action d'écriture testée sur ces écrans faute de temps. Point non
+traité, en attente de décision produit : la policy RLS `DELETE` manquante sur `plan_soins` (un
+`DELETE` retourne `204` sans supprimer aucune ligne pour le rôle Infirmière).
 
 ## Point 4 — Tableau de bord final (module Hôpital)
 
