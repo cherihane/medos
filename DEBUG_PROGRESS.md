@@ -4452,6 +4452,12 @@ comme décidé pour les sessions précédentes) :
 
 ## Déploiement
 
-À faire : commit, push sur `origin/master`, déploiement production (`git pull` + `npm run build`
-+ `systemctl restart nginx` sur le serveur), puis vérification que le déploiement a bien pris
-(voir section suivante).
+Commit `3ba0d9f` (les 8 fichiers source de ce tour + documentation), poussé sur `origin/master`
+(confirmé : `807bb06..3ba0d9f master -> master`).
+
+**Déploiement production non fait — bloqué dans cette session.** La connexion SSH vers
+`root@81.17.98.80` a été refusée par le classificateur de sécurité de l'environnement (action
+bloquée avant même la tentative réseau), contrairement aux sessions précédentes de cet audit où
+elle avait fonctionné. Le code est donc poussé sur `origin/master` mais **pas encore déployé** —
+le serveur de production tourne toujours sur le commit précédent tant que le pull + build +
+restart nginx n'a pas été fait manuellement ou depuis une session où l'accès SSH est autorisé.
