@@ -162,7 +162,7 @@ const EMPTY_FORM = {
   contact_nom: "", email: "", telephone: "", notes: "",
 };
 
-function FournisseurModal({ initial, onClose, onSaved }) {
+function FournisseurModal({ initial, etablissement_id, onClose, onSaved }) {
   const [form, setForm] = useState(initial
     ? {
         nom:                  initial.nom               || "",
@@ -188,7 +188,7 @@ function FournisseurModal({ initial, onClose, onSaved }) {
       if (isEdit) {
         await updateFournisseur(initial.id, form);
       } else {
-        await insertFournisseur({ ...form, actif: true });
+        await insertFournisseur({ ...form, actif: true, etablissement_id: etablissement_id ?? null });
       }
       onSaved();
       onClose();
@@ -440,6 +440,7 @@ export default function Fournisseurs() {
       {/* Modals */}
       {addModal && (
         <FournisseurModal
+          etablissement_id={etablissement_id}
           onClose={() => setAddModal(false)}
           onSaved={() => { success("Fournisseur ajouté avec succès"); refetch(); }}
         />
@@ -447,6 +448,7 @@ export default function Fournisseurs() {
       {editModal && (
         <FournisseurModal
           initial={editModal}
+          etablissement_id={etablissement_id}
           onClose={() => setEditModal(null)}
           onSaved={() => { success(`${editModal.nom} mis à jour`); refetch(); setEditModal(null); }}
         />

@@ -964,6 +964,26 @@ function DashboardRoleLayout({ ri }) {
   );
 }
 
+// ── Fallback neutre — tout role_interne sans case dedie ci-dessous ───────────
+// Jamais le dashboard Direction : aucun raccourci "Acces rapide" vers des
+// ecrans hors de la nav du role (voir DEBUG_PROGRESS.md, fuite Sage-femme).
+function DashboardGenerique({ auth }) {
+  return (
+    <Layout title="Tableau de bord" subtitle="Vue d'ensemble">
+      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
+      <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: 24, marginBottom: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: colors.navy, marginBottom: 6 }}>
+          Bienvenue{auth?.role_interne ? `, ${auth.role_interne}` : ""}
+        </div>
+        <div style={{ fontSize: 13, color: colors.textSecondary }}>
+          Utilisez le menu a gauche pour acceder a vos ecrans.
+        </div>
+      </div>
+      <AlertesPanel />
+    </Layout>
+  );
+}
+
 function DashboardMedecin()    { return <DashboardRoleLayout ri="Médecin" />; }
 function DashboardInfirmiere() { return <DashboardRoleLayout ri="Infirmière" />; }
 function DashboardSecretaire() { return <DashboardRoleLayout ri="Secrétaire médicale" />; }
@@ -985,5 +1005,5 @@ export default function DashboardHopital() {
   if (ri === "Caissier")               return <DashboardCaissier />;
   if (ri === "Pharmacien hospitalier") return <DashboardPharmacien />;
   if (ri === "Aide-soignant")          return <DashboardAideSoignant auth={auth} navigate={navigate} />;
-  return <DashboardDirecteur auth={auth} navigate={navigate} />;
+  return <DashboardGenerique auth={auth} />;
 }

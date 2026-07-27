@@ -3902,6 +3902,59 @@ prévues aujourd'hui, Alertes non résolues) et 3 boutons de raccourci au lieu d
   re-testés individuellement pour ce rôle — mêmes composants déjà validés en profondeur pour
   Infirmière avec les 3 correctifs de ce tour.
 
+### Sage-femme (`cherihaneadam123+r2sagefemme@gmail.com`) — rôle terminé, dernier des 8
+
+Nav réelle confirmée : Dashboard, Patients, Maternité, Alertes (correspond exactement à
+`NAV_INTERNE`).
+
+- **TROUVAILLE — tableau de bord Sage-femme jamais implémenté, fuite d'accès concrète confirmée
+  en direct.** `Dashboard.jsx` n'a aucun `case` pour `Sage-femme` dans son switch sur
+  `role_interne` : elle tombe dans le `default` et reçoit **le tableau de bord Direction complet**
+  (mêmes cartes, mêmes raccourcis, y compris un raccourci "Facturation"). Ce n'est pas resté
+  théorique : j'ai cliqué le raccourci "Facturation" depuis son tableau de bord et elle a été
+  **effectivement amenée sur l'écran Facturation complet** (facture `FAC-202607-3932`, bouton
+  "Gérer les tarifs", bouton "+ Nouvelle facture") — un écran totalement hors de sa nav prévue.
+  C'est la même famille de trouvaille que "la restriction de nav par rôle n'est qu'une convenance
+  d'interface" documentée plus haut, mais ici avec une **cause racine distincte et supplémentaire** :
+  même si `NAV_INTERNE`/`permissions_nav` étaient parfaitement corrects, un dashboard-fallback qui
+  affiche des raccourcis Direction reste un vecteur d'accès non contrôlé par la nav, parce que
+  `ProtectedRoute` ne vérifie que le rôle de plateforme (`hopital`), jamais `role_interne`. Trouvé
+  pendant ce tour, **pas corrigé** (hors des 3 correctifs approuvés ce tour) — à traiter comme un
+  point supplémentaire de la trouvaille NAV_INTERNE/ProtectedRoute déjà connue, pas comme un bug
+  isolé.
+- **Maternité** : ✅ testé en profondeur, tous les onglets fonctionnent réellement en base, aucun
+  bug trouvé :
+  - **Grossesses → "+ Ouvrir un dossier"** : dossier créé pour Fatou Kone (DDR 01/05/2026),
+    apparaît immédiatement dans la liste (`GR-2026-00001`, AG 12 SA, DAP calculée
+    05/02/2027), modale fermée correctement.
+  - **Détail d'une grossesse** (clic sur la ligne) : ouvre la fiche avec CPN (0), bouton "+
+    Nouvelle CPN" — chargement confirmé, pas de test d'écriture plus poussé faute de temps.
+  - **Salle d'accouchement → "+ Admettre une patiente"** : admission réelle testée (Fatou Kone,
+    membranes intactes), la carte "Travaux en cours" apparaît immédiatement avec durée en direct.
+  - **Partogramme (relevé)** : ajout d'un relevé réel (dilatation 4cm, CU 3/10min, BCF 140bpm) —
+    la carte "Travaux en cours" se met à jour immédiatement avec les dernières valeurs.
+  - **Clôture d'accouchement** : enregistrement réel testé (type eutocique, délivrance naturelle)
+    → transition automatique vers le formulaire "Nouveau-né".
+  - **Nouveau-né + calculateur Apgar** : ✅ le calculateur Apgar recalcule correctement en direct
+    à chaque clic (testé 1min:4, 5min:2, 10min:2) ; soumission réelle confirmée — le nouveau-né
+    apparaît dans l'onglet "Nouveau-nés" avec les bonnes valeurs (poids 3200g, Apgar 5min:2) et
+    est **correctement compté dans la carte d'alerte "APGAR 5min < 7"** (1).
+  - **Registre** : ✅ agrégation correcte confirmée (Total 1, Eutociques 1, poids moyen 3200g)
+    reflétant exactement l'accouchement qui vient d'être enregistré.
+  - **Certificat** (bouton sur une ligne "Nouveau-nés") : déclenche probablement `window.print()`
+    directement — aucun changement visible en navigateur automatisé, comportement normal pour ce
+    type d'action, non un bug.
+- **Patients** : ✅ chargement confirmé (2 patients visibles, filtres fonctionnels) ; les lignes ne
+  sont pas cliquables pour ce rôle — pas d'accès à une fiche patient complète depuis cet écran,
+  cohérent avec le périmètre attendu.
+- **Alertes** : ✅ chargement confirmé, aucune erreur, état vide correct.
+
+Données de test créées pendant cette vérification (à nettoyer avec le reste de l'établissement de
+test le moment venu) : grossesse `GR-2026-00001`, accouchement `ACC-2026-00001`, nouveau-né
+"Test-Bebe Kone" — tous liés à la patiente de test Fatou Kone.
+
+**Les 8 rôles hôpital restants sont maintenant tous parcourus avec de vrais comptes invités.**
+
 ## Point 4 — Tableau de bord final (module Hôpital)
 
 ### Ordre de priorité des trouvailles (sécurité > cassé bloquant > incomplet > cosmétique)
@@ -3925,6 +3978,16 @@ prévues aujourd'hui, Alertes non résolues) et 3 boutons de raccourci au lieu d
    formulaire d'invitation), donc le pire scénario (accès complet type Directeur) n'était pas le
    comportement observé en pratique pour ces rôles — mais le correctif reste nécessaire en défense
    en profondeur pour tout compte sans `permissions_nav`.
+5bis. **[CRITIQUE, confirmé en LIVE, non corrigé]** `Dashboard.jsx` n'a pas de `case` pour
+   `Sage-femme` dans son switch sur `role_interne` → fallback silencieux vers
+   `DashboardDirecteur`. Confirmé en conditions réelles avec le vrai compte invité : le raccourci
+   "Facturation" du tableau de bord Direction amène effectivement la Sage-femme sur l'écran
+   Facturation complet (facture réelle visible, "Gérer les tarifs", "+ Nouvelle facture"). Cause
+   racine distincte du désync `NAV_INTERNE`/`ROLES_INTERNES` (point 5) : ici même un
+   `permissions_nav` parfaitement correct ne protège pas, puisque le dashboard-fallback expose des
+   raccourcis vers des écrans hors nav et que `ProtectedRoute` ne vérifie jamais `role_interne`.
+   Non corrigé — nécessite une décision produit (ajouter un vrai `DashboardSageFemme`, ou a minima
+   un fallback neutre sans raccourcis Direction).
 6. **[BLOQUANT, corrigé]** Création de patient impossible sur tout établissement hôpital
    (`medecin_referent` absent de la table `patients`, colonne ajoutée).
 7. **[MOYEN, documenté, non corrigé]** `consultations`/`examens`/`configuration_lits` : policy
@@ -3956,7 +4019,7 @@ prévues aujourd'hui, Alertes non résolues) et 3 boutons de raccourci au lieu d
 | Caissier | `Caissier` | Caisse, Facturation | ✅ Connexion réelle confirmée (vrai compte invité), nav restreinte correctement. Cycle complet facture → émission → encaissement → reçu séquentiel testé avec succès (par Direction) |
 | Pharmacien hospitalier | `Pharmacien hospitalier` | Patients, Stock, Scanner, Alertes | ✅ Connexion réelle confirmée (vrai compte invité), nav restreinte correctement |
 | Aide-soignant | `Aide-soignant` | Dashboard, Lits, Mon service, Alertes | ✅ Connexion confirmée, nav restreinte correctement |
-| Sage-femme | `Sage-femme` | Dashboard, Patients, Maternité, Alertes | ✅ Connexion confirmée, nav restreinte correctement |
+| Sage-femme | `Sage-femme` | Dashboard, Patients, Maternité, Alertes | ✅ Connexion réelle confirmée (vrai compte invité). Maternité testée en profondeur (grossesse, salle d'accouchement, partogramme, nouveau-né + Apgar, registre) — tout fonctionne. ⚠️ Tableau de bord affiche Direction par défaut (pas de `DashboardSageFemme`) et le raccourci "Facturation" mène réellement à l'écran Facturation complet — voir point 5bis |
 
 ### Écrans testés en détail (actions réelles, pas seulement chargement)
 
@@ -3982,11 +4045,16 @@ prévues aujourd'hui, Alertes non résolues) et 3 boutons de raccourci au lieu d
   en direct pendant le Point 3, `medicaments` via `lots`) + 1 faille moyenne documentée non
   corrigée + 1 observation produit. Toutes les migrations appliquées et vérifiées en base de
   production.
-- **Point 3** : cartographie statique + parcours live fait pour les 9 rôles, avec vrais comptes
-  invités pour les 5 rôles affectés par la trouvaille NAV_INTERNE. 1 bug critique d'accès
-  supplémentaire trouvé et corrigé (NAV_INTERNE) + 1 bug bloquant trouvé et corrigé (création
-  patient) + 1 gap fonctionnel documenté (invitation sans provisioning de compte) + 1 écart de
-  contenu documenté (PERMISSIONS_DEFAUT vs NAV_INTERNE).
+- **Point 3** : cartographie statique + **parcours live réel fait pour les 9 rôles** (Direction +
+  les 8 rôles de personnel), chacun avec un vrai compte invité et des actions d'écriture testées
+  en base, pas seulement un chargement d'écran. 1 bug critique d'accès supplémentaire trouvé et
+  corrigé (NAV_INTERNE) + 1 bug bloquant trouvé et corrigé (création patient) + 1 bug clinique
+  critique trouvé et corrigé (transmissions infirmières jamais enregistrées) + 1 bug de calcul
+  trouvé et corrigé (fin de perfusion) + 2 bugs de retour visuel corrigés (Plan de soins,
+  Perfusions) + 1 bug bloquant trouvé et corrigé (Stock "Nouveau produit") + 1 faille d'accès
+  supplémentaire trouvée, **non corrigée** (dashboard-fallback Sage-femme → Facturation) + 1 gap
+  fonctionnel documenté (invitation sans provisioning de compte) + 1 écart de contenu documenté
+  (PERMISSIONS_DEFAUT vs NAV_INTERNE).
 - **Point 4** : tableau de bord ci-dessus. Écrans non testés en détail par manque de temps listés
   explicitement plutôt que supposés fonctionnels.
 
@@ -4004,3 +4072,386 @@ Commits de cette session : `1f6de81` (3 failles RLS critiques + faille `medicame
 `check-stock-alert`), `16ead6f` (NAV_INTERNE + colonne `medecin_referent`), `3e6f4ff` (tableau de
 bord final). Tous poussés sur `origin/master` et déployés en production (confirmé `git log` sur
 le serveur + `systemctl is-active nginx`).
+
+# SESSION 15 (SUITE, 2026-07-27) — Balayage systématique `etablissement_id` + fallback dashboard sécurisé
+
+Deux corrections demandées explicitement, aucune ne touche `AuthContext.jsx`.
+
+## Point A — Balayage systématique des inserts sans `etablissement_id`
+
+Point de départ : `CommanderModal` (Stock.jsx hôpital) avait le même bug que "Nouveau produit"
+(corrigé plus tôt cette session) — `etablissement_id` jamais inclus dans l'insert. Plutôt que
+corriger ce seul cas, audit complet de **tous** les points d'insertion du dépôt (hôpital,
+pharmacie, distributeur) :
+
+- Extraction de la liste des **52 tables** dont la policy RLS `INSERT`/`ALL` exige
+  `etablissement_id = ANY(mes_etablissements())` dans son `WITH CHECK` (requête directe sur
+  `pg_policies`, `WITH CHECK ILIKE '%etablissement_id%'`).
+- Pour chacune, localisation de tous les appelants de la fonction de mutation correspondante
+  (`useMutations.js`) ou de l'insert brut `supabase.from(...).insert(...)`, dans `src/pages` et
+  `src/components` — plus de 60 sites d'insertion vérifiés un par un (payload lu en contexte,
+  pas seulement le nom de la fonction).
+- Piège écarté en cours de route : `retours_lignes` apparaissait dans la liste des 52 tables,
+  mais sa policy vérifie en réalité `etablissement_id` de la ligne **parente** (`retours`) via un
+  `EXISTS`, pas une colonne directe sur `retours_lignes` — ce n'est donc pas un bug, juste un faux
+  positif du filtre textuel initial (vérifié en lisant la policy exacte, pas seulement le nom de
+  la table).
+
+**5 bugs confirmés et corrigés** (tous du même type : `etablissement_id` jamais transmis à
+l'insert, donc rejeté silencieusement par la policy RLS ou — pour l'un d'eux — silencieusement
+avalé par un `catch` vide) :
+
+1. **`src/pages/hopital/Stock.jsx` — `CommanderModal`** (bug signalé explicitement par
+   l'utilisateur). Ajout de `auth` comme prop, `etablissement_id: auth?.etablissement_id ?? null`
+   dans le payload, et passage de `auth` aux deux points d'invocation du modal (onglets Stock et
+   Péremptions).
+2. **`src/pages/hopital/Fournisseurs.jsx` — `FournisseurModal`** : `insertFournisseur({ ...form,
+   actif: true })` sans `etablissement_id` — cassait la création de tout nouveau fournisseur
+   hôpital pour tout le monde. Ajout de la prop `etablissement_id` (déjà disponible dans le
+   composant parent) et inclusion dans le payload.
+3. **`src/pages/hopital/Predictions.jsx` — `CommanderModal`** (bouton "Commander" sur une
+   recommandation IA) : même bug, aucun import `useAuth` dans tout le fichier. Ajout de l'import,
+   de `const { auth } = useAuth();`, et de `etablissement_id` dans le payload + prop du modal.
+4. **`src/pages/pharmacie/Inventaire.jsx` — `CommanderModal`** : même bug côté pharmacie
+   (symétrique au bug hôpital). Ajout de `const { auth } = useAuth();` dans le composant (import
+   déjà présent dans le fichier) et de `etablissement_id` dans le payload.
+5. **`src/hooks/useVerificationLot.js` — `creerAlerteSuspecte()`** : la fonction ne recevait
+   jamais `etablissement_id`, alors même que `verifier()` (son appelant direct dans le hook) le
+   recevait déjà en paramètre et l'utilisait pour l'étape 3 (recherche inventaire local) —
+   simplement jamais transmis à l'étape 4 (création de l'alerte "lot suspect"). Résultat concret :
+   **l'alerte de contrefaçon détectée par le Scanner (pharmacie et hôpital) n'a jamais été créée
+   en conditions réelles**, l'erreur RLS étant avalée par un commentaire explicite "erreur
+   silencieuse, ne pas bloquer le flux utilisateur". Corrigé en ajoutant `etablissement_id` à la
+   signature de `creerAlerteSuspecte` et à son appel. `src/pages/distributeur/Tracabilite.jsx`
+   appelait aussi `verifier()` sans jamais transmettre `etablissement_id` du tout (contrairement à
+   `pharmacie/Scanner.jsx`, qui le transmettait déjà) — corrigé en passant
+   `auth?.etablissement_id ?? null`.
+
+### Preuve réelle — chaque correction testée individuellement, donnée visible après rechargement
+
+Build de production locale (`npm run build` + `npx serve -s build -l 4173`) contre la vraie base
+Supabase, avec de vrais comptes :
+
+- **Fix 1 (Stock.jsx)** : connecté en Direction (`Hopital Audit Test 2`), produit test créé, stock
+  forcé sous le seuil, "Commander" cliqué avec un vrai fournisseur → succès UI, puis confirmé en
+  base : `commandes` id `60242c4d...`, `etablissement_id = 28060337-8a99-4540-8e0d-5eb63b4fa97e`
+  (établissement correct), `notes: "Test-Stock-Hopital-Audit — Qte : 5"`.
+- **Fix 2 (Fournisseurs.jsx hôpital)** : fournisseur "Fournisseur-Hopital-Test-Audit" créé via le
+  modal → confirmé en base, table `fournisseurs`, `etablissement_id` correct
+  (`28060337-8a99-4540-8e0d-5eb63b4fa97e`).
+- **Fix 3 (Predictions.jsx)** : le produit critique est apparu dans "Commandes suggérées",
+  "Commander" cliqué → confirmé en base : `commandes` id `a3c17e58...`, `etablissement_id`
+  correct, `notes` mentionnant explicitement "(recommandation IA Prédictions)".
+- **Fix 4 (Inventaire.jsx pharmacie)** : connecté sur l'établissement de test dédié "Pharmacie
+  Audit Test" (mot de passe déjà existant, aucune réinitialisation nécessaire), produit +
+  fournisseur créés, "Commander" cliqué → toast "Commande passée avec succès" **et** confirmé en
+  base : `commandes` id `ccc21824...`, `etablissement_id = 2f0d35ec-fe25-4883-93a4-d8974739cb9a`
+  (Pharmacie Audit Test).
+- **Fix 5 (useVerificationLot.js)** : scan d'un médicament et numéro de lot totalement inventés
+  sur `/pharmacie/scanner` → résultat "Lot suspect — Non identifié" **et** notification temps réel
+  reçue dans l'app ("Lot suspect détecté : ..."), confirmant que l'insert a réellement abouti.
+  Vérifié en base : `alertes` type `contrefacon`, nouvelle ligne avec `etablissement_id =
+  2f0d35ec-...` correct — à comparer avec 2 lignes historiques du 2026-07-17 dans la même table,
+  **`etablissement_id: null`**, qui sont la preuve directe que ce bug produisait déjà des alertes
+  orphelines avant ce correctif (probablement insérées via un accès direct service-role lors d'un
+  débogage antérieur, mais la valeur `null` illustre exactement le defect corrigé ici).
+  `distributeur/Tracabilite.jsx` : **retesté séparément le 2026-07-27** (voir ci-dessous) — même
+  résultat, confirmé en base.
+
+### Re-test — `distributeur/Tracabilite.jsx` (2026-07-27, suite à une demande explicite de re-vérification)
+
+Le fix appliqué à `Tracabilite.jsx` (passage de `etablissement_id: auth?.etablissement_id ?? null`
+à `verifier()`, absent avant correctif) avait été appliqué par cohérence de code avec le fix
+`pharmacie/Scanner.jsx` mais jamais re-testé via l'UI distributeur elle-même. Fait maintenant,
+même méthode que côté pharmacie :
+
+- Connecté avec le vrai compte distributeur de test "Distributeur Audit Final"
+  (`cherihaneadam123+distaudit@gmail.com`, mot de passe déjà existant, aucune réinitialisation
+  nécessaire).
+- Sur `/distributeur/tracabilite`, scan d'un médicament et d'un numéro de lot totalement inventés
+  (`Zzqqxxdistributeurinventeaudit9999` / `LOT-FAUX-DISTRIB-0001`) → résultat "Lot suspect", **et**
+  notification temps réel reçue dans l'app ("Lot suspect détecté : ... Scanné via Traçabilité —
+  Distributeur"), preuve que l'insert a réellement abouti (avant le fix, il aurait échoué en
+  silence comme documenté pour la pharmacie).
+- Confirmé en base : nouvelle ligne `alertes` (id `7ce90366-...`, 2026-07-27 11:15:46) avec
+  `etablissement_id = 77821e21-f46f-434b-ae6b-fb479888228d` — correspond exactement à
+  l'établissement "Distributeur Audit Final" utilisé pour le test, message
+  `"... Scanne via Traçabilité — Distributeur."`.
+
+**Les deux points d'appel de `useVerificationLot.js` (pharmacie et distributeur) sont maintenant
+vérifiés individuellement avec preuve directe en base. Le fix 5 est intégralement confirmé.**
+
+Données de test créées pendant cette vérification (non nettoyées, à inclure dans un futur passage
+de nettoyage) : produit "Test-Medoc-Audit" + fournisseur "Fournisseur-Test-Audit" + commande
+(Pharmacie Audit Test) ; produit "Test-Stock-Hopital-Audit" + fournisseur
+"Fournisseur-Hopital-Test-Audit" + 2 commandes (Hopital Audit Test 2) ; 2 alertes "contrefacon" de
+test (Pharmacie Audit Test + Distributeur Audit Final).
+
+## Point B — Dashboard : fallback neutre pour tout `role_interne` sans case dédié
+
+Rappel du problème (trouvé et documenté plus tôt cette session) : `Dashboard.jsx` n'avait pas de
+branche pour `Sage-femme` dans son routeur de rôles, et la dernière ligne du if-chain retombait
+sur `<DashboardDirecteur .../>` — donnant à la Sage-femme le tableau de bord Direction complet,
+raccourcis "Accès rapide" inclus (Facturation, Rapports, Planning gardes, Paramètres), confirmé
+en conditions réelles avec un accès effectif à l'écran Facturation.
+
+### Correction appliquée
+
+[`src/pages/hopital/Dashboard.jsx`](src/pages/hopital/Dashboard.jsx) :
+
+- Nouveau composant `DashboardGenerique({ auth })` : un message de bienvenue statique
+  (`Bienvenue, {role_interne}` + "Utilisez le menu à gauche pour accéder à vos écrans.") et le
+  panneau `AlertesPanel` déjà utilisé par les 6 autres rôles avec dashboard dédié (composant
+  purement passif, aucun `onClick`/`navigate` vers un autre écran). **Aucune section "Accès
+  rapide", aucun KPI cliquable, aucun raccourci** — volontairement minimal pour rester sûr même
+  pour un futur `role_interne` non prévu, sans avoir à vérifier au cas par cas ce qui est dans sa
+  nav.
+- Dernière ligne du routeur (`DashboardHopital`) changée de
+  `return <DashboardDirecteur auth={auth} navigate={navigate} />;` à
+  `return <DashboardGenerique auth={auth} />;` — c'était la seule ligne de code responsable de la
+  fuite ; toutes les branches `if (ri === ...)` précédentes restent inchangées.
+- Un vrai `DashboardSageFemme` dédié et complet (KPI grossesses actives, accouchements du jour,
+  etc., sur le modèle des 6 autres rôles) reste à faire dans un sprint séparé, comme convenu — ce
+  correctif ne couvre que le point de sécurité urgent (fallback jamais Direction).
+
+### Preuve réelle
+
+Reconnecté avec le vrai compte invité Sage-femme (`cherihaneadam123+r2sagefemme@gmail.com`) sur
+la build de production locale après le correctif :
+
+- Titre de la page : "Tableau de bord" (plus "Dashboard Direction").
+- Contenu : "Bienvenue, Sage-femme" + panneau "Alertes actives" (temps réel, alerte réelle de
+  rupture de stock affichée) — aucune autre section.
+- `read_page` sur la page entière : **seuls 4 liens de nav présents** (`/hopital/dashboard`,
+  `/hopital/patients`, `/hopital/maternite`, `/hopital/alertes`) + déconnexion — zéro bouton ou
+  lien vers `/hopital/facturation`, `/hopital/rapports`, `/hopital/planning` ou `/parametres`.
+  Confirmé : le vecteur de fuite concret trouvé plus tôt (raccourci Facturation cliquable depuis
+  le dashboard) n'existe plus.
+
+### Ce qui reste à faire (hors scope de ce correctif urgent)
+
+- `DashboardSageFemme` dédié et complet (sprint séparé, décidé explicitement par l'utilisateur).
+- La trouvaille structurelle plus large reste vraie : `ProtectedRoute` ne vérifie que le rôle de
+  plateforme (`hopital`), jamais `role_interne` — ce correctif ferme le vecteur du dashboard
+  spécifiquement, pas le problème de fond (une URL tapée directement resterait accessible). Non
+  traité ici, hors du périmètre demandé pour ce tour ("fallback sécurisé" uniquement).
+
+## Nettoyage des données de test de cette session (2026-07-27) — fait, confirmé en base
+
+Sur demande explicite, nettoyage des données factices créées pendant le balayage
+`etablissement_id` (Point A) et sa vérification, dans les 3 établissements d'audit utilisés
+(hôpital, distributeur, **et pharmacie** — inclus par cohérence avec "toutes les données de test
+créées pendant cet audit", même si seuls hôpital/distributeur étaient nommés explicitement ; à
+signaler si ce n'était pas voulu). **Les comptes de test eux-mêmes ne sont pas touchés** —
+uniquement les lignes de données créées pendant les tests.
+
+Vérifié avant suppression (`SELECT` ciblé sur les ids exacts notés au moment de la création, pas
+un nettoyage par nom générique) qu'aucune autre donnée ne dépendait de ces lignes, à une exception
+près : une alerte "Rupture de stock : Test-Stock-Hopital-Audit" (générée automatiquement par le
+système quand le stock du produit de test avait été forcé sous le seuil pour tester Predictions.jsx)
+référençait le médicament de test via `medicament_id` — trouvée et supprimée avant le produit,
+sans quoi la suppression aurait échoué sur une contrainte de clé étrangère (confirmé : la première
+tentative de suppression des médicaments a bien échoué avec `23503` sur
+`alertes_medicament_id_fkey`, corrigée en élargissant la recherche des alertes dépendantes).
+
+Supprimé, dans l'ordre (enfants avant parents) :
+
+| Table | Lignes supprimées |
+|---|---|
+| `commandes` | 3 (2 sur Hopital Audit Test 2, 1 sur Pharmacie Audit Test) |
+| `fournisseurs` | 2 ("Fournisseur-Hopital-Test-Audit", "Fournisseur-Test-Audit") |
+| `medicaments` | 2 ("Test-Stock-Hopital-Audit", "Test-Medoc-Audit") |
+| `alertes` | 3 (2 "contrefacon" — hôpital-scanner-pharmacie et distributeur — + 1 "rupture de stock" générée automatiquement) |
+
+Vérification finale : requête `COUNT(*)` sur les mêmes ids/noms après suppression → **0 partout**,
+confirmé en base.
+
+**Non touché par ce nettoyage** (hors du périmètre demandé, qui se limitait explicitement à
+"produits, fournisseurs, commandes, alertes") : les données de test créées plus tôt dans cette
+session pendant le parcours Sage-femme — grossesse `GR-2026-00001`, accouchement `ACC-2026-00001`,
+nouveau-né "Test-Bebe Kone" (patiente de test Fatou Kone, établissement Hopital Audit Test 2) —
+toujours en base, à nettoyer séparément si demandé. Les comptes de test (`Pharmacie Audit Test`,
+`Hopital Audit Test 2`, `Distributeur Audit Final`, les 8 comptes `r2*`) et leurs autres données
+réelles d'audit (patients, consultations, etc.) restent également intacts, comme demandé.
+
+## Nettoyage complémentaire — données Maternité restantes (2026-07-27) — fait, confirmé en base
+
+Sur demande explicite, nettoyage du dernier lot de données factices signalé (créé plus tôt cette
+session pendant le parcours Sage-femme, hors du périmètre du nettoyage précédent qui se limitait
+à "produits, fournisseurs, commandes, alertes") : grossesse `GR-2026-00001`, accouchement
+`ACC-2026-00001`, nouveau-né "Test-Bebe Kone" — tous dans `Hopital Audit Test 2`, tous liés à la
+patiente de test Fatou Kone (`990258ba-4066-4ec1-80f5-a29b6dcd524c`, **non supprimée** : c'est une
+patiente de test réutilisable, pas une donnée créée pour ce test précis).
+
+Vérifié avant suppression (`SELECT` par référence exacte — `numero_grossesse`,
+`numero_accouchement`, préfixe du prénom — pas par nom générique) : 4 lignes trouvées, y compris
+un `partogrammes` non mentionné explicitement par l'utilisateur mais faisant partie de la même
+séquence de test (créé en même temps que l'accouchement, référencé par
+`accouchements.partogramme_id`). Vérification des dépendances : aucune CPN
+(`consultations_prenatales`) liée à cette grossesse, aucun décès lié à la patiente — seule
+dépendance trouvée, le nouveau-né lui-même sur l'accouchement (attendu).
+
+Supprimé, dans l'ordre imposé par les clés étrangères (`nouveau_nes.accouchement_id` →
+`accouchements.id`, `accouchements.partogramme_id` → `partogrammes.id`,
+`accouchements.grossesse_id` → `grossesses.id`) :
+
+| Table | Ligne supprimée |
+|---|---|
+| `nouveau_nes` | "Test-Bebe" (Kone), lié à ACC-2026-00001 |
+| `accouchements` | ACC-2026-00001 |
+| `partogrammes` | le partogramme de la même séquence de travail |
+| `grossesses` | GR-2026-00001 |
+
+Vérification finale : requête `COUNT(*)` sur les 4 références exactes après suppression → **0
+partout**, confirmé en base.
+
+**Les données de test créées pendant cet audit sont maintenant intégralement nettoyées** (balayage
+`etablissement_id` + parcours Maternité Sage-femme). Restent uniquement, comme voulu : les comptes
+de test et les données d'audit antérieures déjà documentées comme conservées dans les sessions
+précédentes (patients, consultations, etc.).
+
+# ProtectedRoute — contournement de la restriction de navigation par URL directe (2026-07-27)
+
+## Contexte
+
+Trouvaille déjà documentée plus tôt cette session : la restriction de navigation par rôle
+(`NAV_INTERNE`/`permissions_nav`, calculée dans `AuthContext.jsx` et exposée via `auth.nav`)
+n'était appliquée **que côté affichage du menu**. `ProtectedRoute` (`src/App.js`) ne vérifiait
+que le rôle de haut niveau (hôpital/pharmacie/distributeur/autorité), jamais le chemin précis
+demandé contre `auth.nav`. Concrètement : un compte restreint qui tapait directement l'URL d'un
+écran hors de sa nav (ou la retrouvait par un raccourci comme celui du dashboard Sage-femme, déjà
+corrigé séparément) accédait à la page normalement — confirmé plus tôt avec la Sage-femme et
+Facturation. Ce correctif ferme le vecteur à la racine, pour les 3 modules à la fois, puisqu'un
+seul composant `ProtectedRoute` et une seule logique `NAV_INTERNE` s'appliquent partout.
+
+**Règle absolue respectée : `AuthContext.jsx` non modifié.** Tout le correctif vit dans
+`src/App.js`.
+
+## Correctif appliqué
+
+[`src/App.js`](src/App.js), fonction `ProtectedRoute` (ligne ~124) :
+
+```jsx
+function ProtectedRoute({ children, requiredRole }) {
+  const { auth } = useAuth();
+  const location = useLocation();
+  if (!auth) return <Navigate to="/" replace />;
+  if (requiredRole && auth.role !== requiredRole)
+    return <Navigate to={auth.dashboardPath} replace />;
+  if (Array.isArray(auth.nav)) {
+    const pathAutorise = auth.nav.some((item) => item.path === location.pathname);
+    if (!pathAutorise) return <Navigate to={auth.dashboardPath} replace />;
+  }
+  return children;
+}
+```
+
+Points clés :
+- `useLocation()` ajouté (import `react-router-dom`) pour connaître le chemin réellement demandé.
+- **Aucun traitement spécial pour "accès complet" n'est nécessaire.** En lisant `AuthContext.jsx`
+  (`buildAuthBase`), `auth.nav` n'est en réalité **jamais `null`** en pratique — même pour un
+  compte Direction/Gérant/Directeur (`role_interne` null), il vaut la liste **complète**
+  `config.nav` du rôle (tous les écrans), pas `null` comme le suggérait la table statique
+  `NAV_INTERNE` (`"Directeur": null` y désigne l'absence de filtrage, pas la valeur de `nav`
+  lui-même). Le check `auth.nav.some(...)` fonctionne donc identiquement dans les deux cas : pour
+  un compte à accès complet, la liste contient déjà tous les chemins possibles du rôle, donc rien
+  n'est jamais bloqué à tort. Le garde-fou `Array.isArray(auth.nav)` reste présent par prudence
+  (défense en profondeur si ce comportement changeait un jour), conformément à la demande.
+- **Séparateurs** (`{ type: "separator", label: ... }`) : ils n'ont pas de propriété `path`
+  (`undefined`). `item.path === location.pathname` ne matche donc jamais un séparateur, qui ne
+  peut par construction ni être traité comme une route valide ni bloquer un accès légitime —
+  aucun traitement spécial requis, vérifié explicitement en conditions réelles (voir preuves
+  ci-dessous : tous les comptes Direction hôpital testés ont une nav truffée de séparateurs et
+  aucun accès légitime n'a été bloqué).
+- `/parametres` n'a pas de statut particulier : il est simplement un item de nav comme un autre,
+  inclus ou exclu de `auth.nav` selon les mêmes règles — cohérent avec le fait qu'il figure déjà
+  dans `NAV_INTERNE`/`permissions_nav` au même titre que n'importe quel autre écran.
+- Build de production (`npm run build`) : aucune erreur, aucun nouveau warning introduit.
+
+## Preuve réelle — testé sur les 3 modules, rôle restreint ET Direction/Gérant
+
+Build de production locale (`npm run build` + `npx serve -s build -l 4173`) contre la vraie base
+Supabase.
+
+### Hôpital — Caissier (`cherihaneadam123+r2caissier@gmail.com`, nav réelle : Caisse + Facturation)
+
+- Avant ce correctif (confirmé plus tôt cette session avec le cas Sage-femme → Facturation) :
+  une URL tapée directement en dehors de la nav chargeait la page normalement.
+- **Après** : URL tapée directement `http://localhost:4173/hopital/stock` (écran Pharmacien
+  hospitalier, hors nav Caissier) → `window.location.pathname` confirme la redirection immédiate
+  vers `/hopital/caisse` (son `dashboardPath`), page Stock jamais affichée.
+- Accès légitime non affecté : URL tapée directement `/hopital/facturation` (dans sa nav) →
+  reste sur `/hopital/facturation`, contenu réel affiché (facture `FAC-202607-3932`, Ibrahim
+  CaissierApresFix, 10 000 FCFA).
+
+### Hôpital — Sage-femme (`cherihaneadam123+r2sagefemme@gmail.com`) — re-confirmation du cas d'origine
+
+- URL tapée directement `/hopital/facturation` → redirigée vers `/hopital/dashboard` (confirmé
+  via `window.location.pathname`), écran affiché = "Tableau de bord" (fallback neutre déjà
+  corrigé), **aucune trace de l'écran Facturation**. Le contournement par URL directe qui
+  subsistait après le premier correctif (dashboard uniquement) est maintenant fermé.
+- Accès légitime non affecté : `/hopital/maternite` reste accessible normalement.
+
+### Hôpital — Direction (`cherihaneadam123+hopitalaudit2@gmail.com`, accès complet)
+
+- URLs tapées directement `/hopital/facturation`, `/hopital/bloc`, `/hopital/assistant` → les 3
+  restent sur leur URL respective (aucune redirection), contenu réel affiché à chaque fois
+  (Bloc opératoire, Assistant IA avec ses suggestions cliniques réelles). **Aucune régression** :
+  la nav de ce compte contient de nombreux séparateurs (Vue globale, Patients et soins,
+  Personnel, Stock, Finance, Outils) et aucun n'a bloqué un accès légitime.
+
+### Pharmacie — Caissier (compte de test créé pour cette vérification, supprimé après usage)
+
+- Compte `cherihaneadam123+r2phcaissier@gmail.com` créé (role_interne `Caissier`,
+  `permissions_nav` = `["/pharmacie/caisse","/pharmacie/scanner"]`) car aucun compte Caissier
+  pharmacie n'existait encore parmi les comptes de test — connexion confirmée, nav réelle limitée
+  à Caisse + Scanner.
+- URL tapée directement `/pharmacie/inventaire` (hors nav) → redirigée vers `/pharmacie/caisse`.
+- Accès légitime non affecté : `/pharmacie/scanner` reste accessible.
+- **Compte et ligne `membres_personnel` supprimés après le test** (voir section nettoyage).
+
+### Pharmacie — Direction (`cherihaneadam123+pharmaaudit@gmail.com`, "Pharmacie Audit Test")
+
+- URL tapée directement `/pharmacie/inventaire` → reste sur cette URL, page Inventaire réelle
+  affichée (aucune redirection).
+
+### Distributeur — Commercial (compte de test créé pour cette vérification, supprimé après usage)
+
+- Compte `cherihaneadam123+r2discommercial@gmail.com` créé (role_interne `Commercial`,
+  `permissions_nav` = `["/distributeur/dashboard","/distributeur/reseau-clients","/distributeur/clients","/distributeur/previsions"]`)
+  sur l'établissement "Distributeur Audit Final" — connexion confirmée, nav réelle limitée à
+  Dashboard, Réseau clients, Prévisions, Clients (ni Traçabilité, ni Entrepôt, ni Livraisons).
+- URL tapée directement `/distributeur/tracabilite` (écran Logistique, hors nav Commercial) →
+  redirigée vers `/distributeur/dashboard`.
+- Accès légitime non affecté : `/distributeur/previsions` reste accessible, contenu réel affiché
+  (graphique CA, KPI commandes/clients/livraisons).
+- **Compte et ligne `membres_personnel` supprimés après le test** (voir section nettoyage).
+
+### Distributeur — Direction (`cherihaneadam123+distaudit@gmail.com`, "Distributeur Audit Final")
+
+- URL tapée directement `/distributeur/tracabilite` → reste sur cette URL, page Traçabilité
+  réelle affichée (aucune redirection).
+
+**Bilan : 3 modules × (1 rôle restreint + 1 compte Direction/Gérant) = 6 comptes testés, chacun
+avec un essai de contournement (bloqué) et un essai d'accès légitime (non affecté), plus le
+re-test explicite du cas Sage-femme d'origine. Aucune régression détectée.**
+
+## Nettoyage des comptes de test créés pour cette vérification — fait, confirmé
+
+Les 2 comptes créés spécifiquement pour couvrir pharmacie et distributeur (aucun compte Caissier
+pharmacie ni Commercial distributeur n'existait déjà parmi les comptes de test) ont été supprimés
+après usage, contrairement aux comptes `r2*` hôpital déjà établis qui restent (réutilisables,
+comme décidé pour les sessions précédentes) :
+
+- `membres_personnel` : lignes `cherihaneadam123+r2phcaissier@gmail.com` et
+  `cherihaneadam123+r2discommercial@gmail.com` supprimées (vérifié par id retourné).
+- `auth.users` : les 2 comptes correspondants supprimés via l'API Admin (statut 200 confirmé pour
+  les deux).
+- Vérification finale : `COUNT(*)` sur `auth.users` et `membres_personnel` pour ces 2 emails →
+  **0 partout**, confirmé en base.
+
+## Déploiement
+
+À faire : commit, push sur `origin/master`, déploiement production (`git pull` + `npm run build`
++ `systemctl restart nginx` sur le serveur), puis vérification que le déploiement a bien pris
+(voir section suivante).

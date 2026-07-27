@@ -3,6 +3,7 @@ import { useState, useMemo } from "react";
 import Layout from "../../components/Layout";
 import { useMedicamentsCritiques, useMedicaments, useFournisseurs } from "../../hooks/useSupabaseData";
 import { insertCommande } from "../../hooks/useMutations";
+import { useAuth } from "../../context/AuthContext";
 
 const inputStyle = {
   width: "100%", padding: "9px 13px", border: "1.5px solid var(--border)",
@@ -10,7 +11,7 @@ const inputStyle = {
   color: colors.navy, backgroundColor: colors.bgCard,
 };
 
-function CommanderModal({ medicamentNom, quantiteDefaut, onClose, onSaved }) {
+function CommanderModal({ medicamentNom, quantiteDefaut, etablissement_id, onClose, onSaved }) {
   const { data: fournisseurs, loading: loadingF } = useFournisseurs();
   const [fournisseurId, setFournisseurId] = useState("");
   const [quantite, setQuantite] = useState(String(quantiteDefaut));
@@ -25,6 +26,7 @@ function CommanderModal({ medicamentNom, quantiteDefaut, onClose, onSaved }) {
     try {
       await insertCommande({
         fournisseur_id: fournisseurId,
+        etablissement_id: etablissement_id ?? null,
         statut: "envoyee",
         date_commande: new Date().toISOString(),
         notes: `${medicamentNom} — Qté : ${qty} (recommandation IA Prédictions)`,
@@ -97,6 +99,7 @@ function getRisque(m) {
 }
 
 export default function Predictions() {
+  const { auth } = useAuth();
   const { data: critiques, loading } = useMedicamentsCritiques(20);
   const { data: allMeds } = useMedicaments();
   const [commanderModal, setCommanderModal] = useState(null); // { nom, quantite }
@@ -155,6 +158,7 @@ export default function Predictions() {
         <CommanderModal
           medicamentNom={commanderModal.nom}
           quantiteDefaut={commanderModal.quantite}
+          etablissement_id={auth?.etablissement_id}
           onClose={() => setCommanderModal(null)}
           onSaved={(msg) => { showToast(msg); setCommanderModal(null); }}
         />

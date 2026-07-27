@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { NotificationsProvider } from "./context/NotificationsContext";
 import { DarkModeProvider } from "./context/DarkModeContext";
@@ -123,9 +123,21 @@ function PageLoader() {
 // ── Route protégée ────────────────────────────────────────────────────────────
 function ProtectedRoute({ children, requiredRole }) {
   const { auth } = useAuth();
+  const location = useLocation();
   if (!auth) return <Navigate to="/" replace />;
   if (requiredRole && auth.role !== requiredRole)
     return <Navigate to={auth.dashboardPath} replace />;
+  // auth.nav est toujours un tableau (jamais null en pratique) : la liste complète
+  // des écrans du rôle pour un compte à accès complet (Direction/Gérant/Directeur),
+  // ou la liste filtrée par role_interne pour un rôle restreint (voir AuthContext.jsx,
+  // buildAuthBase/enrichWithEtablissement). Les séparateurs (type: "separator") n'ont
+  // pas de "path" et ne peuvent donc jamais matcher une route réelle ni bloquer un accès
+  // légitime. Si le chemin actuel n'apparaît pas dans auth.nav, l'utilisateur n'y a pas
+  // accès même en tapant l'URL directement — on le renvoie vers son propre dashboard.
+  if (Array.isArray(auth.nav)) {
+    const pathAutorise = auth.nav.some((item) => item.path === location.pathname);
+    if (!pathAutorise) return <Navigate to={auth.dashboardPath} replace />;
+  }
   return children;
 }
 

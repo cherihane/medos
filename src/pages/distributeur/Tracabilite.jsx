@@ -228,6 +228,7 @@ export default function Tracabilite() {
       nomMedicament: nomMedicament.trim(),
       numerolot: numerolot.trim(),
       scannePar: "Traçabilité — Distributeur",
+      etablissement_id: auth?.etablissement_id ?? null,
     });
   }, [nomMedicament, numerolot, verifier, toastError]);
 

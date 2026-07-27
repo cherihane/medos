@@ -89,7 +89,7 @@ function EditModal({ med, onClose, onSaved }) {
   );
 }
 
-function CommanderModal({ med, fournisseurs, onClose, onSaved }) {
+function CommanderModal({ med, fournisseurs, auth, onClose, onSaved }) {
   const [form, setForm] = useState({ fournisseur_id: fournisseurs[0]?.id ?? "", quantite: med.stock_minimum ?? 50, date_livraison_prevue: "" });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
@@ -97,7 +97,7 @@ function CommanderModal({ med, fournisseurs, onClose, onSaved }) {
   const handleSave = async () => {
     if (!form.fournisseur_id) { setFormError("Selectionnez un fournisseur."); return; }
     setSaving(true);
-    try { await insertCommande({ fournisseur_id: form.fournisseur_id, statut: "envoyee", date_commande: new Date().toISOString(), date_livraison_prevue: form.date_livraison_prevue || null, montant_total: 0, notes: `${med.nom} — Qte : ${form.quantite}` }); onSaved(); onClose(); }
+    try { await insertCommande({ fournisseur_id: form.fournisseur_id, etablissement_id: auth?.etablissement_id ?? null, statut: "envoyee", date_commande: new Date().toISOString(), date_livraison_prevue: form.date_livraison_prevue || null, montant_total: 0, notes: `${med.nom} — Qte : ${form.quantite}` }); onSaved(); onClose(); }
     catch (e) { setFormError("Erreur : " + e.message); } finally { setSaving(false); }
   };
   return (
@@ -303,7 +303,7 @@ function OngletStock({ auth }) {
   return (
     <div>
       {editMed    && <EditModal med={editMed} onClose={() => setEditMed(null)} onSaved={() => { refetch(); success("Medicament mis a jour"); }} />}
-      {commandMed && <CommanderModal med={commandMed} fournisseurs={fournisseurs} onClose={() => setCommandMed(null)} onSaved={() => { refetch(); success("Commande passee"); }} />}
+      {commandMed && <CommanderModal med={commandMed} fournisseurs={fournisseurs} auth={auth} onClose={() => setCommandMed(null)} onSaved={() => { refetch(); success("Commande passee"); }} />}
       {showNouveau && <NouveauModal auth={auth} onClose={() => setShowNouveau(false)} onSaved={() => { refetch(); success("Medicament ajoute"); }} />}
       {dispenseMed && <DispensationModal med={dispenseMed} patients={patients} auth={auth} onClose={() => setDispenseMed(null)} onSaved={() => { refetch(); success("Dispensation enregistree — stock mis a jour"); }} />}
 
@@ -527,7 +527,7 @@ function OngletPeremptions({ auth }) {
 
   return (
     <div>
-      {commandMed && <CommanderModal med={commandMed} fournisseurs={fournisseurs} onClose={() => setCommandMed(null)} onSaved={() => success("Commande passee")} />}
+      {commandMed && <CommanderModal med={commandMed} fournisseurs={fournisseurs} auth={auth} onClose={() => setCommandMed(null)} onSaved={() => success("Commande passee")} />}
 
       <div className="kpi-row" style={{ marginBottom: 16 }}>
         {[

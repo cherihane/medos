@@ -147,8 +147,9 @@ async function verifierBDPM(nomMedicament) {
 }
 
 // ── Créer alerte Supabase (une seule fois) ────────────────────────────────────
-async function creerAlerteSuspecte({ nomMedicament, numerolot, scannePar }) {
+async function creerAlerteSuspecte({ nomMedicament, numerolot, scannePar, etablissement_id }) {
   const { error } = await supabase.from("alertes").insert({
+    etablissement_id: etablissement_id ?? null,
     type: "contrefacon",
     severite: "critique",
     titre: `Lot suspect detecte : ${nomMedicament || numerolot || "Inconnu"}`,
@@ -292,7 +293,7 @@ export function useVerificationLot() {
 
       // ── Etape 4 : Suspect — alerte unique ─────────────────────────────────
       // Ces deux appels sont attendus ; ils n'ont lieu qu'une seule fois ici.
-      await creerAlerteSuspecte({ nomMedicament, numerolot, scannePar });
+      await creerAlerteSuspecte({ nomMedicament, numerolot, scannePar, etablissement_id });
       await sendAlertEmail({
         nomMedicament: nomMedicament || numerolot || "Inconnu",
         numerolot,

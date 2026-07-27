@@ -125,6 +125,7 @@ function EditModal({ med, onClose, onSaved }) {
 
 // ── Modal Commander ───────────────────────────────────────────────────────────
 function CommanderModal({ med, fournisseurs, onClose, onSaved }) {
+  const { auth } = useAuth();
   const [form, setForm] = useState({
     fournisseur_id:        fournisseurs[0]?.id ?? "",
     quantite:              med.stock_minimum ?? 100,
@@ -142,6 +143,7 @@ function CommanderModal({ med, fournisseurs, onClose, onSaved }) {
     try {
       await insertCommande({
         fournisseur_id:        form.fournisseur_id,
+        etablissement_id:      auth?.etablissement_id ?? null,
         statut:                "envoyee",
         date_commande:         new Date().toISOString(),
         date_livraison_prevue: form.date_livraison_prevue || null,
