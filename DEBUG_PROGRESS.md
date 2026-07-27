@@ -3839,6 +3839,32 @@ NAV_INTERNE), pas l'ancien compte SQL :
    hors périmètre des 3 correctifs déjà traités ce tour).
 - **Alertes** : ✅ chargement confirmé, "Aucune alerte active", aucune erreur.
 
+### Pharmacien hospitalier (`cherihaneadam123+r2pharmacien@gmail.com`) — en cours
+
+Nav réelle confirmée : Patients, Stock, Scanner, Alertes (correspond exactement à
+`NAV_INTERNE`). `DashboardPharmacien` distinct confirmé (Ordonnances à dispenser, Ruptures de
+stock, Péremptions dans 30j, Commandes internes att.).
+
+**BUG CONFIRMÉ, NOUVEAU, PORTÉE PLUS LARGE QUE CE RÔLE** : "Stock" → "+ Nouveau produit" échoue
+systématiquement avec un message d'erreur visible "Acces refuse. Verifiez que vous etes bien
+connecte a votre etablissement." — testé avec "Paracetamol 1g R2Test", stock initial 50, seuil
+10. Root-causé avec certitude par lecture du code et de la base :
+- `NouveauModal` dans [Stock.jsx:119-127](src/pages/hopital/Stock.jsx#L119-L127) appelle
+  `insertMedicament({ ...form, ... })` où `form` ne contient que
+  `nom, code, categorie, stock_actuel, stock_minimum, prix_unitaire` — **`etablissement_id` n'est
+  jamais inclus dans le payload**, quel que soit le rôle connecté.
+- La policy RLS `med_insert` sur `medicaments` exige
+  `etablissement_id = ANY(mes_etablissements())` en `WITH CHECK` (confirmé par requête directe sur
+  `pg_policy`) ; la colonne n'a **aucune valeur par défaut ni trigger** qui la remplirait
+  automatiquement (confirmé par requête sur `information_schema.columns`).
+- Résultat : `etablissement_id` est toujours `NULL` à l'insertion, ce qui ne peut jamais satisfaire
+  la policy — **l'ajout d'un nouveau médicament au stock hospitalier est cassé pour tout le monde,
+  quel que soit le rôle ou l'établissement**, pas seulement pour le Pharmacien hospitalier.
+- **Non corrigé** — touche un fichier hors du périmètre explicitement autorisé pour cette reprise
+  (`Stock.jsx`, pas `AuthContext.jsx` ni `MonService.jsx`) ; à confirmer avant correctif.
+
+Reste à tester pour ce rôle : Scanner, File de dispensation, Péremptions, Commandes internes.
+
 ## Point 4 — Tableau de bord final (module Hôpital)
 
 ### Ordre de priorité des trouvailles (sécurité > cassé bloquant > incomplet > cosmétique)
