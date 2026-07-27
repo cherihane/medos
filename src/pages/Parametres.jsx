@@ -6,6 +6,8 @@ import { useAuth } from "../context/AuthContext";
 import { supabase } from "../supabaseClient";
 import { colors, radius, shadow, font } from "../theme";
 import { useDarkMode } from "../context/DarkModeContext";
+import { updateMembreSpecialite } from "../hooks/useMutations";
+import { SPECIALITES_MEDECIN } from "../config/specialitesMedecin";
 
 // ─── Pages disponibles par rôle ──────────────────────────────────────────────
 // Ces chemins correspondent exactement aux nav dans AuthContext.roleConfig.
@@ -449,7 +451,7 @@ function SectionPersonnel({ etablissement_id, role }) {
     setLoading(true);
     const { data } = await supabase
       .from("membres_personnel")
-      .select("id, email, role_interne, actif, created_at, invitation_acceptee, permissions_nav")
+      .select("id, email, role_interne, actif, created_at, invitation_acceptee, permissions_nav, specialite")
       .eq("etablissement_id", etablissement_id)
       .order("created_at", { ascending: false });
     setMembres(data ?? []);
@@ -511,6 +513,20 @@ function SectionPersonnel({ etablissement_id, role }) {
       toastError("Erreur : " + e.message);
     } finally {
       setUpdatingId(null);
+    }
+  };
+
+  const [updatingSpecialiteId, setUpdatingSpecialiteId] = useState(null);
+  const handleChangeSpecialite = async (membre, specialite) => {
+    setUpdatingSpecialiteId(membre.id);
+    try {
+      await updateMembreSpecialite(membre.id, specialite || null);
+      setMembres((prev) => prev.map((m) => m.id === membre.id ? { ...m, specialite: specialite || null } : m));
+      success(`Spécialité de ${membre.email} mise à jour : ${specialite || "aucune"}.`);
+    } catch (e) {
+      toastError("Erreur : " + e.message);
+    } finally {
+      setUpdatingSpecialiteId(null);
     }
   };
 
@@ -708,6 +724,22 @@ function SectionPersonnel({ etablissement_id, role }) {
                 {editPermsId !== m.id && (
                   <div style={{ padding: "6px 14px 8px", backgroundColor: colors.bgCard, borderTop: "1px solid var(--border-light)", fontSize: 11, color: colors.textSecondary }}>
                     <span style={{ fontWeight: 600 }}>Accès : </span>{permsSummary(m)}
+                  </div>
+                )}
+
+                {/* Spécialité — uniquement pour les médecins hôpital */}
+                {role === "hopital" && m.role_interne === "Médecin" && (
+                  <div style={{ padding: "6px 14px 10px", backgroundColor: colors.bgCard, borderTop: "1px solid var(--border-light)", display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: colors.textSecondary }}>Spécialité :</span>
+                    <select
+                      value={m.specialite || ""}
+                      disabled={!m.actif || updatingSpecialiteId === m.id}
+                      onChange={(e) => handleChangeSpecialite(m, e.target.value)}
+                      style={{ padding: "4px 8px", border: "1.5px solid var(--border)", borderRadius: 6, fontSize: 12, color: colors.text, cursor: m.actif ? "pointer" : "default", backgroundColor: colors.bgCard }}
+                    >
+                      <option value="">— Non déclarée (Généraliste par défaut) —</option>
+                      {SPECIALITES_MEDECIN.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
                   </div>
                 )}
 

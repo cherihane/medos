@@ -4582,3 +4582,130 @@ reste des données de test.
   entier) → **0 partout**.
 - Compte de test `cherihaneadam123+r2radiologue@gmail.com` **conservé** (réutilisable, même
   convention que les autres comptes `r2*` de cet audit).
+
+## PARTIE 2 — Espace configurable par spécialité médecin
+
+### Objectif
+
+Un médecin a une spécialité déclarée (généraliste, cardiologue, etc.). Son espace de travail —
+dashboard, formulaire de consultation — doit s'adapter à cette spécialité **sans** créer un module
+de code séparé par spécialité (intenable à long terme, et redondant avec les modules déjà
+distincts Maternité/Bloc opératoire/Urgences/Pédiatrie, non touchés ici). Solution retenue : un
+seul fichier de configuration piloté par des données, consommé par du code générique déjà
+existant (`Dashboard.jsx`, `Patients.jsx`) — ajouter une spécialité ne demande de toucher **que**
+ce fichier.
+
+### Modèle de données
+
+```sql
+alter table membres_personnel add column if not exists specialite text;
+alter table comptes_rendus add column if not exists champs_specifiques jsonb;
+alter table comptes_rendus add column if not exists type text;
+```
+
+- `membres_personnel.specialite` : texte libre contraint côté UI à la liste `SPECIALITES_MEDECIN`
+  (pas d'enum Postgres — cohérent avec le reste du schéma qui utilise déjà des colonnes texte pour
+  ce genre de valeurs). Modifiable uniquement par Direction/Gérant, depuis Paramètres → Personnel.
+- `comptes_rendus.champs_specifiques` (jsonb, nullable) : stocke les champs additionnels propres à
+  la spécialité du médecin qui rédige (ex. tension artérielle pour un cardiologue), sans ajouter
+  une colonne par spécialité.
+- `comptes_rendus.type` (text, nullable) : distingue une consultation générale (`null`) d'une
+  consultation gynécologique standard (`'gynecologique'`, voir point 3) — réutilise la même table
+  et le même mécanisme d'écriture (`insertCompteRendu`) plutôt que d'en créer un second.
+
+### Le système de configuration : `src/config/specialitesMedecin.js` (nouveau fichier)
+
+Un objet `CONFIG` associe à chaque spécialité :
+- `champsConsultation` : liste de champs additionnels (clé, libellé, type, placeholder) affichés
+  dans "Nouveau compte rendu" (`Patients.jsx`) et stockés dans `champs_specifiques`.
+- `suivi` : un critère de priorité affiché sur le dashboard Médecin — `motsCles` recherchés dans
+  `patients.antecedents`, `label` affiché au-dessus de la liste (`label: null` désactive la carte,
+  c'est le cas de Généraliste — comportement actuel inchangé, comme demandé).
+
+`getSpecialiteConfig(specialite)` retourne la config correspondante ou celle de Généraliste par
+défaut (couvre les comptes sans spécialité déclarée). `CHAMP_LABEL_PAR_CLE` est un lookup inverse
+clé→libellé toutes spécialités confondues, utilisé pour ré-afficher un compte rendu passé sans
+avoir besoin de connaître la spécialité de son auteur au moment de l'affichage.
+
+Première spécialité différenciée (comme demandé, pour prouver le système) : **Cardiologue**, avec
+3 champs (tension artérielle, fréquence cardiaque, résultat ECG) et un suivi "Patients en suivi
+chronique" sur les mots-clés hypertension/cardiopathie/insuffisance cardiaque/arythmie/infarctus.
+**Gynécologue** et **Pédiatre-consultant** sont déclarés dans `SPECIALITES_MEDECIN` (sélectionnables
+dès maintenant dans Paramètres) mais sans champs additionnels pour cette première version — leurs
+cas d'usage réels restent à définir dans une prochaine mission, conformément à la consigne
+("les autres spécialités s'ajouteront ensuite sur le même modèle, pas dans cette mission").
+
+### Où le système est branché
+
+1. **`src/pages/Parametres.jsx`** : un sélecteur de spécialité (options = `SPECIALITES_MEDECIN`)
+   apparaît pour chaque membre `role_interne === "Médecin"`, modifiable par Direction/Gérant via
+   `updateMembreSpecialite` (nouvelle mutation, `useMutations.js`).
+2. **`src/hooks/useSupabaseData.js`** : nouveau hook `useSpecialiteMedecin(email, etablissement_id)`
+   — lit `membres_personnel.specialite` pour le compte connecté. Volontairement **indépendant
+   d'`AuthContext.jsx`** (requête directe à Supabase), conformément à la règle absolue de ne pas
+   toucher aux fonctions protégées de ce fichier.
+3. **`src/pages/hopital/Dashboard.jsx`** (branche Médecin) : après le chargement des données
+   existantes, une requête complémentaire lit la spécialité du médecin connecté et, si
+   `suivi.motsCles` est non vide, filtre les patients de l'établissement dont les `antecedents`
+   contiennent un des mots-clés → nouveau panneau "Patients en suivi chronique" (ou le `label`
+   déclaré) affiché juste avant le bloc dashboard secrétaire existant. Rien ne s'affiche pour
+   Généraliste (`motsCles: []`).
+4. **`src/pages/hopital/Patients.jsx`** (`ModalNouveauCompteRendu`) : lit la spécialité via le même
+   hook, affiche dynamiquement les `champsConsultation` de la config entre "Diagnostic" et
+   "Traitement prescrit", enregistre leurs valeurs dans `champs_specifiques` (jsonb, `null` si
+   aucun champ rempli). L'affichage d'un compte rendu passé (`detailCR`) restitue ces champs via
+   `CHAMP_LABEL_PAR_CLE`, quelle que soit la spécialité actuelle du médecin qui consulte.
+
+### Point 3 — Consultation gynécologique standard dans Maternité (pas un nouveau module)
+
+Vérification du code existant (`Maternite.jsx`) : les 5 onglets présents (Tableau de bord,
+Grossesses, Salle d'accouchement, Nouveau-nés, Registre) sont **tous** spécifiques au suivi de
+grossesse/accouchement — aucun ne permettait une consultation gynécologique standard hors
+grossesse (contraception, douleur pelvienne, contrôle de routine, etc.).
+
+Correctif : ajout d'un 6ᵉ onglet **"Consultations gynéco"** dans `Maternite.jsx`, qui réutilise
+`insertCompteRendu` (déplacé de `Patients.jsx` vers `useMutations.js` pour être partagé) avec
+`type: "gynecologique"` — même table `comptes_rendus`, même mécanisme d'écriture que les
+consultations générales, pas de nouveau module ni de duplication. `ModalConsultationGyneco`
+reprend les champs standards d'une consultation (motif, examen clinique, diagnostic, traitement,
+prochain rendez-vous) ; `OngletConsultationsGyneco` liste les consultations de ce type pour
+l'établissement.
+
+### Preuve réelle
+
+Build de production locale, compte Médecin réel `cherihaneadam123+r2medecin@gmail.com`,
+établissement `Hopital Audit Test 2`.
+
+**Cardiologue → différenciation confirmée, puis retour à Généraliste confirmé :**
+1. Spécialité déclarée "Cardiologue" via Paramètres (Direction/Gérant) → vérifié en base
+   (`membres_personnel.specialite = 'Cardiologue'`).
+2. Dashboard médecin : panneau "Patients en suivi chronique" apparaît, listant les patients dont
+   les antécédents contiennent un mot-clé cardio (test : antécédent "Hypertension" ajouté
+   temporairement à Fatou Kone pour déclencher le filtre → patiente bien listée).
+3. "Nouveau compte rendu" (module Patients) : section "Champs Cardiologue" visible avec les 3
+   champs (tension artérielle, fréquence cardiaque, résultat ECG) — remplis, enregistrés,
+   vérifiés en base (`comptes_rendus.champs_specifiques` = `{"tension_arterielle": ...,
+   "frequence_cardiaque": ..., "resultat_ecg": ...}`) et correctement restitués dans le détail du
+   compte rendu avec les bons libellés.
+4. Spécialité repassée à "Généraliste" → panneau "Patients en suivi chronique" **disparaît** du
+   dashboard, section "Champs Cardiologue" **disparaît** du formulaire — comportement identique à
+   avant cette mission, comme demandé.
+
+**Consultations gynéco (Maternité) :**
+1. Onglet "Consultations gynéco" confirmé visible dans la nav Maternité, état vide correct
+   ("Aucune consultation gynécologique enregistrée.").
+2. Consultation test créée pour Fatou Kone (motif "Contrôle gynéco de routine - test spécialité",
+   diagnostic "RAS - examen normal") → vérifiée en base : `comptes_rendus.type = 'gynecologique'`,
+   `patient_id` et `medecin` corrects.
+
+### Nettoyage — fait, confirmé
+
+- Compte rendu de test cardiologie (Fatou Kone, motif "Contrôle cardio - test spécialité")
+  supprimé.
+- Compte rendu de test gynécologique (Fatou Kone, motif "Contrôle gynéco de routine - test
+  spécialité") supprimé.
+- `patients.antecedents` de Fatou Kone reverti à `[]` (valeur d'origine avant l'ajout temporaire
+  "Hypertension" pour déclencher le panneau de suivi cardio).
+- Spécialité du compte `cherihaneadam123+r2medecin@gmail.com` revérifiée à "Généraliste" (état
+  final après le test de retour en arrière du point 4 ci-dessus).
+- Vérification finale : `COUNT(*)` sur les 2 comptes rendus de test → **0**.

@@ -7,9 +7,10 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import Layout from "../../components/Layout";
-import { usePatientsPaginated, usePatientsStats, useMedicaments } from "../../hooks/useSupabaseData";
+import { usePatientsPaginated, usePatientsStats, useMedicaments, useSpecialiteMedecin } from "../../hooks/useSupabaseData";
+import { getSpecialiteConfig, CHAMP_LABEL_PAR_CLE } from "../../config/specialitesMedecin";
 import Pagination from "../../components/Pagination";
-import { insertPatient, insertOrdonnance, upsertHospitalisation, fetchHospitalisation, insertConstante, fetchConstantes, updatePatientTriage, insertNoteEvolution, fetchNotesEvolution, fetchPlanSoinsPatient, fetchPerfusionsPatient, insertAdministration, insertPlanSoins, insertDeces, fetchDecesEtablissement, genererNumeroCertificat, updatePatient, fetchRegimePatient, insertImagerie, fetchImageriePatient } from "../../hooks/useMutations";
+import { insertPatient, insertOrdonnance, upsertHospitalisation, fetchHospitalisation, insertConstante, fetchConstantes, updatePatientTriage, insertNoteEvolution, fetchNotesEvolution, fetchPlanSoinsPatient, fetchPerfusionsPatient, insertAdministration, insertPlanSoins, insertDeces, fetchDecesEtablissement, genererNumeroCertificat, updatePatient, fetchRegimePatient, insertImagerie, fetchImageriePatient, insertCompteRendu } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../supabaseClient";
 import Toast from "../../components/Toast";
@@ -224,13 +225,6 @@ function envoyerSMSRendezVous(patient, dateRdv, medecinNom, hopitalNom, onError)
     `Merci de confirmer votre presence.`,
   ].join("\n");
   window.open(`sms:${tel}?body=${encodeURIComponent(corps)}`);
-}
-
-// ── Mutation locale comptes_rendus ────────────────────────────────────────────
-async function insertCompteRendu(fields) {
-  const { data, error } = await supabase.from("comptes_rendus").insert(fields).select().single();
-  if (error) throw new Error(error.message);
-  return data;
 }
 
 // ── Modal Nouveau patient ─────────────────────────────────────────────────────
@@ -555,13 +549,18 @@ function ModalNouvelleOrdonnance({ patient, etablissement_id, medecinNom, medica
 
 // ── Modal Nouveau compte rendu ────────────────────────────────────────────────
 function ModalNouveauCompteRendu({ patient, etablissement_id, medecinNom, onClose, onSaved }) {
+  const { auth } = useAuth();
+  const { specialite } = useSpecialiteMedecin(auth?.user?.email, etablissement_id);
+  const specialiteConfig = getSpecialiteConfig(specialite);
   const [form, setForm] = useState({
     medecin: medecinNom ?? "", date_consultation: new Date().toISOString().slice(0, 10),
     motif: "", examen_clinique: "", diagnostic: "", traitement: "", prochain_rdv: "",
   });
+  const [champsSpecifiques, setChampsSpecifiques] = useState({});
   const [saving, setSaving] = useState(false);
   const [err, setErr]       = useState(null);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const setChamp = (k, v) => setChampsSpecifiques((f) => ({ ...f, [k]: v }));
 
   const handleSave = async () => {
     setErr(null);
@@ -578,6 +577,7 @@ function ModalNouveauCompteRendu({ patient, etablissement_id, medecinNom, onClos
         diagnostic: form.diagnostic.trim(),
         traitement: form.traitement.trim() || null,
         prochain_rdv: form.prochain_rdv || null,
+        champs_specifiques: Object.keys(champsSpecifiques).length > 0 ? champsSpecifiques : null,
         ...(etablissement_id ? { etablissement_id } : {}),
       });
       onSaved();
@@ -616,6 +616,25 @@ function ModalNouveauCompteRendu({ patient, etablissement_id, medecinNom, onClos
             <label style={labelSt}>Diagnostic <span style={{ color: "#EF4444" }}>*</span></label>
             <textarea style={{ ...textareaSt, borderColor: form.diagnostic ? "#6EE7B7" : "#E5E7EB" }} value={form.diagnostic} onChange={(e) => set("diagnostic", e.target.value)} placeholder="Diagnostic principal et différentiel…" />
           </div>
+
+          {specialiteConfig.champsConsultation.length > 0 && (
+            <div style={{ padding: "12px 14px", backgroundColor: "#F8FAFC", borderRadius: 10, border: "1px solid var(--border-light)", display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: colors.textSecondary, textTransform: "uppercase" }}>
+                Champs {specialite ?? "Généraliste"}
+              </div>
+              {specialiteConfig.champsConsultation.map((champ) => (
+                <div key={champ.key}>
+                  <label style={labelSt}>{champ.label}</label>
+                  {champ.type === "textarea" ? (
+                    <textarea style={textareaSt} value={champsSpecifiques[champ.key] ?? ""} onChange={(e) => setChamp(champ.key, e.target.value)} placeholder={champ.placeholder} />
+                  ) : (
+                    <input style={inputSt} type={champ.type} value={champsSpecifiques[champ.key] ?? ""} onChange={(e) => setChamp(champ.key, e.target.value)} placeholder={champ.placeholder} />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
           <div>
             <label style={labelSt}>Traitement prescrit</label>
             <textarea style={textareaSt} value={form.traitement} onChange={(e) => set("traitement", e.target.value)} placeholder="Médicaments, posologies, durée, mesures hygiéno-diététiques…" />
@@ -1395,7 +1414,25 @@ En tant qu'assistant clinique, donne en 3 phrases maximum : 1) le risque princip
               </div>
               <button onClick={() => setDetailCR(null)} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: colors.textMuted }}>×</button>
             </div>
-            {[["Motif", detailCR.motif], ["Examen clinique", detailCR.examen_clinique], ["Diagnostic", detailCR.diagnostic], ["Traitement prescrit", detailCR.traitement]].map(([lbl, val]) => val ? (
+            {[["Motif", detailCR.motif], ["Examen clinique", detailCR.examen_clinique], ["Diagnostic", detailCR.diagnostic]].map(([lbl, val]) => val ? (
+              <div key={lbl} style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted, textTransform: "uppercase", marginBottom: 4 }}>{lbl}</div>
+                <div style={{ fontSize: 13, color: colors.text, lineHeight: 1.6, padding: "10px 14px", background: "#F8FAFC", borderRadius: 8 }}>{val}</div>
+              </div>
+            ) : null)}
+            {detailCR.champs_specifiques && Object.keys(detailCR.champs_specifiques).length > 0 && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted, textTransform: "uppercase", marginBottom: 4 }}>Champs specifiques</div>
+                <div style={{ background: "#F8FAFC", borderRadius: 8, padding: "10px 14px" }}>
+                  {Object.entries(detailCR.champs_specifiques).filter(([, v]) => v).map(([k, v]) => (
+                    <div key={k} style={{ fontSize: 13, color: colors.text, marginBottom: 4 }}>
+                      <span style={{ fontWeight: 600 }}>{CHAMP_LABEL_PAR_CLE[k] ?? k} : </span>{v}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {[["Traitement prescrit", detailCR.traitement]].map(([lbl, val]) => val ? (
               <div key={lbl} style={{ marginBottom: 14 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted, textTransform: "uppercase", marginBottom: 4 }}>{lbl}</div>
                 <div style={{ fontSize: 13, color: colors.text, lineHeight: 1.6, padding: "10px 14px", background: "#F8FAFC", borderRadius: 8 }}>{val}</div>

@@ -8,6 +8,7 @@ import { supabase } from "../../supabaseClient";
 import { colors, radius, shadow, font } from "../../theme";
 import { useAuth } from "../../context/AuthContext";
 import { fetchLitsOccupes, fetchDerniereTransmission, fetchPerfusionsActives, fetchPlanSoinsJour } from "../../hooks/useMutations";
+import { getSpecialiteConfig } from "../../config/specialitesMedecin";
 
 function useTendanceHopital() {
   const [hier, setHier] = useState(null);
@@ -288,6 +289,7 @@ function DashboardRole({ ri }) {
   const [perfusionsInfirmiere, setPerfusionsInfirmiere] = useState([]);
   const [medsMaintenantInf, setMedsMaintenantInf]       = useState([]);
   const [examensUrgentsLabo, setExamensUrgentsLabo]     = useState([]);
+  const [suiviSpecialite, setSuiviSpecialite]           = useState({ label: null, patients: [] });
   const todayISO = new Date().toISOString().slice(0, 10);
   const debutJour = todayISO + "T00:00:00.000Z";
   const finJour   = todayISO + "T23:59:59.999Z";
@@ -322,6 +324,24 @@ function DashboardRole({ ri }) {
           setFileMedecin(fileRes.data ?? []);
           setExamensDispos(eDispoRes.data ?? []);
           setTransmission(trans);
+
+          // Priorité du jour propre à la spécialité déclarée (ex : suivi
+          // chronique pour un cardiologue) — config-driven, voir
+          // src/config/specialitesMedecin.js. Généraliste : aucun effet.
+          const membreRes = await supabase.from("membres_personnel")
+            .select("specialite").eq("email", email).eq("etablissement_id", eid).maybeSingle();
+          const config = getSpecialiteConfig(membreRes.data?.specialite);
+          if (config.suivi.motsCles.length > 0) {
+            const { data: patientsEtab } = await supabase.from("patients")
+              .select("id, prenom, nom, antecedents").eq("etablissement_id", eid);
+            const motsCles = config.suivi.motsCles.map((m) => m.toLowerCase());
+            const patientsSuivi = (patientsEtab ?? []).filter((p) =>
+              (p.antecedents ?? []).some((a) => motsCles.some((mc) => a.toLowerCase().includes(mc)))
+            );
+            setSuiviSpecialite({ label: config.suivi.label, patients: patientsSuivi });
+          } else {
+            setSuiviSpecialite({ label: null, patients: [] });
+          }
 
         } else if (ri === "Infirmière") {
           const seuil6h = new Date(Date.now() - 6 * 3600 * 1000).toISOString();
@@ -632,6 +652,27 @@ function DashboardRole({ ri }) {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Priorite du jour propre a la specialite declaree (ex: suivi chronique cardiologue) */}
+      {isMedecin && !loading && suiviSpecialite.label && (
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: colors.navy }}>{suiviSpecialite.label}</h3>
+            <button onClick={() => navigate("/hopital/patients")}
+              style={{ fontSize: 11, padding: "3px 10px", backgroundColor: "#EFF6FF", color: "#2563EB", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600 }}>
+              Voir les patients
+            </button>
+          </div>
+          {suiviSpecialite.patients.length === 0 ? (
+            <div style={{ fontSize: 13, color: colors.textMuted, textAlign: "center", padding: 20 }}>Aucun patient en suivi chronique identifie pour le moment.</div>
+          ) : suiviSpecialite.patients.map((p) => (
+            <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${colors.borderLight}`, fontSize: 12 }}>
+              <span style={{ fontWeight: 700, color: colors.navy }}>{p.prenom} {p.nom}</span>
+              <span style={{ color: colors.textMuted }}>{(p.antecedents ?? []).join(", ")}</span>
+            </div>
+          ))}
         </div>
       )}
 

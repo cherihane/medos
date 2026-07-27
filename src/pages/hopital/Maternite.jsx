@@ -13,6 +13,7 @@ import {
   insertAccouchement, fetchAccouchementsEtablissement,
   insertNouveauNe, fetchNouveauNesEtablissement,
   genererNumeroMaternite, fetchMembresPersonnel,
+  insertCompteRendu,
 } from "../../hooks/useMutations";
 import { openDocument, tableHTML, infoGridHTML, signatureRowHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Legend } from "recharts";
@@ -1135,6 +1136,178 @@ function OngletRegistre({ etabId, patients, auth }) {
   );
 }
 
+// ── Modal consultation gynéco (hors grossesse) ────────────────────────────────
+function ModalConsultationGyneco({ patients, etabId, medecinNom, onClose, onSaved }) {
+  const [filtre, setFiltre] = useState("");
+  const [form, setForm] = useState({
+    patient_id: "", medecin: medecinNom ?? "", date_consultation: new Date().toISOString().slice(0, 10),
+    motif: "", examen_clinique: "", diagnostic: "", traitement: "", prochain_rdv: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(null);
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const patientsFiltres = patients.filter((p) => `${p.prenom} ${p.nom}`.toLowerCase().includes(filtre.toLowerCase())).slice(0, 80);
+
+  const handleSave = async () => {
+    setErr(null);
+    if (!form.patient_id) { setErr("Selectionnez une patiente."); return; }
+    if (!form.motif.trim()) { setErr("Le motif de consultation est obligatoire."); return; }
+    if (!form.diagnostic.trim()) { setErr("Le diagnostic est obligatoire."); return; }
+    setSaving(true);
+    try {
+      await insertCompteRendu({
+        patient_id: form.patient_id,
+        medecin: form.medecin.trim() || "Non précisé",
+        date_consultation: form.date_consultation,
+        motif: form.motif.trim(),
+        examen_clinique: form.examen_clinique.trim() || null,
+        diagnostic: form.diagnostic.trim(),
+        traitement: form.traitement.trim() || null,
+        prochain_rdv: form.prochain_rdv || null,
+        type: "gynecologique",
+        etablissement_id: etabId ?? null,
+      });
+      onSaved();
+      onClose();
+    } catch (e) { setErr(e.message); setSaving(false); }
+  };
+
+  const textareaSt = { ...inputSt, resize: "vertical", minHeight: 70, fontFamily: "inherit" };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ background: "white", borderRadius: 16, width: "100%", maxWidth: 600, maxHeight: "92vh", overflow: "auto", padding: "26px 28px", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#0A1628" }}>Nouvelle consultation gyneco</h3>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9CA3AF" }}>×</button>
+        </div>
+
+        <div style={{ marginBottom: 14 }}>
+          <label style={labelSt}>Patiente</label>
+          <input style={{ ...inputSt, marginBottom: 6 }} placeholder="Rechercher..." value={filtre} onChange={(e) => setFiltre(e.target.value)} />
+          <select style={inputSt} value={form.patient_id} onChange={(e) => set("patient_id", e.target.value)}>
+            <option value="">-- Selectionnez une patiente --</option>
+            {patientsFiltres.map((p) => <option key={p.id} value={p.id}>{p.prenom} {p.nom}</option>)}
+          </select>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+          <div><label style={labelSt}>Medecin / Sage-femme</label><input style={inputSt} value={form.medecin} onChange={(e) => set("medecin", e.target.value)} placeholder="Dr. Nom Prenom" /></div>
+          <div><label style={labelSt}>Date de consultation</label><input style={inputSt} type="date" value={form.date_consultation} onChange={(e) => set("date_consultation", e.target.value)} /></div>
+        </div>
+
+        <div style={{ marginBottom: 14 }}>
+          <label style={labelSt}>Motif de consultation <span style={{ color: "#EF4444" }}>*</span></label>
+          <input style={inputSt} value={form.motif} onChange={(e) => set("motif", e.target.value)} placeholder="Controle gyneco, contraception, douleurs pelviennes…" />
+        </div>
+        <div style={{ marginBottom: 14 }}>
+          <label style={labelSt}>Examen clinique</label>
+          <textarea style={textareaSt} value={form.examen_clinique} onChange={(e) => set("examen_clinique", e.target.value)} placeholder="Observations de l'examen…" />
+        </div>
+        <div style={{ marginBottom: 14 }}>
+          <label style={labelSt}>Diagnostic <span style={{ color: "#EF4444" }}>*</span></label>
+          <textarea style={{ ...textareaSt, borderColor: form.diagnostic ? "#6EE7B7" : "#E5E7EB" }} value={form.diagnostic} onChange={(e) => set("diagnostic", e.target.value)} placeholder="Diagnostic principal…" />
+        </div>
+        <div style={{ marginBottom: 14 }}>
+          <label style={labelSt}>Traitement prescrit</label>
+          <textarea style={textareaSt} value={form.traitement} onChange={(e) => set("traitement", e.target.value)} placeholder="Medicaments, posologies…" />
+        </div>
+        <div style={{ marginBottom: 20 }}>
+          <label style={labelSt}>Prochain rendez-vous</label>
+          <input style={inputSt} type="date" value={form.prochain_rdv} onChange={(e) => set("prochain_rdv", e.target.value)} />
+        </div>
+
+        {err && <div style={{ padding: "8px 12px", background: "#FEF2F2", borderRadius: 8, fontSize: 12, color: "#DC2626", marginBottom: 12 }}>{err}</div>}
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: 11, background: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: 10, fontSize: 13, cursor: "pointer" }}>Annuler</button>
+          <button onClick={handleSave} disabled={saving}
+            style={{ flex: 2, padding: 11, background: saving ? "#D1D5DB" : ACCENT, color: "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer" }}>
+            {saving ? "Enregistrement..." : "Enregistrer la consultation"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Onglet 6 : Consultations gynéco (hors grossesse) ──────────────────────────
+function OngletConsultationsGyneco({ etabId, patients, auth }) {
+  const [consultations, setConsultations] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+
+  const medecinNom = auth?.user?.email ?? "";
+
+  const load = useCallback(async () => {
+    if (!etabId) return;
+    setLoading(true);
+    const { data } = await supabase
+      .from("comptes_rendus")
+      .select("*, patients(prenom, nom, numero_dossier)")
+      .eq("etablissement_id", etabId)
+      .eq("type", "gynecologique")
+      .order("date_consultation", { ascending: false })
+      .limit(100);
+    setConsultations(data ?? []);
+    setLoading(false);
+  }, [etabId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  return (
+    <div>
+      {showModal && (
+        <ModalConsultationGyneco
+          patients={patients}
+          etabId={etabId}
+          medecinNom={medecinNom}
+          onClose={() => setShowModal(false)}
+          onSaved={load}
+        />
+      )}
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div style={{ fontSize: 12, color: colors.textSecondary }}>
+          Consultations gynécologiques standards (hors suivi de grossesse — voir l'onglet Grossesses pour les CPN).
+        </div>
+        <button onClick={() => setShowModal(true)}
+          style={{ padding: "8px 16px", background: ACCENT, color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+          + Nouvelle consultation gyneco
+        </button>
+      </div>
+
+      {!loading && consultations.length === 0 && (
+        <div style={{ textAlign: "center", color: colors.textMuted, padding: 40, fontSize: 13 }}>Aucune consultation gynecologique enregistree.</div>
+      )}
+      {!loading && consultations.length > 0 && (
+        <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+            <thead>
+              <tr style={{ backgroundColor: colors.bgSurface }}>
+                {["Date", "Patiente", "Medecin", "Motif", "Diagnostic"].map((h) => (
+                  <th key={h} style={{ padding: "10px 12px", textAlign: "left", fontSize: 11, fontWeight: 700, color: colors.textSecondary, textTransform: "uppercase", borderBottom: `1px solid ${colors.border}` }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {consultations.map((c) => (
+                <tr key={c.id} style={{ borderBottom: `1px solid ${colors.borderLight}` }}>
+                  <td style={{ padding: "10px 12px", color: colors.textSecondary }}>{fmtDate(c.date_consultation)}</td>
+                  <td style={{ padding: "10px 12px", fontWeight: 600, color: colors.navy }}>{c.patients ? `${c.patients.prenom} ${c.patients.nom}` : "—"}</td>
+                  <td style={{ padding: "10px 12px", color: colors.textSecondary }}>{c.medecin}</td>
+                  <td style={{ padding: "10px 12px", color: colors.text }}>{c.motif}</td>
+                  <td style={{ padding: "10px 12px", color: colors.text }}>{(c.diagnostic ?? "—").slice(0, 60)}{(c.diagnostic?.length ?? 0) > 60 ? "…" : ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function Maternite() {
   const { auth } = useAuth();
@@ -1172,6 +1345,7 @@ export default function Maternite() {
     { key: "grossesses", label: `Grossesses (${grossessesActives.length})` },
     { key: "salle",      label: `Salle d'accouchement${partogrammesActifs.length > 0 ? ` (${partogrammesActifs.length})` : ""}` },
     { key: "nnes",       label: "Nouveau-nes" },
+    { key: "gyneco",     label: "Consultations gyneco" },
     { key: "registre",   label: "Registre" },
   ];
 
@@ -1192,6 +1366,7 @@ export default function Maternite() {
       {onglet === "grossesses" && <OngletGrossesses etabId={etabId} patients={patients} auth={auth} onRefresh={loadBase} />}
       {onglet === "salle"     && <OngletSalle etabId={etabId} patients={patients} grossessesActives={grossessesActives} auth={auth} onRefresh={loadBase} />}
       {onglet === "nnes"      && <OngletNouveauNes etabId={etabId} patients={patients} auth={auth} />}
+      {onglet === "gyneco"    && <OngletConsultationsGyneco etabId={etabId} patients={patients} auth={auth} />}
       {onglet === "registre"  && <OngletRegistre etabId={etabId} patients={patients} auth={auth} />}
     </Layout>
   );

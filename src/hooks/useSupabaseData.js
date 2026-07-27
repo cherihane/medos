@@ -311,6 +311,36 @@ export function useMedicamentsCritiques(limit = 8, etablissement_id = null) {
   };
 }
 
+// ─── Spécialité médecin ──────────────────────────────────────────────────────
+// Ne modifie pas AuthContext.jsx : la spécialité n'est pas dans `auth`, chaque
+// écran qui en a besoin (Dashboard, formulaire de consultation) la récupère
+// lui-même via ce hook, comme le fait déjà l'établissement de secours dans
+// d'autres écrans (ex. Stock.jsx, Examens.jsx).
+export function useSpecialiteMedecin(email, etablissement_id) {
+  const [specialite, setSpecialite] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    if (!email || !etablissement_id) { setSpecialite(null); setLoading(false); return; }
+    setLoading(true);
+    supabase
+      .from("membres_personnel")
+      .select("specialite")
+      .eq("email", email)
+      .eq("etablissement_id", etablissement_id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!mounted) return;
+        setSpecialite(data?.specialite ?? null);
+        setLoading(false);
+      });
+    return () => { mounted = false; };
+  }, [email, etablissement_id]);
+
+  return { specialite, loading };
+}
+
 // ─── alertes ─────────────────────────────────────────────────────────────────
 export function useAlertes(limit = 20) {
   return useQuery(() =>

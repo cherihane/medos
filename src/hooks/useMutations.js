@@ -494,6 +494,23 @@ export async function updatePatientTriage(id, triage) {
   return run(supabase.from("patients").update({ triage }).eq("id", id).select().single());
 }
 
+// ─── Comptes rendus de consultation ───────────────────────────────────────────
+// Utilisé par Patients.jsx (compte rendu général) et par l'onglet "Consultations
+// gynéco" de Maternite.jsx (consultation gynécologique standard, hors
+// grossesse) — même mécanisme, pas de table dupliquée par cas d'usage.
+export async function insertCompteRendu(fields) {
+  return run(supabase.from("comptes_rendus").insert(fields).select().single());
+}
+
+export async function fetchComptesRendusPatient(patient_id) {
+  const { data } = await supabase
+    .from("comptes_rendus")
+    .select("*")
+    .eq("patient_id", patient_id)
+    .order("date_consultation", { ascending: false });
+  return data ?? [];
+}
+
 // ─── Consultations ────────────────────────────────────────────────────────────
 export async function insertConsultation(fields) {
   return run(supabase.from("consultations").insert(fields).select().single());
@@ -579,6 +596,12 @@ export async function fetchMembresPersonnel(etablissement_id) {
   if (etablissement_id) q = q.eq("etablissement_id", etablissement_id);
   const { data } = await q;
   return data ?? [];
+}
+
+// Spécialité déclarée d'un médecin (Généraliste, Cardiologue, ...) — pilote le
+// dashboard et le formulaire de consultation via src/config/specialitesMedecin.js.
+export async function updateMembreSpecialite(id, specialite) {
+  return run(supabase.from("membres_personnel").update({ specialite }).eq("id", id).select().single());
 }
 
 // ─── Tarifs des actes ─────────────────────────────────────────────────────────
