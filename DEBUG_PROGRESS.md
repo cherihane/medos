@@ -3884,6 +3884,24 @@ File de dispensation, Péremptions, Commandes internes : ✅ chargement confirm�
 erreur, listes vides correctement affichées ("Aucune ordonnance...", "Aucun medicament proche de
 peremption...", "Aucune commande interne.").
 
+### Aide-soignant (`cherihaneadam123+r2aidesoignant@gmail.com`) — rôle terminé
+
+Nav réelle confirmée : Gestion des lits, Mon service, Alertes (correspond exactement à
+`NAV_INTERNE`). Tableau de bord **visuellement distinct de tous les autres rôles** — titre "Mon
+tableau de bord" (pas "Dashboard Hopital"), 3 cartes seulement (Patients hospitalisés, Sorties
+prévues aujourd'hui, Alertes non résolues) et 3 boutons de raccourci au lieu du tableau habituel.
+
+- **Mon service → Constantes** : ✅ testé réellement (Fatou Kone : 37.2°C, 118/76 mmHg, pouls 72,
+  SpO2 97%) — modale fermée automatiquement, écriture confirmée en base
+  (`constantes_vitales`, `saisi_par` correctement rempli avec l'email du compte).
+- **Gestion des lits** : ✅ chargement confirmé, données réelles cohérentes (Fatou Kone occupant
+  un lit en Médecine générale) — déjà testé en profondeur par d'autres rôles cette session, pas
+  de nouvelle action d'écriture testée ici.
+- **Alertes** : ✅ chargement confirmé, aucune erreur.
+- Plan de soins, Perfusions, Transmissions (onglets de Mon service, accessibles via la nav) : non
+  re-testés individuellement pour ce rôle — mêmes composants déjà validés en profondeur pour
+  Infirmière avec les 3 correctifs de ce tour.
+
 ## Point 4 — Tableau de bord final (module Hôpital)
 
 ### Ordre de priorité des trouvailles (sécurité > cassé bloquant > incomplet > cosmétique)
