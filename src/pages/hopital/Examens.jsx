@@ -24,6 +24,10 @@ const TYPES_EXAMENS = [
   "Analyse urine", "Coproculture", "Frottis / Goutte epaisse", "Autre",
 ];
 
+// Types d'imagerie assignes au Radiologue — les analyses de sang/urine restent
+// exclusivement au Laborantin (voir DEBUG_PROGRESS.md, role Radiologue).
+const TYPES_IMAGERIE = ["Radiographie", "Echographie", "ECG", "Scanner"];
+
 const STATUT_CONFIG = {
   prescrit:            { label: "Prescrit",            color: "#6B7280", bg: "#F3F4F6" },
   en_cours:            { label: "En cours",            color: "#3B82F6", bg: "#DBEAFE" },
@@ -144,6 +148,7 @@ function ModalPrescrire({ patients, etabId, onClose, onSaved }) {
 function ModalResultat({ examen, patient, etabId, onClose, onSaved }) {
   const { error: showError } = useToast();
   const refsDisponibles = VALEURS_REFERENCE[examen.type_examen] ?? [];
+  const isImagerie = TYPES_IMAGERIE.includes(examen.type_examen);
   const [form, setForm] = useState({
     resultat_texte: examen.resultat_texte ?? "",
     interpretation: examen.interpretation ?? "",
@@ -153,6 +158,8 @@ function ModalResultat({ examen, patient, etabId, onClose, onSaved }) {
     if (examen.resultat_valeurs && typeof examen.resultat_valeurs === "object") return { ...examen.resultat_valeurs };
     return {};
   });
+  const [fichier, setFichier] = useState(null);
+  const [fichierErr, setFichierErr] = useState(null);
   const [saving, setSaving] = useState(false);
 
   const patientAge = patient?.date_naissance
@@ -160,14 +167,42 @@ function ModalResultat({ examen, patient, etabId, onClose, onSaved }) {
     : 30;
   const patientGenre = patient?.genre ?? "adulte";
 
+  const handleFichierChange = (e) => {
+    const f = e.target.files?.[0];
+    if (!f) { setFichier(null); return; }
+    const typesAcceptes = ["image/png", "image/jpeg", "image/jpg", "image/webp", "application/pdf"];
+    if (!typesAcceptes.includes(f.type)) {
+      setFichierErr("Format non accepte — image (PNG/JPEG/WEBP) ou PDF uniquement.");
+      setFichier(null);
+      return;
+    }
+    if (f.size > 15 * 1024 * 1024) {
+      setFichierErr("Fichier trop volumineux (15 Mo max).");
+      setFichier(null);
+      return;
+    }
+    setFichierErr(null);
+    setFichier(f);
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
-      await updateExamen(examen.id, {
+      const patch = {
         ...form,
         statut: "resultat_disponible",
         resultat_valeurs: Object.keys(valeursForm).length > 0 ? valeursForm : null,
-      });
+      };
+      if (fichier && etabId) {
+        const chemin = `${etabId}/${examen.id}/${Date.now()}-${fichier.name}`;
+        const { error: uploadErr } = await supabase.storage
+          .from("examens-resultats")
+          .upload(chemin, fichier, { upsert: false });
+        if (uploadErr) throw new Error("Fichier : " + uploadErr.message);
+        patch.resultat_fichier_url = chemin;
+        patch.resultat_fichier_nom = fichier.name;
+      }
+      await updateExamen(examen.id, patch);
       if (etabId) {
         await supabase.from("alertes").insert({
           etablissement_id: etabId,
@@ -219,8 +254,23 @@ function ModalResultat({ examen, patient, etabId, onClose, onSaved }) {
           </div>
         )}
 
+        {isImagerie && (
+          <div style={{ marginBottom: 14 }}>
+            <label style={labelSt}>Image / PDF de l'examen</label>
+            {examen.resultat_fichier_nom && !fichier && (
+              <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>
+                Fichier deja joint : <strong>{examen.resultat_fichier_nom}</strong> — en choisir un nouveau le remplacera.
+              </div>
+            )}
+            <input type="file" accept="image/png,image/jpeg,image/webp,application/pdf" onChange={handleFichierChange}
+              style={{ ...inputSt, padding: "7px 11px" }} />
+            {fichier && <div style={{ fontSize: 12, color: "#16A34A", marginTop: 6 }}>Selectionne : {fichier.name}</div>}
+            {fichierErr && <div style={{ fontSize: 12, color: "#DC2626", marginTop: 6 }}>{fichierErr}</div>}
+          </div>
+        )}
+
         <div style={{ marginBottom: 14 }}>
-          <label style={labelSt}>Resultat (texte libre)</label>
+          <label style={labelSt}>{isImagerie ? "Compte-rendu (texte)" : "Resultat (texte libre)"}</label>
           <textarea value={form.resultat_texte} onChange={(e) => setForm((f) => ({ ...f, resultat_texte: e.target.value }))}
             style={{ ...inputSt, minHeight: 70, resize: "vertical" }} placeholder="Observations, commentaires..." />
         </div>
@@ -258,6 +308,18 @@ function ModalResultat({ examen, patient, etabId, onClose, onSaved }) {
 // ── Panel lecture résultat + impression ────────────────────────────────────────
 function PanelResultat({ examen, patient, auth, onClose }) {
   const interp = INTERPRETATION_CONFIG[examen.interpretation];
+  const [fichierUrl, setFichierUrl] = useState(null);
+
+  useEffect(() => {
+    if (!examen.resultat_fichier_url) { setFichierUrl(null); return; }
+    let mounted = true;
+    supabase.storage
+      .from("examens-resultats")
+      .createSignedUrl(examen.resultat_fichier_url, 3600)
+      .then(({ data }) => { if (mounted) setFichierUrl(data?.signedUrl ?? null); });
+    return () => { mounted = false; };
+  }, [examen.resultat_fichier_url]);
+
   const handleImprimer = async () => {
     const etab = await fetchEtabFromAuth(auth);
     openDocument({
@@ -331,6 +393,20 @@ function PanelResultat({ examen, patient, auth, onClose }) {
           );
         })()}
 
+        {examen.resultat_fichier_url && (
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 6 }}>Fichier joint</label>
+            {fichierUrl ? (
+              <a href={fichierUrl} target="_blank" rel="noreferrer"
+                style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 14px", background: "#EFF6FF", color: "#2563EB", borderRadius: 10, fontSize: 13, fontWeight: 700, textDecoration: "none" }}>
+                {examen.resultat_fichier_nom ?? "Voir le fichier"}
+              </a>
+            ) : (
+              <div style={{ fontSize: 12, color: "#9CA3AF" }}>Chargement du fichier...</div>
+            )}
+          </div>
+        )}
+
         {examen.resultat_texte && (
           <div style={{ background: "#F8FAFC", borderRadius: 10, padding: "14px 16px", marginBottom: 14, fontSize: 13, lineHeight: 1.6, whiteSpace: "pre-wrap", color: "#0A1628" }}>
             {examen.resultat_texte}
@@ -387,13 +463,21 @@ export default function Examens() {
 
   const ri = auth?.role_interne;
   const isLaborantin = ri === "Laborantin";
+  const isRadiologue = ri === "Radiologue";
+  const isTraitant   = isLaborantin || isRadiologue; // traite des examens, ne prescrit pas
   const isMedecin    = ri === "Médecin";
 
-  // Par defaut, laborantin voit les examens a traiter en premier
-  const [filtreStatutEffectif, setFiltreStatutEffectif] = useState(isLaborantin ? "prescrit" : "Tous");
+  // Le radiologue ne voit que les types d'imagerie — les analyses de sang/urine
+  // restent exclusives au laborantin (voir DEBUG_PROGRESS.md, role Radiologue).
+  const examensPourRole = useMemo(() => (
+    isRadiologue ? examens.filter((e) => TYPES_IMAGERIE.includes(e.type_examen)) : examens
+  ), [examens, isRadiologue]);
+
+  // Par defaut, laborantin/radiologue voient les examens a traiter en premier
+  const [filtreStatutEffectif, setFiltreStatutEffectif] = useState(isTraitant ? "prescrit" : "Tous");
 
   const filtres = useMemo(() => {
-    let r = examens;
+    let r = examensPourRole;
     const fs = filtreStatutEffectif !== "Tous" ? filtreStatutEffectif : filtreStatut;
     if (fs !== "Tous") r = r.filter((e) => e.statut === fs);
     if (filtreType !== "Tous") r = r.filter((e) => e.type_examen === filtreType);
@@ -402,13 +486,13 @@ export default function Examens() {
       if (prefix) r = r.filter((e) => (e.prescripteur ?? "").toLowerCase().includes(prefix));
     }
     return r;
-  }, [examens, filtreStatut, filtreStatutEffectif, filtreType, isMedecin, auth]);
+  }, [examensPourRole, filtreStatut, filtreStatutEffectif, filtreType, isMedecin, auth]);
 
   const kpis = {
-    prescrits:  examens.filter((e) => e.statut === "prescrit").length,
-    en_cours:   examens.filter((e) => e.statut === "en_cours").length,
-    resultats:  examens.filter((e) => e.statut === "resultat_disponible").length,
-    total:      examens.length,
+    prescrits:  examensPourRole.filter((e) => e.statut === "prescrit").length,
+    en_cours:   examensPourRole.filter((e) => e.statut === "en_cours").length,
+    resultats:  examensPourRole.filter((e) => e.statut === "resultat_disponible").length,
+    total:      examensPourRole.length,
   };
 
   const getPatient = (e) => {
@@ -508,8 +592,8 @@ export default function Examens() {
         ))}
       </div>
 
-      {/* Bandeau laborantin */}
-      {isLaborantin && kpis.prescrits + kpis.en_cours > 0 && (
+      {/* Bandeau laborantin / radiologue */}
+      {isTraitant && kpis.prescrits + kpis.en_cours > 0 && (
         <div style={{ padding: "8px 16px", backgroundColor: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 10, marginBottom: 14, fontSize: 13, color: "#D97706", fontWeight: 700 }}>
           {kpis.prescrits + kpis.en_cours} examen(s) en attente de traitement
         </div>
@@ -519,9 +603,9 @@ export default function Examens() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 10, flexWrap: "wrap" }}>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {["Tous", "prescrit", "en_cours", "resultat_disponible"].map((s) => {
-            const actif = isLaborantin ? filtreStatutEffectif === s : filtreStatut === s;
+            const actif = isTraitant ? filtreStatutEffectif === s : filtreStatut === s;
             return (
-              <button key={s} onClick={() => { if (isLaborantin) setFiltreStatutEffectif(s); else setFiltreStatut(s); }}
+              <button key={s} onClick={() => { if (isTraitant) setFiltreStatutEffectif(s); else setFiltreStatut(s); }}
                 style={{ padding: "5px 12px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700,
                   backgroundColor: actif ? "#3B82F6" : "#F3F4F6",
                   color: actif ? "white" : "#374151" }}>
@@ -532,7 +616,7 @@ export default function Examens() {
           <select value={filtreType} onChange={(e) => setFiltreType(e.target.value)}
             style={{ padding: "5px 10px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 12, background: "white", color: "#0A1628" }}>
             <option value="Tous">Tous les types</option>
-            {TYPES_EXAMENS.map((t) => <option key={t} value={t}>{t}</option>)}
+            {(isRadiologue ? TYPES_IMAGERIE : TYPES_EXAMENS).map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
         {isLaborantin && (
@@ -541,7 +625,7 @@ export default function Examens() {
             Rapport du jour
           </button>
         )}
-        {!isLaborantin && (
+        {!isTraitant && (
           <button onClick={() => setShowPrescrire(true)}
             style={{ padding: "8px 16px", background: ACCENT, color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
             + Prescrire un examen
@@ -593,7 +677,7 @@ export default function Examens() {
                           {!isMedecin && (
                             <button onClick={() => setModalResultat(e)}
                               style={{ fontSize: 11, padding: "3px 9px", border: "none", borderRadius: 6, background: "#DCFCE7", color: "#16A34A", cursor: "pointer", fontWeight: 600 }}>
-                              {isLaborantin ? "Traiter cet examen" : "Resultat"}
+                              {isTraitant ? "Traiter cet examen" : "Resultat"}
                             </button>
                           )}
                         </>

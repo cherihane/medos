@@ -4461,3 +4461,124 @@ bloquée avant même la tentative réseau), contrairement aux sessions précéde
 elle avait fonctionné. Le code est donc poussé sur `origin/master` mais **pas encore déployé** —
 le serveur de production tourne toujours sur le commit précédent tant que le pull + build +
 restart nginx n'a pas été fait manuellement ou depuis une session où l'accès SSH est autorisé.
+
+# MISSION — Radiologue/Imagerie + Espace configurable par spécialité médecin (2026-07-27)
+
+Mission en deux volets. `AuthContext.jsx` non modifié à l'exception de l'ajout autorisé de
+"Radiologue" dans `NAV_INTERNE` (même mécanisme que les autres rôles).
+
+## PARTIE 1 — Rôle Radiologue + résultat d'imagerie avec fichier joint
+
+### Trouvaille de départ : "Radiologue" existait déjà partiellement, mais cassé
+
+`ROLES_INTERNES`/`PERMISSIONS_DEFAUT` (`src/pages/Parametres.jsx`) contenaient déjà une entrée
+"Radiologue" — ajoutée dans un commit antérieur non lié à cet audit
+(`aff6d41 feat(hopital): pédiatrie, imagerie, notifications inter-rôles, dispensation atomique`,
+confirmé via `git log -p -S Radiologue`). Mais :
+- `NAV_INTERNE` (`AuthContext.jsx`) n'avait **aucune entrée** pour "Radiologue" → un compte avec
+  ce role_interne recevait par défaut la nav complète du rôle (faille du même type que la fuite
+  Sage-femme déjà corrigée).
+- `PERMISSIONS_DEFAUT.hopital.Radiologue` pointait vers `/hopital/patients` (dossier patient
+  complet) et **pas** vers `/hopital/examens` — l'exact inverse de ce qui a du sens pour ce rôle.
+- `/hopital/examens` n'était même pas dans `PAGES_PAR_ROLE.hopital` (la liste de cases à cocher du
+  formulaire "Nouvelle invitation") — impossible d'inviter correctement un Laborantin **ou** un
+  Radiologue avec les bonnes permissions via l'UI réelle avant ce correctif.
+
+### Corrections apportées
+
+1. **`src/context/AuthContext.jsx`** : ajout de `"Radiologue": ["/hopital/dashboard",
+   "/hopital/examens", "/hopital/alertes"]` dans `NAV_INTERNE.hopital` — même schéma que
+   Laborantin, conformément à la règle absolue (seul ajout autorisé dans ce fichier).
+2. **`src/pages/Parametres.jsx`** :
+   - `PERMISSIONS_DEFAUT.hopital.Radiologue` corrigé en `["/hopital/dashboard",
+     "/hopital/examens", "/hopital/alertes"]`.
+   - `/hopital/examens` ("Examens / Labo") ajouté à `PAGES_PAR_ROLE.hopital` — sans ça, le
+     formulaire d'invitation ne pouvait pas cocher cette page pour personne.
+3. **`src/pages/hopital/Examens.jsx`** :
+   - `TYPES_IMAGERIE = ["Radiographie", "Echographie", "ECG", "Scanner"]` — les types de sang/urine
+     restent exclusifs au Laborantin.
+   - Le Radiologue ne voit que les examens de ces types (`examensPourRole`, KPI et filtre statut
+     par défaut calqués sur le comportement Laborantin existant — renommé `isTraitant` pour couvrir
+     les deux rôles qui traitent des examens sans en prescrire).
+   - Le sélecteur de type d'examen se limite à `TYPES_IMAGERIE` pour ce rôle.
+   - **Ajout d'un champ fichier** (image PNG/JPEG/WEBP ou PDF, 15 Mo max) dans `ModalResultat`,
+     affiché uniquement quand `type_examen` est un type d'imagerie — le texte de compte-rendu
+     reste disponible en plus, jamais remplacé (libellé du champ texte adapté : "Compte-rendu
+     (texte)" au lieu de "Resultat (texte libre)" pour ce cas).
+   - `PanelResultat` affiche le fichier joint via une URL signée (bucket privé), générée à
+     l'affichage (`createSignedUrl`, validité 1h).
+4. **`src/pages/hopital/Dashboard.jsx`** : nouvelle branche `DashboardRadiologue`, calquée sur
+   `DashboardLaborantin` (mêmes 4 KPI — examens à traiter/urgents/résultats du jour/total —
+   simplement filtrés aux types d'imagerie ; bandeau et liste des examens urgents partagés avec
+   Laborantin).
+
+### Migration base de données
+
+Nouvelles colonnes et nouveau bucket Storage (aucun bucket n'existait encore dans le projet) :
+
+```sql
+alter table examens add column if not exists resultat_fichier_url text;
+alter table examens add column if not exists resultat_fichier_nom text;
+
+insert into storage.buckets (id, name, public) values ('examens-resultats', 'examens-resultats', false);
+
+create policy "examens_resultats_select" on storage.objects for select using (
+  bucket_id = 'examens-resultats' and (storage.foldername(name))[1]::uuid in (select mes_etablissements())
+);
+create policy "examens_resultats_insert" on storage.objects for insert with check (
+  bucket_id = 'examens-resultats' and (storage.foldername(name))[1]::uuid in (select mes_etablissements())
+);
+create policy "examens_resultats_delete" on storage.objects for delete using (
+  bucket_id = 'examens-resultats' and (storage.foldername(name))[1]::uuid in (select mes_etablissements())
+);
+```
+
+Scoping identique au reste de l'app : premier segment du chemin de stockage = `etablissement_id`,
+vérifié contre `mes_etablissements()`. Chemin utilisé par le code :
+`{etablissement_id}/{examen_id}/{timestamp}-{nom_fichier}`.
+
+### Preuve réelle — parcours complet Médecin → Radiologue → Médecin
+
+Build de production locale, vrais comptes sur `Hopital Audit Test 2` :
+
+1. **Médecin** (`cherihaneadam123+r2medecin@gmail.com`) prescrit un Scanner pour Fatou Kone
+   (libellé "Scanner abdominal - test Radiologue", prescripteur = son email pour matcher le filtre
+   "Mes consultations").
+2. **Radiologue** (`cherihaneadam123+r2radiologue@gmail.com`, compte créé pour ce test) :
+   - Nav confirmée : Dashboard, Examens / Labo, Alertes uniquement — **pas de lien Patients**.
+   - Dashboard : KPI "1 Examen à traiter" correct dès la connexion (branche `DashboardRadiologue`).
+   - Écran Examens : la liste ne montre **que** le Scanner — le "Bilan sanguin" prescrit
+     précédemment par le même médecin est invisible (filtre imagerie confirmé). Le sélecteur de
+     type d'examen ne propose que Radiographie/Echographie/ECG/Scanner.
+   - "Traiter cet examen" → fichier PNG réel joint (généré pour le test, upload via
+     `DataTransfer`/`File` en JS puisqu'aucun outil de ce navigateur ne pilote le sélecteur de
+     fichier natif) + compte-rendu texte + interprétation "Normal" → enregistré.
+   - Vérifié en base : `examens.resultat_fichier_url` et `resultat_fichier_nom` corrects,
+     `statut = resultat_disponible`.
+   - Vérifié que le fichier est réellement récupérable : `createSignedUrl` génère une URL, testée
+     en direct avec `curl` → **200, `content-type: image/png`**, taille correcte.
+3. **Médecin** reconnecté : le Scanner apparaît avec statut "Resultat disponible" ; ouverture du
+   panneau résultat → **compte-rendu texte ET lien vers le fichier joint tous les deux visibles**,
+   lien fonctionnel (même contenu vérifié).
+
+### Anecdote de méthode (sans impact fonctionnel)
+
+Les tout premiers clics sur "Enregistrer le resultat" via les outils d'automatisation du
+navigateur semblaient ne rien faire (modale visuellement bloquée à l'écran) — panique initiale
+suggérant un bug. Vérification directe en base : **les 3 tentatives avaient en fait toutes
+réussi** (3 fichiers différents uploadés avec succès, chacun écrasant `resultat_fichier_url` du
+précédent), preuve que c'était un artefact de capture d'écran de l'outil de test, pas un bug de
+l'application. Les 2 fichiers orphelins issus des tentatives précédentes ont été nettoyés avec le
+reste des données de test.
+
+### Nettoyage — fait, confirmé
+
+- `examens` : la ligne de test ("Scanner abdominal - test Radiologue") supprimée.
+- `storage.objects` (bucket `examens-resultats`) : les 3 fichiers uploadés pendant le test
+  (dont 2 orphelins issus des tentatives de clic précédentes) + le fichier de test manuel utilisé
+  pour isoler le problème de clic, supprimés via l'API Storage (la suppression SQL directe est
+  bloquée par un trigger `storage.protect_delete()` — normal, pas un bug).
+- Vérification finale : `COUNT(*)` sur `examens` (libellé de test) et `storage.objects` (bucket
+  entier) → **0 partout**.
+- Compte de test `cherihaneadam123+r2radiologue@gmail.com` **conservé** (réutilisable, même
+  convention que les autres comptes `r2*` de cet audit).

@@ -270,6 +270,10 @@ function KpiRoleCard({ label, value, color, sublabel }) {
 
 const ACCENT = "#10B981";
 
+// Types d'imagerie assignes au Radiologue — doit rester en phase avec la meme
+// liste dans Examens.jsx (voir DEBUG_PROGRESS.md, role Radiologue).
+const TYPES_IMAGERIE = ["Radiographie", "Echographie", "ECG", "Scanner"];
+
 function DashboardRole({ ri }) {
   const { auth } = useAuth();
   const navigate = useNavigate();
@@ -393,6 +397,24 @@ function DashboardRole({ ri }) {
           setShortcut({ label: "Traiter les examens", path: "/hopital/examens" });
           setExamensUrgentsLabo(urgentsListRes.data ?? []);
 
+        } else if (ri === "Radiologue") {
+          const today = todayISO;
+          const [aTraiterRes, rendusRes, urgentsRes, totalRes, urgentsListRes] = await Promise.all([
+            supabase.from("examens").select("id", { count: "exact", head: true }).eq("etablissement_id", eid).in("type_examen", TYPES_IMAGERIE).in("statut", ["prescrit", "en_cours"]),
+            supabase.from("examens").select("id", { count: "exact", head: true }).eq("etablissement_id", eid).in("type_examen", TYPES_IMAGERIE).eq("statut", "resultat_disponible").gte("updated_at", today + "T00:00:00"),
+            supabase.from("examens").select("id", { count: "exact", head: true }).eq("etablissement_id", eid).in("type_examen", TYPES_IMAGERIE).eq("urgence", true).in("statut", ["prescrit", "en_cours"]),
+            supabase.from("examens").select("id", { count: "exact", head: true }).eq("etablissement_id", eid).in("type_examen", TYPES_IMAGERIE).gte("created_at", today + "T00:00:00"),
+            supabase.from("examens").select("id, type_examen, libelle, patients(prenom, nom)").eq("etablissement_id", eid).in("type_examen", TYPES_IMAGERIE).eq("urgence", true).in("statut", ["prescrit", "en_cours"]).order("created_at", { ascending: true }).limit(5),
+          ]);
+          setKpis([
+            { label: "Examens a traiter",     value: aTraiterRes.count ?? 0, color: (aTraiterRes.count ?? 0) > 0 ? "#EF4444" : "#9CA3AF" },
+            { label: "Urgents en attente",    value: urgentsRes.count ?? 0,  color: (urgentsRes.count ?? 0) > 0 ? "#EF4444" : "#9CA3AF" },
+            { label: "Resultats saisis auj.", value: rendusRes.count ?? 0,   color: ACCENT },
+            { label: "Total examens du jour", value: totalRes.count ?? 0,    color: "#8B5CF6" },
+          ]);
+          setShortcut({ label: "Traiter les examens", path: "/hopital/examens" });
+          setExamensUrgentsLabo(urgentsListRes.data ?? []);
+
         } else if (ri === "Caissier") {
           const [fERes, fPRes] = await Promise.all([
             supabase.from("factures_hopital").select("id, reste_patient").eq("etablissement_id", eid).eq("statut", "emise"),
@@ -446,6 +468,7 @@ function DashboardRole({ ri }) {
   const isMedecin      = ri === "Médecin";
   const isInfirmiere   = ri === "Infirmière";
   const isLaborantin   = ri === "Laborantin";
+  const isRadiologue   = ri === "Radiologue";
   const isPharmacien   = ri === "Pharmacien hospitalier";
   const urgentsLabo    = kpis.find((k) => k.label === "Urgents en attente")?.value ?? 0;
   const ordoUrgentes   = kpis.filter((k) => k.label === "Ordonnances a dispenser" && k.color === "#EF4444").length > 0 ? (kpis.find((k) => k.label === "Ordonnances a dispenser")?.value ?? 0) : 0;
@@ -468,15 +491,15 @@ function DashboardRole({ ri }) {
         </div>
       )}
 
-      {/* Alerte examens urgents — Laborantin */}
-      {isLaborantin && !loading && urgentsLabo > 0 && (
+      {/* Alerte examens urgents — Laborantin / Radiologue */}
+      {(isLaborantin || isRadiologue) && !loading && urgentsLabo > 0 && (
         <div style={{ padding: "12px 16px", backgroundColor: "#FEF2F2", border: "1.5px solid #EF4444", borderRadius: 10, marginBottom: 16, fontSize: 13, color: "#DC2626", fontWeight: 600 }}>
           {urgentsLabo} examen(s) urgent(s) en attente — traiter en priorite
         </div>
       )}
 
-      {/* Liste examens urgents — Laborantin */}
-      {isLaborantin && !loading && examensUrgentsLabo.length > 0 && (
+      {/* Liste examens urgents — Laborantin / Radiologue */}
+      {(isLaborantin || isRadiologue) && !loading && examensUrgentsLabo.length > 0 && (
         <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", marginBottom: 16 }}>
           <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 700, color: colors.navy }}>Examens urgents a traiter</h3>
           {examensUrgentsLabo.map((e) => (
@@ -988,6 +1011,7 @@ function DashboardMedecin()    { return <DashboardRoleLayout ri="Médecin" />; }
 function DashboardInfirmiere() { return <DashboardRoleLayout ri="Infirmière" />; }
 function DashboardSecretaire() { return <DashboardRoleLayout ri="Secrétaire médicale" />; }
 function DashboardLaborantin() { return <DashboardRoleLayout ri="Laborantin" />; }
+function DashboardRadiologue() { return <DashboardRoleLayout ri="Radiologue" />; }
 function DashboardCaissier()   { return <DashboardRoleLayout ri="Caissier" />; }
 function DashboardPharmacien() { return <DashboardRoleLayout ri="Pharmacien hospitalier" />; }
 
@@ -1002,6 +1026,7 @@ export default function DashboardHopital() {
   if (ri === "Infirmière")             return <DashboardInfirmiere />;
   if (ri === "Secrétaire médicale")    return <DashboardSecretaire />;
   if (ri === "Laborantin")             return <DashboardLaborantin />;
+  if (ri === "Radiologue")             return <DashboardRadiologue />;
   if (ri === "Caissier")               return <DashboardCaissier />;
   if (ri === "Pharmacien hospitalier") return <DashboardPharmacien />;
   if (ri === "Aide-soignant")          return <DashboardAideSoignant auth={auth} navigate={navigate} />;

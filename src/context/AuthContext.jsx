@@ -81,6 +81,7 @@ const NAV_INTERNE = {
       "/hopital/alertes",
     ],
     "Laborantin": ["/hopital/dashboard", "/hopital/examens", "/hopital/alertes"],
+    "Radiologue": ["/hopital/dashboard", "/hopital/examens", "/hopital/alertes"],
     "Caissier": ["/hopital/dashboard", "/hopital/caisse", "/hopital/facturation"],
     "Aide-soignant": [
       "/hopital/dashboard",
