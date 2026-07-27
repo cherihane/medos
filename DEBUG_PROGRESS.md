@@ -3794,6 +3794,26 @@ chargement confirmé, pas d'action d'écriture testée sur ces écrans faute de 
 traité, en attente de décision produit : la policy RLS `DELETE` manquante sur `plan_soins` (un
 `DELETE` retourne `204` sans supprimer aucune ligne pour le rôle Infirmière).
 
+### Secrétaire médicale (`cherihaneadam123+r2secretaire@gmail.com`) — rôle terminé
+
+Nav réelle confirmée : Dashboard, Consultations, Agenda RDV, Patients, Caisse, Facturation
+(correspond exactement à `NAV_INTERNE`). `DashboardSecretaire` distinct confirmé (En salle
+d'attente, RDV d'aujourd'hui, Nouveaux patients, Factures en attente). Rechargement de page
+testé — fonctionne (correctif session en cours toujours valide).
+
+- **Consultations** : ✅ cycle complet réel testé — "Enregistrer une arrivee" (patient existant,
+  triage "Non urgent") → ticket créé dans "En attente" → "Appeler" → passe en "En cours" →
+  "Terminer" → apparaît dans "Termines aujourd'hui". Aucun accroc.
+- **Agenda RDV** : ✅ "Nouveau RDV" testé réellement (Fatou Kone, 27/07 08:00, motif "Suivi
+  post-hospitalisation") — apparaît correctement sur le calendrier semaine. Case SMS de
+  confirmation laissée décochée (pas d'envoi réel à un patient de test).
+- **Patients** : ✅ chargement confirmé (déjà testé en profondeur par d'autres rôles cette
+  session, non re-testé en écriture ici).
+- **Caisse** : ✅ ouverture de session réelle (fond 30 000 FCFA), fermeture réelle avec arrêté de
+  caisse équilibré (30 000 = 30 000).
+- **Facturation** : ✅ chargement confirmé, liste des factures existantes visible (création déjà
+  testée en profondeur par Caissier plus tôt dans la session, non dupliquée ici).
+
 ## Point 4 — Tableau de bord final (module Hôpital)
 
 ### Ordre de priorité des trouvailles (sécurité > cassé bloquant > incomplet > cosmétique)
