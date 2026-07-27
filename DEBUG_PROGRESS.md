@@ -3860,8 +3860,21 @@ connecte a votre etablissement." — testé avec "Paracetamol 1g R2Test", stock 
 - Résultat : `etablissement_id` est toujours `NULL` à l'insertion, ce qui ne peut jamais satisfaire
   la policy — **l'ajout d'un nouveau médicament au stock hospitalier est cassé pour tout le monde,
   quel que soit le rôle ou l'établissement**, pas seulement pour le Pharmacien hospitalier.
-- **Non corrigé** — touche un fichier hors du périmètre explicitement autorisé pour cette reprise
-  (`Stock.jsx`, pas `AuthContext.jsx` ni `MonService.jsx`) ; à confirmer avant correctif.
+- **Corrigé sur confirmation explicite de l'utilisateur.** Ajout de `auth` en prop à
+  `NouveauModal` (invocation à [Stock.jsx:298](src/pages/hopital/Stock.jsx#L298)) et inclusion de
+  `etablissement_id: auth?.etablissement_id ?? null` dans le payload
+  ([Stock.jsx:119-137](src/pages/hopital/Stock.jsx#L119-L137)). **Testé réellement** (build de
+  production locale, servie en statique) : "Paracetamol 1g R2Test", stock 50, seuil 10 → modale
+  fermée automatiquement, produit visible immédiatement dans la liste ("Total references: 1",
+  statut "Normal"). Déployé en production et revérifié. Donnée de test supprimée après
+  vérification.
+- **Trouvaille additionnelle, non corrigée** : `CommanderModal` (bouton "Commander" sur un
+  médicament, même écran) présente **exactement le même bug** — `insertCommande(...)` à
+  [Stock.jsx:100](src/pages/hopital/Stock.jsx#L100) n'inclut pas non plus `etablissement_id`, et
+  la table `commandes` a une policy RLS `cmd_insert` identique
+  (`etablissement_id = ANY(mes_etablissements())`, confirmé par requête directe). Donc
+  "Commander" un réapprovisionnement fournisseur est probablement cassé pour tout le monde
+  aussi — **non testé en direct, non corrigé**, signalé pour décision séparée.
 
 Reste à tester pour ce rôle : Scanner, File de dispensation, Péremptions, Commandes internes.
 

@@ -116,7 +116,7 @@ function CommanderModal({ med, fournisseurs, onClose, onSaved }) {
   );
 }
 
-function NouveauModal({ onClose, onSaved }) {
+function NouveauModal({ onClose, onSaved, auth }) {
   const [form, setForm] = useState({ nom: "", code: "", categorie: "", stock_actuel: 0, stock_minimum: 0, prix_unitaire: 0 });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
@@ -124,7 +124,16 @@ function NouveauModal({ onClose, onSaved }) {
   const handleSave = async () => {
     if (!form.nom.trim()) { setFormError("Le nom est obligatoire."); return; }
     setSaving(true);
-    try { await insertMedicament({ ...form, stock_actuel: Number(form.stock_actuel), stock_minimum: Number(form.stock_minimum), prix_unitaire: Number(form.prix_unitaire) }); onSaved(); onClose(); }
+    try {
+      await insertMedicament({
+        ...form,
+        etablissement_id: auth?.etablissement_id ?? null,
+        stock_actuel: Number(form.stock_actuel),
+        stock_minimum: Number(form.stock_minimum),
+        prix_unitaire: Number(form.prix_unitaire),
+      });
+      onSaved(); onClose();
+    }
     catch (e) { setFormError("Erreur : " + e.message); } finally { setSaving(false); }
   };
   return (
@@ -295,7 +304,7 @@ function OngletStock({ auth }) {
     <div>
       {editMed    && <EditModal med={editMed} onClose={() => setEditMed(null)} onSaved={() => { refetch(); success("Medicament mis a jour"); }} />}
       {commandMed && <CommanderModal med={commandMed} fournisseurs={fournisseurs} onClose={() => setCommandMed(null)} onSaved={() => { refetch(); success("Commande passee"); }} />}
-      {showNouveau && <NouveauModal onClose={() => setShowNouveau(false)} onSaved={() => { refetch(); success("Medicament ajoute"); }} />}
+      {showNouveau && <NouveauModal auth={auth} onClose={() => setShowNouveau(false)} onSaved={() => { refetch(); success("Medicament ajoute"); }} />}
       {dispenseMed && <DispensationModal med={dispenseMed} patients={patients} auth={auth} onClose={() => setDispenseMed(null)} onSaved={() => { refetch(); success("Dispensation enregistree — stock mis a jour"); }} />}
 
       {auth?.role_interne === "Infirmière" && (
