@@ -3876,7 +3876,13 @@ connecte a votre etablissement." — testé avec "Paracetamol 1g R2Test", stock 
   "Commander" un réapprovisionnement fournisseur est probablement cassé pour tout le monde
   aussi — **non testé en direct, non corrigé**, signalé pour décision séparée.
 
-Reste à tester pour ce rôle : Scanner, File de dispensation, Péremptions, Commandes internes.
+**Rôle terminé.** Scanner : ✅ vérification réelle testée ("Paracetamol 1g") — "Certifié MedOS"
+avec numéro de lot, fabricant, dates de fabrication/expiration, quantité initiale ; confirme que
+le correctif RPC sécurisé de la session précédente (`verifier_lot_public`) ne fuit toujours aucun
+champ sensible (`stock_actuel`, `stock_minimum`, `etablissement_id`) pour ce nouveau rôle non plus.
+File de dispensation, Péremptions, Commandes internes : ✅ chargement confirmé pour les 3, aucune
+erreur, listes vides correctement affichées ("Aucune ordonnance...", "Aucun medicament proche de
+peremption...", "Aucune commande interne.").
 
 ## Point 4 — Tableau de bord final (module Hôpital)
 
