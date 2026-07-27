@@ -3814,6 +3814,31 @@ testé — fonctionne (correctif session en cours toujours valide).
 - **Facturation** : ✅ chargement confirmé, liste des factures existantes visible (création déjà
   testée en profondeur par Caissier plus tôt dans la session, non dupliquée ici).
 
+### Laborantin (`cherihaneadam123+r2laborantin@gmail.com`) — rôle terminé, point ambigu résolu
+
+Nav réelle confirmée : Examens/Labo, Alertes (correspond exactement à `NAV_INTERNE`).
+`DashboardLaborantin` distinct confirmé (Examens à traiter, Urgents en attente, Résultats saisis
+aujourd'hui, Total examens du jour) — a immédiatement affiché "1 examen à traiter" correspondant
+au Bilan sanguin prescrit par le Médecin plus tôt dans la session, confirmant au passage que le
+flux inter-rôles reste correct après tous les correctifs.
+
+**Point explicitement demandé, résolu sans ambiguïté** : le cycle complet "Prescrit → En cours →
+Résultat disponible" a été testé pas à pas avec le vrai compte invité (post-correctif
+NAV_INTERNE), pas l'ancien compte SQL :
+1. Clic sur "En cours" (onglet Prescrit, ligne Fatou Kone / Bilan sanguin) → compteurs mis à jour
+   immédiatement (Prescrits 0 → En cours 1), l'examen disparaît de l'onglet "Prescrit". **Confirmé
+   fonctionnel.**
+2. Clic sur "Traiter cet examen" → modale "Saisir le resultat" ouverte, remplie (texte libre +
+   interprétation "Normal") et soumise. La modale ne s'est **pas fermée visuellement** (même
+   symptôme d'absence de retour visuel que Plan de soins/Perfusions avant leur correctif), mais
+   **vérifié directement en base** : la ligne `examens` contient bien `statut:
+   "resultat_disponible"`, `resultat_texte` et `interpretation: "normal"` corrects. Rechargement de
+   la page → compteurs "Resultats disponibles: 1, Total: 1" confirment l'écriture réussie.
+   **Confirmé fonctionnel** — l'incertitude de la session précédente est levée : les clics
+   fonctionnaient déjà réellement, seul le retour visuel manquait (cause non creusée plus avant,
+   hors périmètre des 3 correctifs déjà traités ce tour).
+- **Alertes** : ✅ chargement confirmé, "Aucune alerte active", aucune erreur.
+
 ## Point 4 — Tableau de bord final (module Hôpital)
 
 ### Ordre de priorité des trouvailles (sécurité > cassé bloquant > incomplet > cosmétique)
