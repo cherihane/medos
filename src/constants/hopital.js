@@ -29,9 +29,29 @@ export const CRENEAUX_GARDE = [
 ];
 
 export const ROLES_PLANNING = [
-  { value: "Médecin",       label: "Médecin",       color: "#16A34A", bg: "#DCFCE7" },
-  { value: "Infirmier",     label: "Infirmier",     color: "#2563EB", bg: "#DBEAFE" },
-  { value: "Aide-soignant", label: "Aide-soignant", color: "#D97706", bg: "#FEF3C7" },
-  { value: "Sage-femme",    label: "Sage-femme",    color: "#7C3AED", bg: "#EDE9FE" },
-  { value: "Laborantin",    label: "Laborantin",    color: "#0891B2", bg: "#CFFAFE" },
+  { value: "Médecin",               label: "Médecin",               color: "#16A34A", bg: "#DCFCE7" },
+  { value: "Infirmier",             label: "Infirmier",             color: "#2563EB", bg: "#DBEAFE" },
+  { value: "Aide-soignant",         label: "Aide-soignant",         color: "#D97706", bg: "#FEF3C7" },
+  { value: "Sage-femme",            label: "Sage-femme",            color: "#7C3AED", bg: "#EDE9FE" },
+  { value: "Laborantin",            label: "Laborantin",            color: "#0891B2", bg: "#CFFAFE" },
+  { value: "Radiologue",            label: "Radiologue",            color: "#DB2777", bg: "#FCE7F3" },
+  { value: "Secrétaire médicale",   label: "Secrétaire médicale",   color: "#64748B", bg: "#F1F5F9" },
+  { value: "Pharmacien hospitalier", label: "Pharmacien hospitalier", color: "#059669", bg: "#D1FAE5" },
+  { value: "Caissier",              label: "Caissier",              color: "#CA8A04", bg: "#FEF9C3" },
 ];
+
+// role_interne (tel que stocké sur membres_personnel/auth) -> valeur ROLES_PLANNING
+// (les deux nomenclatures divergent legerement, ex. "Infirmière" -> "Infirmier").
+// Utilisé pour l'auto-inscription : le rôle est déduit du compte connecté, jamais
+// choisi manuellement par le membre lui-même.
+export const ROLE_INTERNE_VERS_PLANNING = {
+  "Médecin": "Médecin",
+  "Infirmière": "Infirmier",
+  "Aide-soignant": "Aide-soignant",
+  "Sage-femme": "Sage-femme",
+  "Laborantin": "Laborantin",
+  "Radiologue": "Radiologue",
+  "Secrétaire médicale": "Secrétaire médicale",
+  "Pharmacien hospitalier": "Pharmacien hospitalier",
+  "Caissier": "Caissier",
+};

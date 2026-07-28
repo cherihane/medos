@@ -49,6 +49,7 @@ const NAV_INTERNE = {
       "/hopital/bloc",
       "/hopital/dietetique",
       "/hopital/transferts",
+      "/hopital/planning",
     ],
     "Infirmière": [
       "/hopital/dashboard",
@@ -59,12 +60,14 @@ const NAV_INTERNE = {
       "/hopital/urgences",
       "/hopital/maternite",
       "/hopital/bloc",
+      "/hopital/planning",
     ],
     "Sage-femme": [
       "/hopital/dashboard",
       "/hopital/maternite",
       "/hopital/patients",
       "/hopital/alertes",
+      "/hopital/planning",
     ],
     "Secrétaire médicale": [
       "/hopital/dashboard",
@@ -73,6 +76,7 @@ const NAV_INTERNE = {
       "/hopital/patients",
       "/hopital/facturation",
       "/hopital/caisse",
+      "/hopital/planning",
     ],
     "Pharmacien hospitalier": [
       "/hopital/dashboard",
@@ -81,15 +85,17 @@ const NAV_INTERNE = {
       "/hopital/scanner",
       "/hopital/alertes",
       "/hopital/fournisseurs",
+      "/hopital/planning",
     ],
-    "Laborantin": ["/hopital/dashboard", "/hopital/examens", "/hopital/alertes"],
-    "Radiologue": ["/hopital/dashboard", "/hopital/examens", "/hopital/alertes"],
-    "Caissier": ["/hopital/dashboard", "/hopital/caisse", "/hopital/facturation"],
+    "Laborantin": ["/hopital/dashboard", "/hopital/examens", "/hopital/alertes", "/hopital/planning"],
+    "Radiologue": ["/hopital/dashboard", "/hopital/examens", "/hopital/alertes", "/hopital/planning"],
+    "Caissier": ["/hopital/dashboard", "/hopital/caisse", "/hopital/facturation", "/hopital/planning"],
     "Aide-soignant": [
       "/hopital/dashboard",
       "/hopital/mon-service",
       "/hopital/lits",
       "/hopital/alertes",
+      "/hopital/planning",
     ],
     Dieteticien: [
       "/hopital/dashboard",

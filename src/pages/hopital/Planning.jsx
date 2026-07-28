@@ -1,6 +1,6 @@
 import { colors } from "../../theme";
 import { useState, useEffect, useCallback } from "react";
-import { SERVICES_HOPITAL, CRENEAUX_GARDE, ROLES_PLANNING } from "../../constants/hopital";
+import { SERVICES_HOPITAL, CRENEAUX_GARDE, ROLES_PLANNING, ROLE_INTERNE_VERS_PLANNING } from "../../constants/hopital";
 import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
 import Toast from "../../components/Toast";
@@ -189,38 +189,83 @@ function GardeModal({ garde, preset, membres, onClose, onSaved, etabId }) {
   );
 }
 
+// ── Modal auto-inscription (rôles restreints — créneau et identité déjà fixés,
+// pas de choix d'un autre membre ni du service/horaire) ────────────────────────
+function InscriptionModal({ preset, personnelNom, personnelRole, etabId, onClose, onSaved }) {
+  const { error: showError } = useToast();
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await insertGarde({
+        personnel_nom: personnelNom,
+        personnel_role: personnelRole,
+        service: preset.service,
+        date_garde: preset.dateISO,
+        heure_debut: preset.debut,
+        heure_fin: preset.fin,
+        notes: notes || null,
+        etablissement_id: etabId ?? null,
+      });
+      onSaved();
+      onClose();
+    } catch (e) {
+      showError("Erreur : " + e.message);
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <Modal title="S'inscrire sur ce créneau" onClose={onClose}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 14 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: colors.navy }}>{preset.service}</div>
+        <div style={{ fontSize: 12, color: colors.textSecondary }}>
+          {new Date(preset.dateISO).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} · {preset.debut} – {preset.fin}
+        </div>
+      </div>
+      <Field label="Notes (optionnel)">
+        <input style={inputStyle} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Remarque éventuelle..." />
+      </Field>
+      <ModalFooter onCancel={onClose} onSubmit={handleSave} submitLabel="Confirmer mon inscription" saving={saving} />
+    </Modal>
+  );
+}
+
 // ── Carte garde (draggable) ───────────────────────────────────────────────────
-function GardeCard({ garde, onEdit, onDelete, conflit, overlay }) {
+function GardeCard({ garde, onEdit, onDelete, conflit, overlay, isDirection, isMine, draggable }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: garde.id,
     data: { garde },
+    disabled: !draggable,
   });
 
   const rs = roleStyle(garde.personnel_role);
+  const canManage = isDirection || isMine;
 
   return (
     <div
       ref={setNodeRef}
       style={{
         backgroundColor: rs.bg,
-        border: conflit ? "2px solid #F59E0B" : `1.5px solid ${rs.color}33`,
+        border: conflit ? "2px solid #F59E0B" : isMine && !isDirection ? `2px solid ${rs.color}` : `1.5px solid ${rs.color}33`,
         borderRadius: 8,
         padding: "7px 9px",
         marginBottom: 5,
-        cursor: isDragging ? "grabbing" : "grab",
+        cursor: !draggable ? "default" : isDragging ? "grabbing" : "grab",
         opacity: isDragging && !overlay ? 0.3 : 1,
         transform: transform ? `translate(${transform.x}px, ${transform.y}px)` : undefined,
         boxShadow: overlay ? "0 8px 24px rgba(0,0,0,0.2)" : "0 1px 3px rgba(0,0,0,0.06)",
         userSelect: "none",
         position: "relative",
       }}
-      {...(overlay ? {} : { ...attributes, ...listeners })}
+      {...(overlay || !draggable ? {} : { ...attributes, ...listeners })}
     >
       {conflit && (
         <div style={{ position: "absolute", top: 4, right: 4, fontSize: 9, fontWeight: 800, color: "#D97706", backgroundColor: "#FEF3C7", borderRadius: 4, padding: "1px 5px" }}>CONFLIT</div>
       )}
       <div style={{ fontSize: 11, fontWeight: 700, color: rs.color, marginBottom: 3, paddingRight: conflit ? 48 : 0 }}>
-        {garde.personnel_nom}
+        {garde.personnel_nom}{isMine && !isDirection ? " (moi)" : ""}
       </div>
       <span style={{ fontSize: 10, color: rs.color, backgroundColor: "white", borderRadius: 4, padding: "1px 6px", border: `1px solid ${rs.color}44`, fontWeight: 600 }}>
         {garde.personnel_role}
@@ -228,18 +273,20 @@ function GardeCard({ garde, onEdit, onDelete, conflit, overlay }) {
       {garde.notes && (
         <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 3, fontStyle: "italic" }}>{garde.notes}</div>
       )}
-      {!overlay && (
+      {!overlay && canManage && (
         <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
-          <button
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => { e.stopPropagation(); onEdit(garde); }}
-            style={{ fontSize: 10, padding: "2px 8px", border: "none", borderRadius: 4, backgroundColor: "#EFF6FF", color: "#2563EB", cursor: "pointer", fontWeight: 600 }}
-          >Edit</button>
+          {isDirection && (
+            <button
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); onEdit(garde); }}
+              style={{ fontSize: 10, padding: "2px 8px", border: "none", borderRadius: 4, backgroundColor: "#EFF6FF", color: "#2563EB", cursor: "pointer", fontWeight: 600 }}
+            >Edit</button>
+          )}
           <button
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => { e.stopPropagation(); onDelete(garde.id); }}
             style={{ fontSize: 10, padding: "2px 8px", border: "none", borderRadius: 4, backgroundColor: "#FEF2F2", color: "#DC2626", cursor: "pointer", fontWeight: 600 }}
-          >Sup.</button>
+          >{isDirection ? "Sup." : "Annuler"}</button>
         </div>
       )}
     </div>
@@ -247,9 +294,8 @@ function GardeCard({ garde, onEdit, onDelete, conflit, overlay }) {
 }
 
 // ── Cellule droppable ────────────────────────────────────────────────────────
-function DroppableCell({ id, gardes, onAdd, onEdit, onDelete, conflits, alerteVide }) {
-  const { error: showError } = useToast();
-  const { setNodeRef, isOver } = useDroppable({ id });
+function DroppableCell({ id, gardes, onAdd, onEdit, onDelete, conflits, alerteVide, isDirection, monEmail }) {
+  const { setNodeRef, isOver } = useDroppable({ id, disabled: !isDirection });
 
   return (
     <div
@@ -275,6 +321,9 @@ function DroppableCell({ id, gardes, onAdd, onEdit, onDelete, conflits, alerteVi
           onDelete={onDelete}
           conflit={conflits.has(g.id)}
           overlay={false}
+          isDirection={isDirection}
+          isMine={!!monEmail && g.personnel_nom === monEmail}
+          draggable={isDirection}
         />
       ))}
       <button
@@ -294,7 +343,7 @@ function DroppableCell({ id, gardes, onAdd, onEdit, onDelete, conflits, alerteVi
         onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#3B82F6"; e.currentTarget.style.color = "#3B82F6"; }}
         onMouseLeave={(e) => { e.currentTarget.style.borderColor = colors.border; e.currentTarget.style.color = colors.textMuted; }}
       >
-        + Ajouter
+        {isDirection ? "+ Ajouter" : "+ S'inscrire"}
       </button>
     </div>
   );
@@ -390,8 +439,17 @@ export default function Planning() {
   const [membres, setMembres] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null);
+  const [inscription, setInscription] = useState(null);
   const [activeGarde, setActiveGarde] = useState(null);
   const [etabId, setEtabId] = useState(auth?.etablissement_id ?? null);
+
+  // Direction (role_interne null = accès complet) garde le CRUD intégral —
+  // les rôles restreints n'ont accès qu'en lecture + auto-inscription sur un
+  // créneau vide (voir mission "planning gardes pour le personnel").
+  const ri = auth?.role_interne;
+  const isDirection = !ri;
+  const monEmail = auth?.user?.email ?? null;
+  const monRolePlanning = ROLE_INTERNE_VERS_PLANNING[ri] ?? ri ?? "Médecin";
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
@@ -424,16 +482,24 @@ export default function Planning() {
   useEffect(() => { load(); }, [load]);
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Supprimer cette garde ?")) return;
+    // Rôle restreint : ne peut annuler que sa propre inscription (le bouton
+    // n'est de toute façon rendu que pour ses propres cartes, voir GardeCard).
+    if (!isDirection) {
+      const garde = gardes.find((g) => g.id === id);
+      if (garde && garde.personnel_nom !== monEmail) return;
+      if (!window.confirm("Annuler votre inscription sur ce creneau ?")) return;
+    } else if (!window.confirm("Supprimer cette garde ?")) return;
     await deleteGarde(id);
     setGardes((prev) => prev.filter((g) => g.id !== id));
-    success("Garde supprimee");
+    success(isDirection ? "Garde supprimee" : "Inscription annulee");
   };
 
   const handleAdd = (ck) => {
     const { service, creneauKey, dateISO } = parseCellKey(ck);
     const cr = CRENEAUX.find((c) => c.key === creneauKey);
-    setModal({ preset: { service, dateISO, debut: cr?.debut ?? "06:00", fin: cr?.fin ?? "14:00" } });
+    const preset = { service, dateISO, debut: cr?.debut ?? "06:00", fin: cr?.fin ?? "14:00" };
+    if (isDirection) setModal({ preset });
+    else setInscription({ preset });
   };
 
   const handleDragStart = ({ active }) => {
@@ -483,7 +549,7 @@ export default function Planning() {
     <Layout title="Planning des gardes" subtitle="Vue semaine — Grille service x creneau">
       <Toast toasts={toasts} />
 
-      {modal && (
+      {modal && isDirection && (
         <GardeModal
           garde={modal.garde}
           preset={modal.preset}
@@ -491,6 +557,16 @@ export default function Planning() {
           etabId={etabId}
           onClose={() => setModal(null)}
           onSaved={() => { load(); success(modal.garde ? "Garde modifiee" : "Garde ajoutee"); }}
+        />
+      )}
+      {inscription && !isDirection && (
+        <InscriptionModal
+          preset={inscription.preset}
+          personnelNom={monEmail}
+          personnelRole={monRolePlanning}
+          etabId={etabId}
+          onClose={() => setInscription(null)}
+          onSaved={() => { load(); success("Inscription confirmee."); }}
         />
       )}
 
@@ -545,12 +621,19 @@ export default function Planning() {
             onClick={() => exportPlanningPDF(gardes, weekDates, auth ?? {}, showError)}
             style={{ padding: "7px 16px", backgroundColor: colors.bgCard, color: "#7C3AED", border: `1px solid #7C3AED`, borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" }}
           >Exporter PDF</button>
-          <button
-            onClick={() => setModal({})}
-            style={{ padding: "7px 16px", backgroundColor: "#10B981", color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" }}
-          >+ Nouvelle garde</button>
+          {isDirection && (
+            <button
+              onClick={() => setModal({})}
+              style={{ padding: "7px 16px", backgroundColor: "#10B981", color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" }}
+            >+ Nouvelle garde</button>
+          )}
         </div>
       </div>
+      {!isDirection && (
+        <div style={{ backgroundColor: "#EFF6FF", border: "1.5px solid #BFDBFE", borderRadius: 10, padding: "10px 16px", marginBottom: 12, fontSize: 13, color: "#1D4ED8", fontWeight: 600 }}>
+          Consultez le planning et inscrivez-vous sur un créneau libre ("+ S'inscrire"). Seule la Direction peut créer une garde pour un autre membre ou la modifier.
+        </div>
+      )}
 
       {/* Legende */}
       <div style={{ display: "flex", gap: 14, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
@@ -689,6 +772,8 @@ export default function Planning() {
                                 onDelete={handleDelete}
                                 conflits={conflits}
                                 alerteVide={alerteVide}
+                                isDirection={isDirection}
+                                monEmail={monEmail}
                               />
                             )}
                           </div>
