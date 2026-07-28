@@ -318,7 +318,7 @@ function AppRoutes() {
           path="/hopital/scanner"
           element={
             <ProtectedRoute requiredRole="hopital">
-              <PhScanner />
+              <PhScanner profile="hopital" />
             </ProtectedRoute>
           }
         />
