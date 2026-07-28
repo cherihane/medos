@@ -43,6 +43,7 @@ const HoPatients = lazy(() => import("./pages/hopital/Patients"));
 const HoPredictions = lazy(() => import("./pages/hopital/Predictions"));
 const HoAssistant = lazy(() => import("./pages/hopital/AssistantIA"));
 const HoReseau = lazy(() => import("./pages/hopital/Reseau"));
+const HoTransferts = lazy(() => import("./pages/hopital/Transferts"));
 const HoAlertes = lazy(() => import("./pages/hopital/Alertes"));
 const HoRapports = lazy(() => import("./pages/hopital/Rapports"));
 const HoFacturation = lazy(() => import("./pages/hopital/Facturation"));
@@ -334,6 +335,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute requiredRole="hopital">
               <HoReseau />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/hopital/transferts"
+          element={
+            <ProtectedRoute requiredRole="hopital">
+              <HoTransferts />
             </ProtectedRoute>
           }
         />

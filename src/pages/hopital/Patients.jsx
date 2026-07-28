@@ -7,10 +7,10 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import Layout from "../../components/Layout";
-import { usePatientsPaginated, usePatientsStats, useMedicaments, useSpecialiteMedecin } from "../../hooks/useSupabaseData";
+import { usePatientsPaginated, usePatientsStats, useMedicaments, useSpecialiteMedecin, useEtablissements } from "../../hooks/useSupabaseData";
 import { getSpecialiteConfig, CHAMP_LABEL_PAR_CLE } from "../../config/specialitesMedecin";
 import Pagination from "../../components/Pagination";
-import { insertPatient, insertOrdonnance, upsertHospitalisation, fetchHospitalisation, insertConstante, fetchConstantes, updatePatientTriage, insertNoteEvolution, fetchNotesEvolution, fetchPlanSoinsPatient, fetchPerfusionsPatient, insertAdministration, insertPlanSoins, insertDeces, fetchDecesEtablissement, genererNumeroCertificat, updatePatient, fetchRegimePatient, insertImagerie, fetchImageriePatient, insertCompteRendu } from "../../hooks/useMutations";
+import { insertPatient, insertOrdonnance, upsertHospitalisation, fetchHospitalisation, insertConstante, fetchConstantes, updatePatientTriage, insertNoteEvolution, fetchNotesEvolution, fetchPlanSoinsPatient, fetchPerfusionsPatient, insertAdministration, insertPlanSoins, insertDeces, fetchDecesEtablissement, genererNumeroCertificat, updatePatient, fetchRegimePatient, insertImagerie, fetchImageriePatient, insertCompteRendu, insertTransfertPatient } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../supabaseClient";
 import Toast from "../../components/Toast";
@@ -657,6 +657,123 @@ function ModalNouveauCompteRendu({ patient, etablissement_id, medecinNom, onClos
   );
 }
 
+// ── Modal Transfert vers un autre établissement ───────────────────────────────
+function ModalTransfertPatient({ patient, comptes, etablissement_id, medecinNom, onClose, onSaved }) {
+  // useEtablissements("hopital") inclut aussi NOTRE propre hôpital (visible via
+  // mes_etablissements(), toujours vrai peu importe la policy publique
+  // etab_select_hopitaux_publics) — on y récupère le vrai nom de l'origine
+  // plutôt que le libellé générique roleConfig.structure ("Votre Hôpital").
+  const { data: hopitaux, loading: loadingHopitaux } = useEtablissements("hopital");
+  const destinations = (hopitaux ?? []).filter((h) => h.id !== etablissement_id);
+  const etablissementOrigineNom = (hopitaux ?? []).find((h) => h.id === etablissement_id)?.nom ?? null;
+  const [form, setForm] = useState({ destination_id: "", motif: "", urgence: "normale", notes_cliniques: "" });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(null);
+  const set = (k, v) => { setErr(null); setForm((f) => ({ ...f, [k]: v })); };
+
+  const dernierCR = comptes?.[0] ?? null;
+
+  const handleSave = async () => {
+    if (!form.destination_id) { setErr("Sélectionnez l'établissement destination."); return; }
+    if (!form.motif.trim()) { setErr("Le motif du transfert est obligatoire."); return; }
+    const destination = destinations.find((h) => h.id === form.destination_id);
+    setSaving(true);
+    try {
+      await insertTransfertPatient({
+        patient_id: patient.id,
+        patient_nom: patient.nom,
+        patient_prenom: patient.prenom,
+        patient_date_naissance: patient.date_naissance ?? null,
+        patient_genre: patient.genre ?? null,
+        etablissement_origine_id: etablissement_id,
+        etablissement_origine_nom: etablissementOrigineNom,
+        etablissement_destination_id: form.destination_id,
+        etablissement_destination_nom: destination?.nom ?? null,
+        medecin_demandeur: medecinNom ?? null,
+        motif: form.motif.trim(),
+        urgence: form.urgence,
+        notes_cliniques: form.notes_cliniques.trim() || null,
+        contexte_clinique: {
+          antecedents: patient.antecedents ?? [],
+          allergies: patient.allergies ?? [],
+          groupe_sanguin: patient.groupe_sanguin ?? null,
+          dernier_compte_rendu: dernierCR ? {
+            date_consultation: dernierCR.date_consultation,
+            motif: dernierCR.motif,
+            diagnostic: dernierCR.diagnostic,
+            traitement: dernierCR.traitement,
+          } : null,
+        },
+      });
+      onSaved();
+    } catch (e) { setErr(e.message); setSaving(false); }
+  };
+
+  const textareaSt = { ...inputSt, resize: "vertical", minHeight: 72, fontFamily: "inherit" };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ background: "white", borderRadius: 16, width: "100%", maxWidth: 560, maxHeight: "92vh", overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+        <div style={{ padding: "22px 26px 0", flexShrink: 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: colors.navy }}>Transférer vers un autre établissement</h3>
+              <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 3 }}>{patient.prenom} {patient.nom} — {patient.numero_dossier ?? ""}</div>
+            </div>
+            <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: colors.textMuted }}>×</button>
+          </div>
+        </div>
+
+        <div style={{ overflowY: "auto", padding: "0 26px 10px", flexGrow: 1, display: "flex", flexDirection: "column", gap: 14 }}>
+          <div>
+            <label style={labelSt}>Établissement destination <span style={{ color: "#EF4444" }}>*</span></label>
+            <select style={inputSt} value={form.destination_id} onChange={(e) => set("destination_id", e.target.value)}>
+              <option value="">{loadingHopitaux ? "Chargement…" : "— Sélectionner —"}</option>
+              {destinations.map((h) => <option key={h.id} value={h.id}>{h.nom} {h.ville ? `(${h.ville})` : ""}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={labelSt}>Urgence du transfert</label>
+            <select style={inputSt} value={form.urgence} onChange={(e) => set("urgence", e.target.value)}>
+              <option value="normale">Normale</option>
+              <option value="urgente">Urgente</option>
+            </select>
+          </div>
+          <div>
+            <label style={labelSt}>Motif du transfert <span style={{ color: "#EF4444" }}>*</span></label>
+            <input style={inputSt} value={form.motif} onChange={(e) => set("motif", e.target.value)} placeholder="Plateau technique non disponible, spécialiste requis, capacité…" />
+          </div>
+          <div>
+            <label style={labelSt}>Notes cliniques de transfert</label>
+            <textarea style={textareaSt} value={form.notes_cliniques} onChange={(e) => set("notes_cliniques", e.target.value)} placeholder="Éléments cliniques utiles à la prise en charge par l'équipe destinataire…" />
+          </div>
+
+          <div style={{ padding: "12px 14px", backgroundColor: "#F8FAFC", borderRadius: 10, border: "1px solid var(--border-light)" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: colors.textSecondary, textTransform: "uppercase", marginBottom: 8 }}>
+              Contexte clinique transmis à la destination
+            </div>
+            <div style={{ fontSize: 12, color: colors.text, lineHeight: 1.7 }}>
+              <div><span style={{ fontWeight: 600 }}>Antécédents : </span>{(patient.antecedents ?? []).join(", ") || "aucun connu"}</div>
+              <div><span style={{ fontWeight: 600 }}>Allergies : </span>{(patient.allergies ?? []).join(", ") || "aucune connue"}</div>
+              <div><span style={{ fontWeight: 600 }}>Groupe sanguin : </span>{patient.groupe_sanguin || "non renseigné"}</div>
+              <div><span style={{ fontWeight: 600 }}>Dernier compte rendu : </span>{dernierCR ? `${fmtDate(dernierCR.date_consultation)} — ${dernierCR.diagnostic ?? dernierCR.motif}` : "aucun"}</div>
+            </div>
+          </div>
+
+          {err && <div style={{ padding: "8px 12px", background: "#FEF2F2", borderRadius: 8, fontSize: 12, color: "#DC2626" }}>{err}</div>}
+        </div>
+
+        <div style={{ display: "flex", gap: 10, padding: "16px 26px", borderTop: "1px solid var(--border-light)", flexShrink: 0 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: 11, background: "#F8FAFC", color: colors.text, border: "1px solid var(--border)", borderRadius: 10, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>Annuler</button>
+          <button onClick={handleSave} disabled={saving} style={{ flex: 2, padding: 11, background: saving ? "#E5E7EB" : ACCENT, color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+            {saving ? <><Spin />Envoi…</> : "Proposer le transfert"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Fiche patient ─────────────────────────────────────────────────────────────
 const STATUT_ORD = {
   en_attente: { bg: "#FFFBEB", color: "#D97706" }, validee: { bg: "#DCFCE7", color: "#16A34A" },
@@ -1173,6 +1290,7 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
   const [showOrd, setShowOrd]         = useState(false);
   const [ordRenouveler, setOrdRenouveler] = useState(null);
   const [showCR, setShowCR]           = useState(false);
+  const [showTransfert, setShowTransfert] = useState(false);
   const [detailCR, setDetailCR]       = useState(null);
   const [smsError, setSmsError]       = useState(null);
   // Constantes form
@@ -1374,6 +1492,7 @@ En tant qu'assistant clinique, donne en 3 phrases maximum : 1) le risque princip
   const peutSaisirConst    = !ri || ri === "Médecin" || ri === "Infirmière" || ri === "Directeur";
   const peutCreerOrd       = !ri || ri === "Médecin" || ri === "Directeur";
   const peutVoirSoins      = !ri || ri === "Médecin" || ri === "Infirmière" || ri === "Directeur";
+  const peutTransferer     = !ri || ri === "Médecin" || ri === "Directeur";
 
   // Charger soins quand l'onglet est ouvert
   useEffect(() => {
@@ -1402,6 +1521,7 @@ En tant qu'assistant clinique, donne en 3 phrases maximum : 1) le risque princip
       {showOrd && <ModalNouvelleOrdonnance patient={patient} etablissement_id={etablissement_id} medecinNom={medecinNom} medicaments={medicaments} onClose={() => setShowOrd(false)} onSaved={() => { setShowOrd(false); charger(); onPatientUpdated("Ordonnance créée."); }} />}
       {ordRenouveler && <ModalNouvelleOrdonnance patient={patient} etablissement_id={etablissement_id} medecinNom={medecinNom} medicaments={medicaments} lignesInitiales={(() => { try { return JSON.parse(ordRenouveler.notes ?? "{}").lignes ?? []; } catch { return []; } })()} onClose={() => setOrdRenouveler(null)} onSaved={() => { setOrdRenouveler(null); charger(); onPatientUpdated("Ordonnance renouvelee."); }} />}
       {showCR  && <ModalNouveauCompteRendu patient={patient} etablissement_id={etablissement_id} medecinNom={medecinNom} onClose={() => setShowCR(false)} onSaved={() => { setShowCR(false); charger(); onPatientUpdated("Compte rendu enregistré."); }} />}
+      {showTransfert && <ModalTransfertPatient patient={patient} comptes={comptes} etablissement_id={etablissement_id} medecinNom={medecinNom} onClose={() => setShowTransfert(false)} onSaved={() => { setShowTransfert(false); onPatientUpdated("Transfert propose a l'etablissement destination."); }} />}
 
       {/* Détail compte rendu */}
       {detailCR && (
@@ -2160,6 +2280,12 @@ En tant qu'assistant clinique, donne en 3 phrases maximum : 1) le risque princip
               <button onClick={() => { setShowOrd(true); setOnglet("ordonnances"); }} style={{ padding: "9px 16px", background: ACCENT, color: "white", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
                 Nouvelle ordonnance
+              </button>
+            )}
+            {peutTransferer && (
+              <button onClick={() => setShowTransfert(true)} style={{ padding: "9px 16px", background: "#7C3AED", color: "white", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M17 8l4 4-4 4M3 12h18"/></svg>
+                Transférer
               </button>
             )}
           </div>

@@ -48,6 +48,7 @@ const NAV_INTERNE = {
       "/hopital/maternite",
       "/hopital/bloc",
       "/hopital/dietetique",
+      "/hopital/transferts",
     ],
     "Infirmière": [
       "/hopital/dashboard",
@@ -255,6 +256,7 @@ export const roleConfig = {
       { type: "separator", label: "Outils" },
       { path: "/hopital/assistant", label: "Assistant IA", icon: "assistant" },
       { path: "/hopital/reseau", label: "Réseau", icon: "reseau" },
+      { path: "/hopital/transferts", label: "Transferts patients", icon: "reseau" },
       { path: "/hopital/alertes", label: "Alertes", icon: "alertes" },
       { path: "/parametres", label: "Paramètres", icon: "parametres" },
     ],

@@ -4709,3 +4709,131 @@ Build de production locale, compte Médecin réel `cherihaneadam123+r2medecin@gm
 - Spécialité du compte `cherihaneadam123+r2medecin@gmail.com` revérifiée à "Généraliste" (état
   final après le test de retour en arrière du point 4 ci-dessus).
 - Vérification finale : `COUNT(*)` sur les 2 comptes rendus de test → **0**.
+
+## Transfert de patient entre établissements hospitaliers
+
+### Objectif
+
+Un patient référé d'un hôpital vers un autre (mieux équipé, spécialisé, ou pour raison de
+capacité) — mécanisme distinct de la redistribution de stock déjà existante (`Réseau.jsx`,
+`transferts_stock`, non touchés ici).
+
+### Modèle de données : `transferts_patients` (nouvelle table)
+
+```sql
+CREATE TABLE transferts_patients (
+  id, patient_id, patient_nom, patient_prenom, patient_date_naissance, patient_genre,
+  etablissement_origine_id, etablissement_origine_nom,
+  etablissement_destination_id, etablissement_destination_nom,
+  medecin_demandeur, motif, urgence, statut, notes_cliniques,
+  contexte_clinique JSONB, patient_id_destination,
+  date_demande, date_reponse, created_at, updated_at
+);
+```
+
+- `statut` : `propose` → `accepte`/`refuse` → (si accepté) `en_cours` (patient admis côté
+  destination) → `termine`, ou `annule` (origine, tant que `propose`).
+- **Pas d'ouverture de RLS cross-établissement sur `patients`/`comptes_rendus`** : plutôt que de
+  laisser la destination interroger le dossier complet de l'origine, le contexte clinique
+  nécessaire (antécédents, allergies, groupe sanguin, dernier compte rendu) est **capturé en
+  clair sur la ligne de transfert au moment de la demande** (`contexte_clinique` jsonb) — la
+  destination ne voit jamais que ce qui a été explicitement transmis, jamais le dossier complet.
+  Conforme à la consigne : "pas le dossier complet en accès libre, seulement ce qui est
+  nécessaire à la prise en charge".
+
+RLS (`transferts_patients`) :
+```sql
+-- SELECT : accès volontaire à DEUX établissements précis (origine ET destination) —
+-- pas un accès large, contrairement aux fuites etablissement_id déjà corrigées ailleurs.
+USING (etablissement_origine_id = ANY(mes_etablissements()) OR etablissement_destination_id = ANY(mes_etablissements()))
+-- INSERT : seule l'origine peut initier (doit être son propre établissement)
+-- UPDATE : origine (annuler) ET destination (accepter/refuser/admettre/clôturer)
+```
+
+Nouvelle policy sur `etablissements` (`etab_select_hopitaux_publics`) : un hôpital doit pouvoir
+**trouver les autres hôpitaux réels inscrits sur MedOS** pour choisir une destination — la policy
+existante (`etab_select`) restreint la lecture à `mes_etablissements()` uniquement, ce qui
+empêchait toute recherche cross-hôpital. Même précédent que `etab_select_distributeurs_publics`
+déjà en place (visibilité publique restreinte au type concerné, hôpitaux actifs et validés
+uniquement).
+
+Temps réel : `transferts_patients` ajoutée à la publication `supabase_realtime` (elle était vide à
+part `alertes`/`commandes`) — les deux établissements voient l'évolution du statut sans recharger,
+même mécanisme que les alertes stock partagées avec un distributeur.
+
+### Où c'est branché
+
+1. **`src/pages/hopital/Patients.jsx`** : bouton "Transférer" dans la fiche patient (Médecin/
+   Directeur uniquement), ouvre `ModalTransfertPatient` — recherche l'établissement destination
+   (`useEtablissements("hopital")`, propre établissement exclu), motif, urgence, notes. Le
+   contexte clinique transmis est affiché en lecture seule dans le formulaire avant envoi.
+2. **`src/pages/hopital/Transferts.jsx`** (nouvel écran) : deux sections, "Transferts entrants"
+   (actions Accepter/Refuser puis Admettre puis Clôturer) et "Transferts sortants" (Annuler tant
+   que `propose`). KPI (entrants en attente/total, sortants total). Contexte clinique dépliable
+   par transfert.
+3. **Admission en continuité** (`admettrePatientTransfert`, `useMutations.js`) : à l'acceptation
+   ET l'admission, une nouvelle ligne `patients` est créée **dans l'établissement destination**,
+   pré-remplie depuis `contexte_clinique` (antécédents, allergies, groupe sanguin) — pas de
+   ressaisie. Chaque hôpital garde son propre dossier/numéro (`TR-{année}-{...}`) ; MedOS n'a pas
+   d'identité patient partagée entre établissements, donc pas de fusion de dossier au sens strict,
+   mais aucune information clinique n'est perdue ni à ressaisir manuellement.
+4. **`AuthContext.jsx`** : `/hopital/transferts` ajouté à `NAV_INTERNE.hopital.Médecin` (seul ajout
+   permis dans ce fichier, comme pour Radiologue) et à `roleConfig.hopital.nav`. Directeur = accès
+   complet (`null`), donc automatiquement inclus.
+5. **`App.js`** : route `/hopital/transferts` protégée (`ProtectedRoute requiredRole="hopital"`,
+   bloque l'accès direct par URL si le chemin n'est pas dans `auth.nav`, même mécanisme que les
+   autres écrans).
+6. **`Parametres.jsx`** : page ajoutée à `PAGES_PAR_ROLE.hopital` (sinon impossible à cocher dans
+   le formulaire d'invitation) et à `PERMISSIONS_DEFAUT.hopital.Médecin`.
+
+### Bugs trouvés et corrigés pendant le test réel (pas seulement en lecture de code)
+
+1. **`etablissement_origine_nom` enregistré comme "Votre Hôpital"** au lieu du vrai nom de
+   l'hôpital d'origine : `ModalTransfertPatient` utilisait `hopitalNom` (= `auth.structure`, un
+   libellé générique de `roleConfig`, pas le vrai nom de l'établissement — utilisé ailleurs dans
+   l'app uniquement pour de l'impression/SMS où ce n'est pas critique). Pour un enregistrement
+   **partagé entre deux établissements réels**, c'est trompeur : la destination doit voir qui
+   demande réellement le transfert. Corrigé en récupérant le vrai nom depuis
+   `useEtablissements("hopital")` (qui inclut toujours son propre établissement via
+   `mes_etablissements()`), plutôt que le libellé générique.
+2. **Admission bloquée par une contrainte CHECK non vue au premier passage** :
+   `admettrePatientTransfert` insérait `statut: "actif"` sur `patients`, alors que
+   `patients_statut_check` n'autorise que `hospitalise`/`ambulatoire`/`sorti`. L'échec (400,
+   contrainte violée) ne remontait **aucune erreur visible côté UI** — trouvé uniquement en
+   interceptant les requêtes `fetch` du navigateur pendant le test réel (clic "Admettre" sans
+   effet, aucun toast, aucune erreur console visible). Corrigé en utilisant `"hospitalise"`
+   (le patient est admis pour prise en charge).
+
+### Preuve réelle — parcours complet Origine → Destination, isolation Tiers
+
+Build de production locale, 3 vrais établissements hôpital distincts :
+- Origine : **Hopital Audit Test 2** (`cherihaneadam123+hopitalaudit2@gmail.com`, existant —
+  mot de passe réinitialisé pour ce test, utilisateur informé immédiatement).
+- Destination : **Hopital Audit Test Destination** (`cherihaneadam123+hopitaldest@gmail.com`,
+  créé pour ce test).
+- Tiers (isolation) : **Hopital Audit Test Tiers** (`cherihaneadam123+hopitaltiers@gmail.com`,
+  créé pour ce test).
+
+1. **Origine** : ouverture du dossier de Fatou Kone → "Transférer" → destination = Hopital Audit
+   Test Destination, urgence = Urgente, motif "Plateau technique cardiologie non disponible",
+   notes cliniques renseignées → "Proposer le transfert". Vérifié en base : ligne créée,
+   `etablissement_origine_nom` et `etablissement_destination_nom` corrects, `statut = propose`.
+2. **Destination** : `/hopital/transferts` → transfert entrant visible avec le bon nom d'origine,
+   badge "Urgent", motif, notes, et contexte clinique dépliable (antécédents/allergies/groupe
+   sanguin/dernier compte rendu). "Accepter" → `statut = accepte`, **mise à jour visible sans
+   recharger la page** (temps réel confirmé : KPI "Entrants en attente" passe de 1 à 0, bouton
+   change en direct). "Admettre le patient" → nouvelle ligne `patients` créée dans l'établissement
+   destination (vérifié : `Fatou Kone` apparaît dans `/hopital/patients` de la Destination,
+   `statut = hospitalise`, numéro de dossier `TR-2026-...`), `statut transfert = en_cours`.
+   "Clôturer le transfert" → `statut = termine`.
+3. **Tiers** : connecté sur `/hopital/transferts` → **"Aucun transfert entrant." / "Aucun
+   transfert sortant."** — isolation confirmée, un établissement non concerné ne voit strictement
+   rien de ce transfert.
+
+### Nettoyage — fait, confirmé
+
+- Ligne de transfert de test et le dossier patient créé côté destination (admission) supprimés :
+  `COUNT(*)` sur `transferts_patients` → **0**, patients de l'établissement Destination → **0**.
+- Comptes `cherihaneadam123+hopitaldest@gmail.com` et `cherihaneadam123+hopitaltiers@gmail.com`
+  (établissements + comptes) **conservés**, réutilisables pour de futurs tests inter-hôpitaux
+  (même convention que les autres comptes de test de cet audit).

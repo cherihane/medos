@@ -33,6 +33,7 @@ const PAGES_PAR_ROLE = {
     { path: "/hopital/scanner",      label: "Scanner" },
     { path: "/hopital/assistant",    label: "Assistant IA" },
     { path: "/hopital/reseau",       label: "Réseau" },
+    { path: "/hopital/transferts",   label: "Transferts patients" },
     { path: "/hopital/alertes",      label: "Alertes" },
     { path: "/hopital/rapports",     label: "Rapports" },
     { path: "/hopital/dietetique",   label: "Diététique" },
@@ -69,7 +70,7 @@ const PERMISSIONS_DEFAUT = {
   },
   hopital: {
     Directeur:                null,
-    "Médecin":                ["/hopital/dashboard", "/hopital/patients", "/hopital/consultations", "/hopital/mes-consultations", "/hopital/examens", "/hopital/assistant", "/hopital/alertes", "/hopital/agenda", "/hopital/transmission", "/hopital/transmission-garde", "/hopital/renouvellements", "/hopital/urgences", "/hopital/maternite", "/hopital/bloc", "/hopital/dietetique", "/hopital/sterilisation", "/hopital/pediatrie"],
+    "Médecin":                ["/hopital/dashboard", "/hopital/patients", "/hopital/consultations", "/hopital/mes-consultations", "/hopital/examens", "/hopital/assistant", "/hopital/alertes", "/hopital/agenda", "/hopital/transmission", "/hopital/transmission-garde", "/hopital/renouvellements", "/hopital/urgences", "/hopital/maternite", "/hopital/bloc", "/hopital/dietetique", "/hopital/sterilisation", "/hopital/pediatrie", "/hopital/transferts"],
     "Infirmière":             ["/hopital/dashboard", "/hopital/patients", "/hopital/consultations", "/hopital/lits", "/hopital/mon-service", "/hopital/alertes", "/hopital/transmission-garde", "/hopital/urgences", "/hopital/maternite", "/hopital/bloc", "/hopital/pediatrie"],
     "Dieteticien":            ["/hopital/dashboard", "/hopital/dietetique", "/hopital/alertes"],
     "Cuisiniere":             ["/hopital/dashboard", "/hopital/dietetique", "/hopital/alertes"],

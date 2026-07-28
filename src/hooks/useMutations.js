@@ -669,6 +669,73 @@ export async function fetchTransfertsStock(etablissement_id) {
   return data ?? [];
 }
 
+// ─── Transferts de patients inter-établissements (référé, pas redistribution
+// de stock — voir transferts_stock ci-dessus, mécanisme distinct) ──────────────
+export async function insertTransfertPatient(fields) {
+  return run(supabase.from("transferts_patients").insert({ ...fields, statut: "propose" }).select().single());
+}
+
+export async function fetchTransfertsPatients(etablissement_id) {
+  if (!etablissement_id) return [];
+  const { data } = await supabase
+    .from("transferts_patients")
+    .select("*")
+    .or(`etablissement_origine_id.eq.${etablissement_id},etablissement_destination_id.eq.${etablissement_id}`)
+    .order("date_demande", { ascending: false });
+  return data ?? [];
+}
+
+export async function updateStatutTransfertPatient(id, statut) {
+  return run(
+    supabase
+      .from("transferts_patients")
+      .update({ statut, date_reponse: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .select()
+      .single(),
+  );
+}
+
+// Admission côté destination : crée le dossier patient en continuité (pré-
+// rempli depuis le contexte clinique transmis, pas de ressaisie) puis marque
+// le transfert "en_cours". Le patient garde son numéro de dossier propre à ce
+// nouvel établissement (chaque hôpital a son propre dossier — pas d'identité
+// patient partagée entre établissements dans MedOS).
+export async function admettrePatientTransfert(transfert, etablissement_destination_id) {
+  const ctx = transfert.contexte_clinique ?? {};
+  const { data: patient, error: errPatient } = await supabase
+    .from("patients")
+    .insert({
+      etablissement_id: etablissement_destination_id,
+      nom: transfert.patient_nom,
+      prenom: transfert.patient_prenom,
+      date_naissance: transfert.patient_date_naissance,
+      genre: transfert.patient_genre,
+      antecedents: ctx.antecedents ?? [],
+      allergies: ctx.allergies ?? [],
+      groupe_sanguin: ctx.groupe_sanguin ?? null,
+      numero_dossier: `TR-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`,
+      statut: "hospitalise",
+      medecin_referent: transfert.medecin_demandeur ?? null,
+    })
+    .select()
+    .single();
+  if (errPatient) throw new Error(errPatient.message);
+
+  return run(
+    supabase
+      .from("transferts_patients")
+      .update({
+        patient_id_destination: patient.id,
+        statut: "en_cours",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", transfert.id)
+      .select()
+      .single(),
+  );
+}
+
 // ─── Sessions caisse ──────────────────────────────────────────────────────────
 export async function ouvrirSessionCaisse(fields) {
   return run(supabase.from("sessions_caisse").insert(fields).select().single());
