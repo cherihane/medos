@@ -1,9 +1,11 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { NotificationsProvider } from "./context/NotificationsContext";
+import { AccesElargiProvider, useAccesElargi } from "./context/AccesElargiContext";
 import { DarkModeProvider } from "./context/DarkModeContext";
 import InactivityGuard from "./components/InactivityGuard";
+import WidgetAccesElargi from "./components/WidgetAccesElargi";
 
 // ── Chargement différé de toutes les pages ────────────────────────────────────
 
@@ -126,6 +128,20 @@ function PageLoader() {
 function ProtectedRoute({ children, requiredRole }) {
   const { auth } = useAuth();
   const location = useLocation();
+  const { pagesSupplementaires, logAcces } = useAccesElargi();
+
+  const pathAutorise = Array.isArray(auth?.nav) && auth.nav.some((item) => item.path === location.pathname);
+  // Extension additive uniquement : un accès élargi actif peut AJOUTER des
+  // pages normalement hors du rôle habituel, jamais en retirer. Chaque accès
+  // emprunté par ce biais est journalisé (journal_acces_elargi) pour ne
+  // jamais être indiscernable d'un accès normal.
+  const viaAccesElargi = !pathAutorise && pagesSupplementaires.includes(location.pathname);
+
+  useEffect(() => {
+    if (viaAccesElargi) logAcces(location.pathname);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viaAccesElargi, location.pathname]);
+
   if (!auth) return <Navigate to="/" replace />;
   if (requiredRole && auth.role !== requiredRole)
     return <Navigate to={auth.dashboardPath} replace />;
@@ -135,10 +151,10 @@ function ProtectedRoute({ children, requiredRole }) {
   // buildAuthBase/enrichWithEtablissement). Les séparateurs (type: "separator") n'ont
   // pas de "path" et ne peuvent donc jamais matcher une route réelle ni bloquer un accès
   // légitime. Si le chemin actuel n'apparaît pas dans auth.nav, l'utilisateur n'y a pas
-  // accès même en tapant l'URL directement — on le renvoie vers son propre dashboard.
+  // accès même en tapant l'URL directement — on le renvoie vers son propre dashboard,
+  // SAUF si un accès élargi actif couvre justement cette page (viaAccesElargi).
   if (Array.isArray(auth.nav)) {
-    const pathAutorise = auth.nav.some((item) => item.path === location.pathname);
-    if (!pathAutorise) return <Navigate to={auth.dashboardPath} replace />;
+    if (!pathAutorise && !viaAccesElargi) return <Navigate to={auth.dashboardPath} replace />;
   }
   return children;
 }
@@ -150,6 +166,7 @@ function AppRoutes() {
   return (
     <>
       <InactivityGuard />
+      <WidgetAccesElargi />
       <Suspense fallback={<PageLoader />}>
       <Routes>
         <Route
@@ -672,7 +689,9 @@ export default function App() {
       <DarkModeProvider>
         <AuthProvider>
           <NotificationsProvider>
-            <AppRoutes />
+            <AccesElargiProvider>
+              <AppRoutes />
+            </AccesElargiProvider>
           </NotificationsProvider>
         </AuthProvider>
       </DarkModeProvider>

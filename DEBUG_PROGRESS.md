@@ -5213,3 +5213,152 @@ Kone (groupe sanguin renseigné pour ce test : A-, reverti après coup).
 - `permissions_nav` ajoutées pour `r2laborantin`/`r2medecin` (accès Banque de sang) **conservées** —
   changement de configuration réel, pas une donnée de test.
 - `COUNT(*)` sur les transferts de test → **0**.
+
+## Rôles de secours + accès élargi en urgence (Partie 3 de la mission transfert/banque de sang/accès élargi)
+
+### Contrainte absolue respectée
+
+Aucune fonction protégée d'AuthContext.jsx n'a été touchée
+(setLoading/buildAuthBase/enrichWithEtablissement/mountedRef/getSession/onAuthStateChange). Le
+module vit dans un contexte React **entièrement séparé** (`AccesElargiContext.jsx`), qui ne fait que
+lire `auth` déjà construit ailleurs (même principe que le heartbeat de présence de Layout.jsx). Un
+seul changement dans AuthContext.jsx : `NAV_INTERNE` est passé de `const` à `export const` (une
+ligne, aucune logique modifiée) pour que le nouveau contexte puisse calculer les pages qu'un rôle
+élargi débloquerait, sans dupliquer cette liste ailleurs.
+
+### Modèle de données
+
+- `membres_personnel.roles_secours TEXT[]` : rôles de secours pré-assignés par Direction.
+- `etablissements.delai_acces_elargi_minutes INTEGER DEFAULT 15` : délai réglable par établissement
+  avant octroi automatique (exposé dans Paramètres → "Accès élargi en urgence").
+- `demandes_acces_elargi` : chaque demande — demandeur, rôle actuel, rôle demandé (jamais
+  "Directeur", CHECK constraint — l'élévation ne mène jamais à un accès d'administration complète),
+  motif obligatoire, statut (en_attente/approuve/refuse/auto_accorde/expire), qui a décidé et quand,
+  jusqu'à quand l'accès est valide, et le sous-système de revue obligatoire
+  (revue_requise/revue_faite/revue_par/revue_le/date_limite_revue) — c'est cette table elle-même qui
+  constitue la trace complète exigée par la mission (qui a demandé, pourquoi, accordé comment,
+  quand ça expire).
+- `journal_acces_elargi` : journal immuable (pas d'update/delete) de chaque page normalement hors du
+  rôle habituel effectivement consultée grâce à un accès élargi actif — pour qu'une telle action ne
+  soit jamais indiscernable d'un accès normal après coup.
+- `alertes.type` étendu avec la valeur `acces_elargi` (le CHECK existant est une liste fermée qui ne
+  la couvrait pas).
+
+### Limitations assumées et documentées explicitement (pas de sur-promesse)
+
+1. **Pas de tâche planifiée (cron) côté serveur dans ce projet.** L'octroi automatique après le
+   délai n'est donc PAS déclenché à l'instant exact où le délai expire, mais évalué paresseusement
+   (`verifierEtAccorderAutomatique`) à chaque fois qu'un client hôpital connecté de l'établissement
+   rafraîchit son contexte d'accès élargi (toutes les ~30s). Si personne n'a l'app ouverte dans
+   l'établissement, l'octroi est simplement retardé jusqu'à la prochaine connexion d'un client. Testé
+   et documenté comme tel, jamais présenté comme un vrai ordonnanceur.
+2. **Durée de l'accès non reliée à l'heure de fin de garde planifiée.** La table `planning_gardes`
+   ne stocke qu'un nom en texte libre (`personnel_nom`), et `membres_personnel` n'a pas de colonne
+   "nom" — il n'existe aucune clé fiable pour rapprocher une demande d'accès élargi (identifiée par
+   email) d'une ligne de planning. Tenter un rapprochement par correspondance de texte aurait été
+   fragile et aurait pu accorder silencieusement une mauvaise durée. Choix assumé : durée fixe de 4h
+   (`DUREE_ACCES_ELARGI_HEURES`, documentée, ajustable dans le code — "quelques heures" selon la
+   mission), plutôt qu'un rapprochement non fiable.
+3. **Portée de l'accès élargi = accès aux PAGES du rôle emprunté, pas fusion fine des permissions
+   internes de chaque page.** Un accès élargi actif étend `auth.nav` de façon additive (jamais
+   retirer, seulement ajouter — voir ProtectedRoute dans App.js) pour les pages du rôle demandé que
+   l'utilisateur n'avait pas déjà, et journalise chaque page ainsi atteinte. Les branches internes de
+   certaines pages qui font leurs propres vérifications de `role_interne` (comme le flag "lecture"
+   de Sterilisation.jsx ou BanqueSang.jsx) n'ont pas été retouchées une par une pour reconnaître
+   l'élévation — ça aurait nécessité de modifier un grand nombre de pages du module hôpital sans
+   pouvoir toutes les retester correctement dans le temps imparti. La portée testée et garantie est
+   l'accès à la page elle-même (ce qui est la manifestation principale et testable d'un "accès
+   élargi" dans cette application), documentée honnêtement plutôt que sur-promise.
+4. **Lien avec le planning des gardes (point 1 de la mission)** : pas de jointure technique fiable
+   possible (voir limitation 2), donc traité comme un lien conceptuel/documentaire — le texte
+   d'aide dans Paramètres précise que les rôles de secours sont notamment destinés à être utilisés
+   pendant les gardes planifiées de ce membre.
+
+### Rôles de secours (Paramètres)
+
+Section ajoutée sous chaque membre du personnel hôpital (sauf Directeur) : boutons à bascule pour
+chaque rôle opérationnel (`ROLES_SECOURS_HOPITAL`, tous les rôles hôpital sauf Directeur), stockés
+dans `membres_personnel.roles_secours`. Si un membre a des rôles de secours assignés, le formulaire
+de demande d'accès élargi ne lui propose QUE ces rôles-là (pas tous les rôles) — cohérence entre les
+deux mécanismes de la mission.
+
+### "Demander un accès élargi" — bouton permanent
+
+`WidgetAccesElargi.jsx`, rendu globalement (App.js) pour tout compte hôpital, peu importe la page —
+un bouton flottant toujours visible, jamais caché derrière une permission de navigation. Motif
+obligatoire. À la soumission :
+- Notification en temps réel : insertion dans `alertes` (relayée par le mécanisme Realtime déjà en
+  place, `NotificationsContext.jsx`, sans modification de ce fichier).
+- Email réel à Direction (`send-app-email`, même pattern que les notifications de transfert).
+- Direction voit un badge "(N en attente)" sur son propre bouton, ouvre la même modale, et
+  approuve/refuse **en un geste** (un clic) — l'app étant déjà responsive (voir `useIsMobile`), ce
+  geste fonctionne aussi bien depuis un téléphone, satisfaisant "y compris depuis son téléphone"
+  sans nécessiter de lien d'action non authentifié par email (qui aurait été un risque de sécurité).
+
+### Bandeau permanent — jamais un accès silencieux
+
+Dès qu'un accès élargi est actif (approuvé ou auto-accordé, non expiré), un bandeau violet fixe en
+haut de l'écran ("Accès élargi actif (RÔLE) jusqu'à HH:MM — motif : ...") s'affiche en permanence,
+sans bouton pour le masquer — conforme à l'exigence "jamais un accès silencieux".
+
+### Traçabilité — jamais indiscernable d'un accès normal
+
+Chaque fois que `ProtectedRoute` (App.js) autorise l'accès à une page normalement hors du rôle
+habituel grâce à un accès élargi actif, une ligne est insérée dans `journal_acces_elargi`
+(email, page, demande liée, horodatage) — immuable, consultable par Direction.
+
+### Bug trouvé et corrigé en testant réellement
+
+Le premier octroi automatique testé n'a pas généré son alerte de revue obligatoire (silencieusement
+— la table `alertes.type` avait un CHECK constraint fermé qui ne couvrait pas `acces_elargi`,
+exactement le même type de problème déjà rencontré ailleurs dans ce code avec des valeurs de
+statut/type absentes du schéma réel). Diagnostiqué en ajoutant temporairement un log d'erreur explicite
+au lieu d'avaler silencieusement l'échec (`.catch(() => {})`), confirmé, corrigé en étendant le CHECK
+constraint pour inclure `acces_elargi`, puis re-testé deux fois avec succès (octrois automatiques
+suivants : alerte créée à chaque fois, y compris le signalement d'abus).
+
+### Preuve réelle
+
+Build de production locale, comptes réels Direction (`cherihaneadam123+hopitalaudit2@gmail.com`) et
+Infirmière (`cherihaneadam123+r2infirmiere@gmail.com`), rôle de secours "Médecin" assigné à
+l'Infirmière pour ce test.
+
+1. **Rôle de secours assigné** : Direction coche "Médecin" pour l'Infirmière dans Paramètres —
+   confirmé en base (`roles_secours: ["Médecin"]`).
+2. **Demande réelle avec motif** : l'Infirmière demande un accès élargi vers "Médecin" (seul rôle
+   proposé, cohérent avec son rôle de secours), motif renseigné — email réel reçu par Direction
+   quelques secondes après (vérifié par recherche Gmail directe, sujet "MedOS — Demande d'accès
+   élargi : cherihaneadam123+r2infirmiere@gmail.com", motif et rôle corrects dans le corps).
+3. **Approbation en un geste** : Direction voit la demande dans son propre widget (badge "1 en
+   attente"), clique "Approuver" — confirmé en base (`statut: approuve`, `decide_par`, `accorde_jusqu_a`
+   à +4h).
+4. **Bandeau permanent confirmé** : reconnectée, l'Infirmière voit immédiatement le bandeau violet
+   "Accès élargi actif (Médecin) jusqu'à 28/07 22:24 — motif : ...", visible sur toutes les pages.
+5. **Accès à une page normalement hors de son rôle confirmé réel** : navigation vers
+   `/hopital/renouvellements` (page réservée au rôle Médecin, absente de la liste NAV_INTERNE de
+   l'Infirmière) — la page s'affiche réellement (pas une redirection), et une ligne apparaît
+   immédiatement dans `journal_acces_elargi` (email, page, demande liée) — confirmant qu'aucun
+   accès élargi ne reste indiscernable d'un accès normal.
+6. **Cas d'échec/urgence obligatoire — octroi automatique testé** : demande créée avec un
+   `created_at` antidaté de 20 minutes (Direction n'ayant pas répondu sous le délai de 15 minutes) —
+   au rafraîchissement suivant d'un client hôpital connecté, la demande passe automatiquement à
+   `statut: auto_accorde`, `revue_requise: true`, `date_limite_revue` fixée à +24h, ET une alerte de
+   revue obligatoire est créée pour Direction (visible dans le widget, section "Revue obligatoire —
+   accès auto-accordés").
+7. **Cas d'abus délibéré testé et confirmé tracé** : deux octrois automatiques supplémentaires
+   déclenchés pour le même compte dans la même fenêtre de 24h — les 2e et 3e alertes générées
+   portent explicitement le titre "ABUS POTENTIEL — accès élargi auto-accordé plusieurs fois" avec
+   sévérité `critique` (au lieu de la simple alerte de revue), confirmant que la répétition est
+   signalée à Direction comme point à examiner en priorité, pas seulement tracée silencieusement.
+8. **Revue marquée comme faite** : Direction clique "Marquer la revue comme faite" sur un accès
+   auto-accordé — `revue_faite: true`, `revue_par`, `revue_le` enregistrés en base.
+9. **Refus testé** : demande de test refusée par Direction — `statut: refuse`, `decide_par`
+   enregistrés en base.
+
+### Nettoyage — fait, confirmé
+
+- Toutes les demandes de test (`demandes_acces_elargi`), le journal de test (`journal_acces_elargi`)
+  et les alertes de test (`alertes` où `type = 'acces_elargi'`) supprimés — `COUNT(*)` → **0** sur
+  les trois.
+- Rôle de secours "Médecin" sur l'Infirmière **conservé** — changement de configuration réel voulu
+  par la mission (Direction pré-assigne des rôles de secours), pas une donnée de test.

@@ -21,7 +21,7 @@ function effacerRoleSession() {
 
 // Chemins autorisés par role_interne. Absent = compte principal → tout est visible.
 // /parametres est toujours inclus pour tous les rôles internes.
-const NAV_INTERNE = {
+export const NAV_INTERNE = {
   pharmacie: {
     "Gérant": null, // accès complet
     "Pharmacien": [

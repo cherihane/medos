@@ -6,8 +6,9 @@ import { useAuth } from "../context/AuthContext";
 import { supabase } from "../supabaseClient";
 import { colors, radius, shadow, font } from "../theme";
 import { useDarkMode } from "../context/DarkModeContext";
-import { updateMembreSpecialite } from "../hooks/useMutations";
+import { updateMembreSpecialite, updateRolesSecours, updateDelaiAccesElargi } from "../hooks/useMutations";
 import { SPECIALITES_MEDECIN } from "../config/specialitesMedecin";
+import { ROLES_SECOURS_HOPITAL } from "../constants/hopital";
 
 // ─── Pages disponibles par rôle ──────────────────────────────────────────────
 // Ces chemins correspondent exactement aux nav dans AuthContext.roleConfig.
@@ -454,7 +455,7 @@ function SectionPersonnel({ etablissement_id, role }) {
     setLoading(true);
     const { data } = await supabase
       .from("membres_personnel")
-      .select("id, email, role_interne, actif, created_at, invitation_acceptee, permissions_nav, specialite")
+      .select("id, email, role_interne, actif, created_at, invitation_acceptee, permissions_nav, specialite, roles_secours")
       .eq("etablissement_id", etablissement_id)
       .order("created_at", { ascending: false });
     setMembres(data ?? []);
@@ -530,6 +531,21 @@ function SectionPersonnel({ etablissement_id, role }) {
       toastError("Erreur : " + e.message);
     } finally {
       setUpdatingSpecialiteId(null);
+    }
+  };
+
+  const [updatingRolesSecoursId, setUpdatingRolesSecoursId] = useState(null);
+  const handleToggleRoleSecours = async (membre, r) => {
+    const actuels = Array.isArray(membre.roles_secours) ? membre.roles_secours : [];
+    const suivant = actuels.includes(r) ? actuels.filter((x) => x !== r) : [...actuels, r];
+    setUpdatingRolesSecoursId(membre.id);
+    try {
+      await updateRolesSecours(membre.id, suivant.length ? suivant : null);
+      setMembres((prev) => prev.map((m) => m.id === membre.id ? { ...m, roles_secours: suivant.length ? suivant : null } : m));
+    } catch (e) {
+      toastError("Erreur : " + e.message);
+    } finally {
+      setUpdatingRolesSecoursId(null);
     }
   };
 
@@ -746,6 +762,30 @@ function SectionPersonnel({ etablissement_id, role }) {
                   </div>
                 )}
 
+                {/* Rôles de secours — accès élargi en urgence (hôpital uniquement, jamais pour Directeur) */}
+                {role === "hopital" && m.role_interne && m.role_interne !== "Directeur" && (
+                  <div style={{ padding: "8px 14px 10px", backgroundColor: colors.bgCard, borderTop: "1px solid var(--border-light)" }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: colors.textSecondary, marginBottom: 6 }}>
+                      Rôles de secours (accès élargi en urgence — ex: peut aussi agir comme...) :
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {ROLES_SECOURS_HOPITAL.filter((r) => r !== m.role_interne).map((r) => {
+                        const actif = Array.isArray(m.roles_secours) && m.roles_secours.includes(r);
+                        return (
+                          <button
+                            key={r}
+                            disabled={updatingRolesSecoursId === m.id}
+                            onClick={() => handleToggleRoleSecours(m, r)}
+                            style={{ padding: "4px 10px", borderRadius: 7, fontSize: 11, fontWeight: actif ? 700 : 400, cursor: "pointer", border: `1.5px solid ${actif ? "#7C3AED" : "var(--border)"}`, backgroundColor: actif ? "#F5F3FF" : colors.bgSurface, color: actif ? "#7C3AED" : colors.textSecondary }}
+                          >
+                            {r}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {/* Panel édition permissions inline */}
                 {editPermsId === m.id && (
                   <div style={{ padding: "14px 16px", backgroundColor: colors.bgCard, borderTop: "1.5px solid #BFDBFE" }}>
@@ -823,6 +863,46 @@ function SectionApparence() {
   );
 }
 
+// ─── Délai avant octroi automatique d'un accès élargi (hôpital) ──────────────
+function SectionAccesElargi({ etablissement_id }) {
+  const { toasts, success, error: toastError } = useToast();
+  const [delai, setDelai] = useState(15);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!etablissement_id) return;
+    supabase.from("etablissements").select("delai_acces_elargi_minutes").eq("id", etablissement_id).single()
+      .then(({ data }) => { setDelai(data?.delai_acces_elargi_minutes ?? 15); setLoading(false); });
+  }, [etablissement_id]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await updateDelaiAccesElargi(etablissement_id, Number(delai) || 15);
+      success("Délai mis à jour.");
+    } catch (e) { toastError("Erreur : " + e.message); }
+    setSaving(false);
+  };
+
+  return (
+    <Card title="Accès élargi en urgence">
+      <Toast toasts={toasts} />
+      <div style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 14 }}>
+        Si Direction ne répond pas à une demande d'accès élargi dans ce délai, l'accès est accordé
+        automatiquement pour une durée limitée, et une revue de Direction devient obligatoire.
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <label style={{ fontSize: 12, fontWeight: 600, color: colors.text }}>Délai avant octroi automatique (minutes) :</label>
+        <input type="number" min={1} value={delai} disabled={loading} onChange={(e) => setDelai(e.target.value)} style={{ width: 80, padding: "7px 10px", border: "1.5px solid var(--border)", borderRadius: 7, fontSize: 13 }} />
+        <button onClick={handleSave} disabled={saving || loading} style={{ padding: "7px 16px", backgroundColor: "#111827", color: "white", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+          {saving ? "Enregistrement…" : "Enregistrer"}
+        </button>
+      </div>
+    </Card>
+  );
+}
+
 export default function Parametres() {
   const { auth } = useAuth();
   const etablissement_id = auth?.etablissement_id ?? null;
@@ -840,6 +920,7 @@ export default function Parametres() {
       <SectionEtablissement etablissement_id={etablissement_id} role={role} />
       {role === "pharmacie" && <SectionTicketCaisse etablissement_id={etablissement_id} />}
       <SectionPersonnel etablissement_id={etablissement_id} role={role} />
+      {role === "hopital" && <SectionAccesElargi etablissement_id={etablissement_id} />}
     </Layout>
   );
 }

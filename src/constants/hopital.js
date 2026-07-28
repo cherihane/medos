@@ -28,6 +28,16 @@ export const CRENEAUX_GARDE = [
   { key: "nuit",  label: "Nuit",        debut: "22:00", fin: "06:00" },
 ];
 
+// Rôles internes opérationnels pouvant être assignés comme "rôle de secours"
+// ou demandés en accès élargi — Directeur en est volontairement exclu (voir
+// migration 20260730_acces_elargi.sql : l'élévation ne mène jamais à un accès
+// d'administration complète de l'établissement).
+export const ROLES_SECOURS_HOPITAL = [
+  "Médecin", "Infirmière", "Sage-femme", "Pharmacien hospitalier",
+  "Secrétaire médicale", "Laborantin", "Caissier", "Aide-soignant",
+  "Dieteticien", "Cuisiniere", "Agent de sterilisation", "Radiologue",
+];
+
 export const ROLES_PLANNING = [
   { value: "Médecin",               label: "Médecin",               color: "#16A34A", bg: "#DCFCE7" },
   { value: "Infirmier",             label: "Infirmier",             color: "#2563EB", bg: "#DBEAFE" },

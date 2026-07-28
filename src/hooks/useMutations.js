@@ -1435,3 +1435,161 @@ export async function fetchTransfusionsPatient(patient_id) {
   const { data } = await supabase.from("transfusions").select("*").eq("patient_id", patient_id).order("date_transfusion", { ascending: false });
   return data ?? [];
 }
+
+// ─── Rôles de secours + accès élargi en urgence ─────────────────────────────
+// Durée par défaut d'un accès accordé (manuel ou automatique) — "quelques
+// heures" selon la mission. On aurait aimé la relier à l'heure de fin de
+// garde planifiée (planning_gardes), mais cette table ne stocke qu'un nom en
+// texte libre (personnel_nom), sans clé fiable vers le compte auth qui fait
+// la demande (membres_personnel n'a pas de colonne "nom") — tenter un
+// rapprochement par correspondance de texte serait fragile et pourrait
+// accorder une mauvaise durée silencieusement. Choix assumé : durée fixe,
+// documentée, plutôt qu'un rapprochement non fiable.
+export const DUREE_ACCES_ELARGI_HEURES = 4;
+// Fenêtre de détection d'abus : plusieurs octrois automatiques pour le même
+// compte dans cette fenêtre déclenchent un signalement prioritaire.
+export const FENETRE_ABUS_HEURES = 24;
+
+export async function updateRolesSecours(id, roles_secours) {
+  return run(supabase.from("membres_personnel").update({ roles_secours }).eq("id", id).select().single());
+}
+
+export async function updateDelaiAccesElargi(etablissement_id, delai_minutes) {
+  return run(supabase.from("etablissements").update({ delai_acces_elargi_minutes: delai_minutes }).eq("id", etablissement_id).select().single());
+}
+
+export async function fetchDemandesAcces(etablissement_id) {
+  if (!etablissement_id) return [];
+  const { data } = await supabase
+    .from("demandes_acces_elargi")
+    .select("*")
+    .eq("etablissement_id", etablissement_id)
+    .order("created_at", { ascending: false });
+  return data ?? [];
+}
+
+// La demande "active" pour la bannière de l'utilisateur courant : accordée
+// (manuellement ou automatiquement) et pas encore expirée.
+export async function fetchDemandeActive(etablissement_id, demandeur_email) {
+  if (!etablissement_id || !demandeur_email) return null;
+  const { data } = await supabase
+    .from("demandes_acces_elargi")
+    .select("*")
+    .eq("etablissement_id", etablissement_id)
+    .eq("demandeur_email", demandeur_email)
+    .in("statut", ["approuve", "auto_accorde"])
+    .gt("accorde_jusqu_a", new Date().toISOString())
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data ?? null;
+}
+
+export async function insertDemandeAcces({ etablissement_id, demandeur_email, role_actuel, role_demande, motif }) {
+  return run(
+    supabase.from("demandes_acces_elargi").insert({
+      etablissement_id, demandeur_email, role_actuel, role_demande, motif,
+      statut: "en_attente",
+    }).select().single(),
+  );
+}
+
+export async function approuverDemandeAcces(id, { decide_par, duree_heures = DUREE_ACCES_ELARGI_HEURES }) {
+  const jusqu_a = new Date(Date.now() + duree_heures * 3600 * 1000).toISOString();
+  return run(
+    supabase.from("demandes_acces_elargi")
+      .update({ statut: "approuve", decide_par, decide_le: new Date().toISOString(), accorde_jusqu_a: jusqu_a })
+      .eq("id", id).eq("statut", "en_attente")
+      .select().single(),
+  );
+}
+
+export async function refuserDemandeAcces(id, decide_par) {
+  return run(
+    supabase.from("demandes_acces_elargi")
+      .update({ statut: "refuse", decide_par, decide_le: new Date().toISOString() })
+      .eq("id", id).eq("statut", "en_attente")
+      .select().single(),
+  );
+}
+
+export async function marquerRevueFaite(id, revue_par) {
+  return run(
+    supabase.from("demandes_acces_elargi")
+      .update({ revue_faite: true, revue_par, revue_le: new Date().toISOString() })
+      .eq("id", id)
+      .select().single(),
+  );
+}
+
+export async function insertJournalAccesElargi({ etablissement_id, demande_id, utilisateur_email, page_accedee }) {
+  return supabase.from("journal_acces_elargi").insert({ etablissement_id, demande_id, utilisateur_email, page_accedee }).then(() => {});
+}
+
+export async function fetchJournalAccesElargi(etablissement_id) {
+  if (!etablissement_id) return [];
+  const { data } = await supabase
+    .from("journal_acces_elargi")
+    .select("*")
+    .eq("etablissement_id", etablissement_id)
+    .order("created_at", { ascending: false })
+    .limit(200);
+  return data ?? [];
+}
+
+// Octroi automatique paresseux (pas de tâche planifiée serveur — voir
+// commentaire de migration 20260730_acces_elargi.sql) : à appeler
+// périodiquement par n'importe quel client hôpital connecté de
+// l'établissement. Traite toutes les demandes en_attente dont le délai est
+// dépassé, accorde l'accès, marque la revue obligatoire, et signale tout
+// compte ayant déjà déclenché un octroi automatique récent comme abus
+// potentiel à examiner en priorité.
+export async function verifierEtAccorderAutomatique(etablissement_id, delai_minutes) {
+  if (!etablissement_id) return;
+  const seuil = new Date(Date.now() - delai_minutes * 60 * 1000).toISOString();
+  const { data: enAttente } = await supabase
+    .from("demandes_acces_elargi")
+    .select("*")
+    .eq("etablissement_id", etablissement_id)
+    .eq("statut", "en_attente")
+    .lt("created_at", seuil);
+
+  for (const demande of enAttente ?? []) {
+    const jusqu_a = new Date(Date.now() + DUREE_ACCES_ELARGI_HEURES * 3600 * 1000).toISOString();
+    const dateLimiteRevue = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+    const { data: accordee, error } = await supabase
+      .from("demandes_acces_elargi")
+      .update({
+        statut: "auto_accorde", accorde_jusqu_a: jusqu_a,
+        revue_requise: true, date_limite_revue: dateLimiteRevue,
+      })
+      .eq("id", demande.id).eq("statut", "en_attente")
+      .select().single();
+    if (error || !accordee) continue; // déjà traitée entre-temps par un autre client
+
+    const depuis = new Date(Date.now() - FENETRE_ABUS_HEURES * 3600 * 1000).toISOString();
+    const { count: octroisRecents } = await supabase
+      .from("demandes_acces_elargi")
+      .select("id", { count: "exact", head: true })
+      .eq("etablissement_id", etablissement_id)
+      .eq("demandeur_email", demande.demandeur_email)
+      .eq("statut", "auto_accorde")
+      .gt("created_at", depuis);
+
+    const estAbusPotentiel = (octroisRecents ?? 0) > 1; // celle-ci incluse = au moins la 2e
+
+    await supabase.from("alertes").insert({
+      etablissement_id,
+      titre: estAbusPotentiel
+        ? "ABUS POTENTIEL — accès élargi auto-accordé plusieurs fois"
+        : "Accès élargi accordé automatiquement — revue requise",
+      message: estAbusPotentiel
+        ? `${demande.demandeur_email} a déclenché plusieurs octrois automatiques d'accès élargi (${octroisRecents} en ${FENETRE_ABUS_HEURES}h) — à examiner en priorité. Motif le plus récent : ${demande.motif}`
+        : `${demande.demandeur_email} → ${demande.role_demande} accordé automatiquement (Direction n'a pas répondu sous ${delai_minutes} min). Motif : ${demande.motif}. Revue obligatoire sous 24h.`,
+      type: "acces_elargi",
+      lu: false,
+      severite: estAbusPotentiel ? "critique" : "alerte",
+      resolu: false,
+    }).catch(() => {});
+  }
+}
