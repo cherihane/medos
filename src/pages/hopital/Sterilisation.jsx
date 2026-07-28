@@ -68,7 +68,7 @@ function Badge({ cfg }) {
 // ─── Modal Nouveau Cycle ──────────────────────────────────────────────────────
 function ModalNouveauCycle({ etablissement_id, equipements, onClose, onSaved }) {
   const { success } = useToast();
-  const auth = useAuth();
+  const { auth } = useAuth();
   const [form, setForm] = useState({
     description_contenu: "", nombre_sets: 1, service_destinataire: "",
     methode: "autoclave_134", equipement_id: "",
@@ -299,9 +299,9 @@ function ModalAjouterEquipement({ etablissement_id, onClose, onSaved }) {
 }
 
 // ─── Carte lot ────────────────────────────────────────────────────────────────
-function CarteLot({ lot, onAction }) {
+function CarteLot({ lot, onAction, lecture }) {
   const { success } = useToast();
-  const auth = useAuth();
+  const { auth } = useAuth();
   const canValider = lot.indicateur_chimique === "conforme" && ["negatif", "non_fait"].includes(lot.test_biologique);
 
   async function action(type) {
@@ -374,13 +374,13 @@ function CarteLot({ lot, onAction }) {
       </div>
 
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        {lot.statut === "en_attente_validation" && (
+        {!lecture && lot.statut === "en_attente_validation" && (
           <>
             {canValider && <button onClick={() => action("valider")} style={{ padding: "5px 11px", background: ACCENT, color: "white", border: "none", borderRadius: 7, fontSize: 12, cursor: "pointer", fontWeight: 600 }}>Valider</button>}
             <button onClick={() => action("non_conforme")} style={{ padding: "5px 11px", background: "#FEE2E2", color: "#DC2626", border: "none", borderRadius: 7, fontSize: 12, cursor: "pointer", fontWeight: 600 }}>Non conforme</button>
           </>
         )}
-        {lot.statut === "valide" && (
+        {!lecture && lot.statut === "valide" && (
           <button onClick={() => action("distribuer")} style={{ padding: "5px 11px", background: "#EFF6FF", color: "#3B82F6", border: "none", borderRadius: 7, fontSize: 12, cursor: "pointer", fontWeight: 600 }}>Distribuer</button>
         )}
         <button onClick={imprimer} style={{ padding: "5px 11px", background: colors.bgSurface, border: `1px solid ${colors.border}`, borderRadius: 7, fontSize: 12, cursor: "pointer" }}>Imprimer l'étiquette</button>
@@ -390,7 +390,7 @@ function CarteLot({ lot, onAction }) {
 }
 
 // ─── Onglet Lots du jour ──────────────────────────────────────────────────────
-function OngletLotsJour({ etablissement_id, equipements, loadEquip }) {
+function OngletLotsJour({ etablissement_id, equipements, loadEquip, lecture }) {
   const [lots, setLots] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -432,11 +432,13 @@ function OngletLotsJour({ etablissement_id, equipements, loadEquip }) {
         ))}
       </div>
 
-      <div style={{ marginBottom: 18 }}>
-        <button onClick={() => setShowModal(true)} style={{ padding: "9px 16px", background: ACCENT, color: "white", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-          + Enregistrer un cycle de stérilisation
-        </button>
-      </div>
+      {!lecture && (
+        <div style={{ marginBottom: 18 }}>
+          <button onClick={() => setShowModal(true)} style={{ padding: "9px 16px", background: ACCENT, color: "white", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+            + Enregistrer un cycle de stérilisation
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div style={{ textAlign: "center", padding: 40, color: colors.textMuted, fontSize: 13 }}>Chargement...</div>
@@ -444,11 +446,11 @@ function OngletLotsJour({ etablissement_id, equipements, loadEquip }) {
         <div style={{ textAlign: "center", padding: 40, color: colors.textMuted, fontSize: 13, background: colors.bgCard, borderRadius: 12 }}>Aucun cycle enregistré aujourd'hui.</div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {lots.map((l) => <CarteLot key={l.id} lot={l} onAction={load} />)}
+          {lots.map((l) => <CarteLot key={l.id} lot={l} onAction={load} lecture={lecture} />)}
         </div>
       )}
 
-      {showModal && (
+      {!lecture && showModal && (
         <ModalNouveauCycle etablissement_id={etablissement_id} equipements={equipements} onClose={() => setShowModal(false)} onSaved={load} />
       )}
     </div>
@@ -461,7 +463,7 @@ function OngletHistorique({ etablissement_id }) {
   const [loading, setLoading] = useState(false);
   const [filtreStatut, setFiltreStatut] = useState("tous");
   const [filtreService, setFiltreService] = useState("");
-  const auth = useAuth();
+  const { auth } = useAuth();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -570,7 +572,7 @@ function OngletHistorique({ etablissement_id }) {
 }
 
 // ─── Onglet Équipements ───────────────────────────────────────────────────────
-function OngletEquipements({ etablissement_id, equipements, reload }) {
+function OngletEquipements({ etablissement_id, equipements, reload, lecture }) {
   const [maintenanceModal, setMaintenanceModal] = useState(null);
   const [ajoutModal, setAjoutModal] = useState(false);
   const { success } = useToast();
@@ -583,11 +585,13 @@ function OngletEquipements({ etablissement_id, equipements, reload }) {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
-        <button onClick={() => setAjoutModal(true)} style={{ padding: "9px 16px", background: ACCENT, color: "white", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-          + Ajouter un équipement
-        </button>
-      </div>
+      {!lecture && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+          <button onClick={() => setAjoutModal(true)} style={{ padding: "9px 16px", background: ACCENT, color: "white", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+            + Ajouter un équipement
+          </button>
+        </div>
+      )}
 
       {equipements.length === 0 ? (
         <div style={{ textAlign: "center", padding: 40, color: colors.textMuted, fontSize: 13, background: colors.bgCard, borderRadius: 12 }}>Aucun équipement enregistré.</div>
@@ -609,20 +613,22 @@ function OngletEquipements({ etablissement_id, equipements, reload }) {
                     Dernière maintenance : {new Date(e.date_derniere_maintenance).toLocaleDateString("fr-FR")}
                   </div>
                 )}
-                <div style={{ display: "flex", gap: 6 }}>
-                  {e.statut !== "en_panne" && (
-                    <button onClick={() => signalerPanne(e)} style={{ padding: "5px 10px", background: "#FEE2E2", color: "#DC2626", border: "none", borderRadius: 7, fontSize: 11, cursor: "pointer" }}>Signaler une panne</button>
-                  )}
-                  <button onClick={() => setMaintenanceModal(e)} style={{ padding: "5px 10px", background: "#F0FDF4", color: ACCENT, border: "none", borderRadius: 7, fontSize: 11, cursor: "pointer" }}>Maintenance effectuée</button>
-                </div>
+                {!lecture && (
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {e.statut !== "en_panne" && (
+                      <button onClick={() => signalerPanne(e)} style={{ padding: "5px 10px", background: "#FEE2E2", color: "#DC2626", border: "none", borderRadius: 7, fontSize: 11, cursor: "pointer" }}>Signaler une panne</button>
+                    )}
+                    <button onClick={() => setMaintenanceModal(e)} style={{ padding: "5px 10px", background: "#F0FDF4", color: ACCENT, border: "none", borderRadius: 7, fontSize: 11, cursor: "pointer" }}>Maintenance effectuée</button>
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
       )}
 
-      {maintenanceModal && <ModalMaintenance equip={maintenanceModal} onClose={() => setMaintenanceModal(null)} onSaved={reload} />}
-      {ajoutModal && <ModalAjouterEquipement etablissement_id={etablissement_id} onClose={() => setAjoutModal(false)} onSaved={reload} />}
+      {!lecture && maintenanceModal && <ModalMaintenance equip={maintenanceModal} onClose={() => setMaintenanceModal(null)} onSaved={reload} />}
+      {!lecture && ajoutModal && <ModalAjouterEquipement etablissement_id={etablissement_id} onClose={() => setAjoutModal(false)} onSaved={reload} />}
     </div>
   );
 }
@@ -631,6 +637,10 @@ function OngletEquipements({ etablissement_id, equipements, reload }) {
 export default function Sterilisation() {
   const { auth } = useAuth();
   const etabId = auth?.etablissement_id ?? null;
+  // Infirmière : accès lecture seule (voir les cycles/équipements, pas les
+  // enregistrer/valider/modifier) — Agent de stérilisation et Direction
+  // gardent le CRUD complet.
+  const lecture = auth?.role_interne === "Infirmière";
   const [onglet, setOnglet] = useState("jour");
   const [equipements, setEquipements] = useState([]);
 
@@ -659,9 +669,15 @@ export default function Sterilisation() {
         ))}
       </div>
 
-      {onglet === "jour"        && <OngletLotsJour etablissement_id={etabId} equipements={equipements} loadEquip={loadEquip} />}
+      {lecture && (
+        <div style={{ backgroundColor: "#EFF6FF", border: "1.5px solid #BFDBFE", borderRadius: 10, padding: "10px 16px", marginBottom: 18, fontSize: 13, color: "#1D4ED8", fontWeight: 600 }}>
+          Accès en lecture seule. Seul l'Agent de stérilisation (ou la Direction) peut enregistrer, valider ou modifier un cycle.
+        </div>
+      )}
+
+      {onglet === "jour"        && <OngletLotsJour etablissement_id={etabId} equipements={equipements} loadEquip={loadEquip} lecture={lecture} />}
       {onglet === "historique"  && <OngletHistorique etablissement_id={etabId} />}
-      {onglet === "equipements" && <OngletEquipements etablissement_id={etabId} equipements={equipements} reload={loadEquip} />}
+      {onglet === "equipements" && <OngletEquipements etablissement_id={etabId} equipements={equipements} reload={loadEquip} lecture={lecture} />}
     </Layout>
   );
 }

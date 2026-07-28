@@ -72,7 +72,7 @@ const PERMISSIONS_DEFAUT = {
   hopital: {
     Directeur:                null,
     "Médecin":                ["/hopital/dashboard", "/hopital/patients", "/hopital/consultations", "/hopital/mes-consultations", "/hopital/examens", "/hopital/assistant", "/hopital/alertes", "/hopital/agenda", "/hopital/transmission", "/hopital/transmission-garde", "/hopital/renouvellements", "/hopital/urgences", "/hopital/maternite", "/hopital/bloc", "/hopital/dietetique", "/hopital/sterilisation", "/hopital/pediatrie", "/hopital/transferts", "/hopital/planning"],
-    "Infirmière":             ["/hopital/dashboard", "/hopital/patients", "/hopital/consultations", "/hopital/lits", "/hopital/mon-service", "/hopital/alertes", "/hopital/transmission-garde", "/hopital/urgences", "/hopital/maternite", "/hopital/bloc", "/hopital/pediatrie", "/hopital/planning"],
+    "Infirmière":             ["/hopital/dashboard", "/hopital/patients", "/hopital/consultations", "/hopital/lits", "/hopital/mon-service", "/hopital/alertes", "/hopital/transmission-garde", "/hopital/urgences", "/hopital/maternite", "/hopital/bloc", "/hopital/pediatrie", "/hopital/sterilisation", "/hopital/planning"],
     "Dieteticien":            ["/hopital/dashboard", "/hopital/dietetique", "/hopital/alertes"],
     "Cuisiniere":             ["/hopital/dashboard", "/hopital/dietetique", "/hopital/alertes"],
     "Agent de sterilisation": ["/hopital/dashboard", "/hopital/sterilisation", "/hopital/alertes"],

@@ -60,6 +60,7 @@ const NAV_INTERNE = {
       "/hopital/urgences",
       "/hopital/maternite",
       "/hopital/bloc",
+      "/hopital/sterilisation",
       "/hopital/planning",
     ],
     "Sage-femme": [
