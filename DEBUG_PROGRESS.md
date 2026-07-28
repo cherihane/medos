@@ -4837,3 +4837,157 @@ Build de production locale, 3 vrais établissements hôpital distincts :
 - Comptes `cherihaneadam123+hopitaldest@gmail.com` et `cherihaneadam123+hopitaltiers@gmail.com`
   (établissements + comptes) **conservés**, réutilisables pour de futurs tests inter-hôpitaux
   (même convention que les autres comptes de test de cet audit).
+
+## Fournisseurs, planning des gardes, stérilisation (5 points) + vérifications email
+
+### Point 1 — Accès Fournisseurs pour le Pharmacien hospitalier
+
+Le Pharmacien hospitalier n'avait jamais eu `/hopital/fournisseurs` dans `NAV_INTERNE` ni dans les
+permissions par défaut d'invitation (`Parametres.jsx`), alors que la gestion des commandes
+fournisseurs relève directement de ce rôle. Ajouté dans les deux.
+
+**Preuve réelle** : les permissions de l'invité existant `cherihaneadam123+r2pharmacien@gmail.com`
+étaient un instantané figé au moment de l'invitation (`membres_personnel.permissions_nav`), donc
+non affecté automatiquement par ce changement de code — comme pour tout ajout de rôle précédent.
+Direction (`cherihaneadam123+hopitalaudit2@gmail.com`) a coché "Fournisseurs" pour ce membre via le
+vrai écran Paramètres → Permissions ; reconnecté avec le compte invité → `/hopital/fournisseurs`
+bien accessible, avec le module enrichi (point 2/3 ci-dessous).
+
+### Points 2 & 3 — Enrichissement Fournisseurs (panier multi-produits, email+PDF, historique
+filtrable, suppression limitée aux brouillons, réception scannée, traçabilité)
+
+`hopital/Fournisseurs.jsx` porté au même niveau que `pharmacie/Fournisseurs.jsx`, en réutilisant le
+code déjà écrit et déjà générique (aucune des mutations/hooks utilisés n'était pharmacie-spécifique :
+`insertCommande`, `insertCommandeLignes`, `updateCommande`, `deleteCommande`, `insertLot`,
+`incrementStock`, `useCommandesPaginated`, `useCommandeHistorique`, `rechercherLotPourPrefill`
+existaient déjà et sont scopés par RLS/établissement, pas par module) :
+
+- **Panier multi-médicaments** (`commande_lignes`) au lieu d'un seul produit par commande.
+- **Envoi réel du bon de commande par email** (`send-app-email`) avec le PDF généré côté serveur
+  (`generate-bon-commande-pdf`) en pièce jointe, au fournisseur **et** en notification interne à
+  l'établissement — statut d'envoi (`email_statut`/`email_erreur`) tracé sur la commande, jamais de
+  faux succès silencieux si l'envoi échoue.
+- **Onglet "Commandes"** : historique filtrable par statut/fournisseur/recherche par référence,
+  historique des transitions de statut par commande (append-only), **suppression réservée aux
+  brouillons** (tout autre statut ne peut qu'être annulé — trace d'audit conservée, protégé aussi
+  côté RLS).
+- **Réception scannée** liée au flux Fournisseurs/réception (pas un nouvel onglet Stock séparé,
+  comme demandé) : le bouton "Marquer reçue" devient **"Réceptionner"**, qui ouvre une réception
+  ligne par ligne — pour chaque médicament de la commande, "Scanner le lot" pré-remplit fabricant
+  et date de péremption depuis un lot certifié MedOS (`rechercherLotPourPrefill`, exactement le
+  mécanisme déjà utilisé par `useVerificationLot.js`/Scanner), sinon saisie manuelle. Un numéro de
+  lot est **généré automatiquement par médicament** (`MEDOS-{année}-HOP-{suffixe}`, même format que
+  la réception Entrepôt Distributeur). À la confirmation : un lot est créé par médicament
+  (traçabilité), le stock est incrémenté — **sans double incrément** pour les commandes à une seule
+  ligne, déjà couvertes par le trigger SQL `increment_stock_reception_commande()` (colonnes
+  historiques `medicament_id`/`quantite`) ; l'incrément est manuel uniquement pour les commandes
+  multi-lignes (`commande_lignes`), que ce trigger ne couvre pas.
+- Corrigé au passage : `/hopital/scanner` chargeait le Scanner partagé sans préciser
+  `profile="hopital"` (toujours resté sur le style "pharmacie" par défaut) — passage explicite du
+  profil.
+
+**Preuve réelle** — compte réel `cherihaneadam123+r2pharmacien@gmail.com`, `Hopital Audit Test 2` :
+1. Fournisseur "Fournisseur Test Hopital" créé (email `cherihaneadam123@gmail.com`, compte réel de
+   l'utilisateur).
+2. 2 médicaments de test créés (Amoxicilline, Paracétamol) pour alimenter le panier.
+3. Commande passée avec les 2 produits (50 + 30 unités, 9 900 FCFA) → **email reçu dans la vraie
+   boîte Gmail** chez le fournisseur (`Commande MedOS CMD-44364480 — 2 produits`, les 2 lignes bien
+   listées) **et** notification interne reçue (`[MedOS] Commande passée CMD-44364480`) — vérifiés
+   via recherche directe dans Gmail, pas supposés.
+4. Onglet Commandes : historique filtrable confirmé, commande visible avec ses 2 lignes.
+5. Transitions Envoyée → Confirmée → En transit → **Réceptionner** : numéros de lot générés par
+   ligne (`MEDOS-2026-HOP-IMUIC`, `MEDOS-2026-HOP-L0FSH`), bouton "Scanner le lot" confirmé
+   fonctionnel (caméra bloquée dans cet environnement de test sans webcam — message d'erreur
+   correctement affiché, repli en saisie manuelle), fabricant + péremption saisis → réception
+   confirmée. Vérifié en base : commande `statut = livree`, **2 lots créés** avec les bons numéros/
+   fabricants/péremptions, **stock incrémenté exactement** (Amoxicilline 20→70, Paracétamol
+   15→45 — +50/+30 conformes aux quantités commandées).
+
+### Point 4 — Planning des gardes : lecture pour tout le personnel + auto-inscription
+
+Seule la Direction avait accès à `/hopital/planning`. Ajout de l'accès en **lecture** pour Médecin,
+Infirmière, Sage-femme, Secrétaire médicale, Pharmacien hospitalier, Laborantin, Radiologue,
+Caissier, Aide-soignant (`NAV_INTERNE` + permissions par défaut).
+
+Une vraie fonctionnalité d'**auto-inscription** est ajoutée (pas seulement la consultation) : sur un
+créneau vide, un rôle restreint voit "+ S'inscrire" (au lieu de "+ Ajouter" pour la Direction), qui
+ouvre `InscriptionModal` — service/date/horaire déjà fixés par la cellule, identité et rôle déduits
+automatiquement du compte connecté (`ROLE_INTERNE_VERS_PLANNING`, nouvelle table de correspondance
+dans `constants/hopital.js`, car les deux nomenclatures divergent légèrement, ex. "Infirmière" →
+"Infirmier"), seule une note est libre. Un membre ne peut annuler que **sa propre** inscription
+(bouton "Annuler" visible uniquement sur ses cartes, marquées "(moi)") — aucune carte d'un autre
+membre n'est modifiable ni déplaçable (glisser-déposer désactivé pour les rôles restreints). La
+Direction garde le CRUD intégral (création pour n'importe qui, édition, suppression, glisser-
+déposer) — comportement inchangé pour elle.
+
+**Preuve réelle** — 2 vrais comptes invités distincts :
+1. `cherihaneadam123+r2medecin@gmail.com` (Médecin) : bandeau lecture visible, "+ S'inscrire" sur un
+   créneau vide (Médecine générale, Matin, aujourd'hui) → inscription confirmée avec une note ("Test
+   auto-inscription Medecin") → vérifié en base (`planning_gardes.personnel_nom` = son email,
+   `personnel_role = "Médecin"`). Carte affichée en vert avec "(moi)" + bouton "Annuler" (pas
+   "Edit").
+2. `cherihaneadam123+r2infirmiere@gmail.com` (Infirmière, compte différent) reconnectée sur le même
+   planning → **inscription du Médecin bien visible**, mais **sans** "(moi)" ni bouton "Annuler"
+   (lecture seule pour la carte d'un autre membre) — isolation des droits de gestion confirmée entre
+   deux comptes réels.
+
+### Point 5 — Accès Stérilisation en lecture pour Infirmière + rôle Agent de stérilisation testé
+
+`/hopital/sterilisation` ajouté en lecture pour Infirmière (`NAV_INTERNE` + permissions par défaut),
+en plus du rôle "Agent de stérilisation" déjà existant. L'écran n'avait **aucune distinction lecture/
+écriture interne** — n'importe quel compte y accédant avait le CRUD complet. Ajout d'un flag
+`lecture` (vrai uniquement pour Infirmière) qui masque les boutons d'enregistrement de cycle, de
+validation/non-conformité/distribution et de gestion des équipements sur les 3 onglets, avec un
+bandeau explicite ("Seul l'Agent de stérilisation... peut enregistrer, valider ou modifier").
+
+**Bug trouvé en testant réellement le rôle "Agent de stérilisation" (jamais testé jusqu'ici, comme
+demandé)** : `useAuth()` était appelé sans déstructurer (`const auth = useAuth()` au lieu de
+`const { auth } = useAuth()`) à 3 endroits du fichier — `auth` valait donc `{ auth, login, logout,
+loading }` et non l'objet auth réel. Conséquence concrète : le champ "Opérateur" du formulaire de
+nouveau cycle restait toujours vide (`auth?.user?.email` était en réalité `undefined.email`), de
+même que "Validé par" à la validation d'un lot, et l'export du registre récupérait un mauvais objet
+établissement. Corrigé aux 3 endroits.
+
+**Preuve réelle** — compte `cherihaneadam123+r2sterilisation@gmail.com` **créé pour ce test, jamais
+utilisé avant** :
+1. Nav confirmée restreinte : Dashboard, Stérilisation, Alertes uniquement.
+2. Cycle de stérilisation enregistré (Autoclave 134°C, indicateur chimique conforme) → numéro de lot
+   généré (`LOT-2026-00001`), lot visible dans "Lots du jour" → "Valider" → statut passé à "Validé"
+   en base.
+3. Après correctif de destructuration `useAuth()` (rebuild + redéploiement local) : nouveau cycle
+   ouvert → champ "Opérateur" **désormais correctement pré-rempli** avec l'email réel du compte
+   connecté (vérifié en lisant la valeur du champ dans le DOM) — confirmé que le bug est
+   effectivement résolu, pas seulement supposé.
+4. `cherihaneadam123+r2infirmiere@gmail.com` (Infirmière) : accès confirmé, bandeau lecture seule
+   visible, aucun bouton d'enregistrement/validation/gestion d'équipement présent sur les 3 onglets.
+
+### Vérifications email (report de la mission précédente)
+
+- **Transferts de patients** : aucun code d'envoi d'email n'existe pour ce flux
+  (`Transferts.jsx`/`useMutations.js` ne référencent pas `send-app-email` pour les transferts) — la
+  mission précédente n'en demandait pas, seulement la visibilité in-app + temps réel (déjà vérifiée
+  et documentée). Rien à corriger ici ; à considérer comme une nouvelle fonctionnalité si des emails
+  de transfert sont souhaités dans une future session.
+- **Alertes de stock bas (hôpital)** — documentée à plusieurs reprises dans ce fichier comme
+  **cassée** ("le webhook email d'alerte stock reste bloqué par [...] une clé sensible manquante").
+  **Retestée réellement dans cette session : elle fonctionne désormais.** Médicament de test créé
+  pour `Hopital Audit Test 2`, stock forcé sous le seuil minimum (5 < 10) → ligne `alertes` créée
+  correctement (`type: rupture`, non résolue) **et** email réellement reçu dans la vraie boîte Gmail
+  de l'établissement (`cherihaneadam123+hopitalaudit2@gmail.com`), envoyé depuis
+  `alertes@mail.kelagroup.org` via la fonction `check-stock-alert` (Resend), sujet "⚠️ STOCK
+  CRITIQUE — Test-Alerte-Stock-Hopital (5 unités restantes)" avec le bon contenu (stock actuel/seuil/
+  recommandation). **La documentation précédente (ligne "🔴 cassée") est donc obsolète** — la clé
+  sensible manquante a dû être configurée entre-temps. Donnée de test nettoyée après vérification.
+
+### Nettoyage — fait, confirmé
+
+- Fournisseur/commande/lignes de commande de test, 2 médicaments de test créés pour le panier, et
+  les 2 lots générés à la réception : tous supprimés.
+- Garde de test (auto-inscription Médecin) : supprimée.
+- Lot de stérilisation de test (`LOT-2026-00001`) : supprimé.
+- Médicament + alerte de test pour la vérification email stock bas : supprimés.
+- Comptes de test (`r2pharmacien`, `r2medecin`, `r2infirmiere`, `r2sterilisation` — ce dernier créé
+  pour ce test) **conservés**, réutilisables (même convention que les comptes précédents). Les
+  permissions accordées (Fournisseurs pour r2pharmacien, Planning pour r2medecin/r2infirmiere,
+  Stérilisation pour r2infirmiere) sont **volontairement conservées** : elles reflètent l'état cible
+  réel de cette mission, pas des données de test.
