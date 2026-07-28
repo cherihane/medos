@@ -77,7 +77,7 @@ const PERMISSIONS_DEFAUT = {
     "Agent de sterilisation": ["/hopital/dashboard", "/hopital/sterilisation", "/hopital/alertes"],
     "Sage-femme":             ["/hopital/dashboard", "/hopital/maternite", "/hopital/patients", "/hopital/alertes", "/hopital/pediatrie"],
     "Radiologue":             ["/hopital/dashboard", "/hopital/examens", "/hopital/alertes"],
-    "Pharmacien hospitalier": ["/hopital/stock", "/hopital/patients", "/hopital/scanner", "/hopital/alertes"],
+    "Pharmacien hospitalier": ["/hopital/stock", "/hopital/patients", "/hopital/scanner", "/hopital/alertes", "/hopital/fournisseurs"],
     "Secrétaire médicale":    ["/hopital/dashboard", "/hopital/consultations", "/hopital/patients", "/hopital/facturation", "/hopital/caisse", "/hopital/agenda"],
     "Laborantin":             ["/hopital/examens", "/hopital/alertes"],
     "Caissier":               ["/hopital/facturation", "/hopital/caisse"],
