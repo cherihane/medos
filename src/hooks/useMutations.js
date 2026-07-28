@@ -1333,3 +1333,105 @@ export async function fetchImageriePatient(patient_id) {
 export async function enregistrerConnexion() {
   await supabase.rpc("enregistrer_connexion");
 }
+
+// ─── Banque de sang ─────────────────────────────────────────────────────────────
+export function genererNumeroPoche() {
+  const annee = new Date().getFullYear();
+  const suffix = Math.random().toString(36).toUpperCase().slice(2, 8);
+  return `SANG-${annee}-${suffix}`;
+}
+
+export async function insertPocheSang(fields) {
+  return run(supabase.from("poches_sang").insert(fields).select().single());
+}
+
+export async function fetchPochesSang(etablissement_id) {
+  if (!etablissement_id) return [];
+  const { data } = await supabase
+    .from("poches_sang")
+    .select("*, patients(nom, prenom, groupe_sanguin)")
+    .eq("etablissement_id", etablissement_id)
+    .order("date_peremption", { ascending: true });
+  return data ?? [];
+}
+
+// Réservation : la vérification de compatibilité (voir
+// src/utils/compatibiliteSanguine.js) doit avoir déjà eu lieu côté appelant
+// AVANT ce mutation — cette fonction re-vérifie quand même que la poche est
+// toujours "disponible" au moment de l'écriture (WITH CHECK via le statut
+// dans le WHERE), pour éviter une double réservation en cas de clic rapide
+// sur deux postes différents.
+export async function reserverPocheSang(pocheId, { patient_id, reserve_par }) {
+  const { data, error } = await supabase
+    .from("poches_sang")
+    .update({
+      statut: "reservee", patient_id, reserve_par,
+      date_reservation: new Date().toISOString(), updated_at: new Date().toISOString(),
+    })
+    .eq("id", pocheId)
+    .eq("statut", "disponible")
+    .select()
+    .single();
+  if (error || !data) {
+    throw new Error("Cette poche n'est plus disponible (déjà réservée ou transfusée entre-temps) — rechargez la liste.");
+  }
+  return data;
+}
+
+export async function annulerReservationPocheSang(pocheId) {
+  return run(
+    supabase.from("poches_sang")
+      .update({ statut: "disponible", patient_id: null, reserve_par: null, date_reservation: null, updated_at: new Date().toISOString() })
+      .eq("id", pocheId)
+      .select()
+      .single(),
+  );
+}
+
+export async function ecarterPocheSang(pocheId) {
+  return run(
+    supabase.from("poches_sang")
+      .update({ statut: "ecartee", updated_at: new Date().toISOString() })
+      .eq("id", pocheId)
+      .select()
+      .single(),
+  );
+}
+
+// Transfusion réelle : décrémente le stock (la poche sort de "disponible"/
+// "reservee") et enregistre l'acte dans le dossier du patient (table
+// transfusions, distincte du cycle de vie de la poche). Les DEUX groupes
+// sanguins sont capturés explicitement — preuve de la double confirmation
+// déjà faite côté UI, jamais recalculée après coup.
+export async function transfuserPocheSang(poche, { groupe_sanguin_patient, effectue_par, notes }) {
+  const { data: updated, error } = await supabase
+    .from("poches_sang")
+    .update({
+      statut: "transfusee", transfuse_par: effectue_par,
+      date_transfusion: new Date().toISOString(), updated_at: new Date().toISOString(),
+    })
+    .eq("id", poche.id)
+    .in("statut", ["disponible", "reservee"])
+    .select()
+    .single();
+  if (error || !updated) {
+    throw new Error("Cette poche n'est plus disponible pour transfusion (déjà transfusée ou écartée).");
+  }
+  return run(
+    supabase.from("transfusions").insert({
+      patient_id: poche.patient_id,
+      etablissement_id: poche.etablissement_id,
+      poche_id: poche.id,
+      numero_poche: poche.numero_poche,
+      groupe_sanguin_patient,
+      groupe_sanguin_poche: poche.groupe_sanguin,
+      effectue_par: effectue_par ?? null,
+      notes: notes || null,
+    }).select().single(),
+  );
+}
+
+export async function fetchTransfusionsPatient(patient_id) {
+  const { data } = await supabase.from("transfusions").select("*").eq("patient_id", patient_id).order("date_transfusion", { ascending: false });
+  return data ?? [];
+}

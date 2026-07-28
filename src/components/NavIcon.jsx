@@ -247,6 +247,11 @@ const icons = {
       <polyline points="21 15 16 10 5 21"/>
     </svg>
   ),
+  "banque-sang": (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2s7 7.58 7 12a7 7 0 0 1-14 0c0-4.42 7-12 7-12z"/>
+    </svg>
+  ),
 };
 
 export default function NavIcon({ name }) {

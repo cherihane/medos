@@ -49,6 +49,7 @@ const NAV_INTERNE = {
       "/hopital/bloc",
       "/hopital/dietetique",
       "/hopital/transferts",
+      "/hopital/banque-sang",
       "/hopital/planning",
     ],
     "Infirmière": [
@@ -88,7 +89,7 @@ const NAV_INTERNE = {
       "/hopital/fournisseurs",
       "/hopital/planning",
     ],
-    "Laborantin": ["/hopital/dashboard", "/hopital/examens", "/hopital/alertes", "/hopital/planning"],
+    "Laborantin": ["/hopital/dashboard", "/hopital/examens", "/hopital/banque-sang", "/hopital/alertes", "/hopital/planning"],
     "Radiologue": ["/hopital/dashboard", "/hopital/examens", "/hopital/alertes", "/hopital/planning"],
     "Caissier": ["/hopital/dashboard", "/hopital/caisse", "/hopital/facturation", "/hopital/planning"],
     "Aide-soignant": [
@@ -239,6 +240,7 @@ export const roleConfig = {
       // ── Stock
       { type: "separator", label: "Stock" },
       { path: "/hopital/stock", label: "Stock", icon: "inventaire" },
+      { path: "/hopital/banque-sang", label: "Banque de sang", icon: "banque-sang" },
       {
         path: "/hopital/fournisseurs",
         label: "Fournisseurs",

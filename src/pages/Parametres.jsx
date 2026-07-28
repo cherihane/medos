@@ -26,6 +26,7 @@ const PAGES_PAR_ROLE = {
   hopital: [
     { path: "/hopital/dashboard",    label: "Dashboard" },
     { path: "/hopital/stock",        label: "Stock" },
+    { path: "/hopital/banque-sang",  label: "Banque de sang" },
     { path: "/hopital/fournisseurs", label: "Fournisseurs" },
     { path: "/hopital/patients",     label: "Patients" },
     { path: "/hopital/examens",      label: "Examens / Labo" },
@@ -71,7 +72,7 @@ const PERMISSIONS_DEFAUT = {
   },
   hopital: {
     Directeur:                null,
-    "Médecin":                ["/hopital/dashboard", "/hopital/patients", "/hopital/consultations", "/hopital/mes-consultations", "/hopital/examens", "/hopital/assistant", "/hopital/alertes", "/hopital/agenda", "/hopital/transmission", "/hopital/transmission-garde", "/hopital/renouvellements", "/hopital/urgences", "/hopital/maternite", "/hopital/bloc", "/hopital/dietetique", "/hopital/sterilisation", "/hopital/pediatrie", "/hopital/transferts", "/hopital/planning"],
+    "Médecin":                ["/hopital/dashboard", "/hopital/patients", "/hopital/consultations", "/hopital/mes-consultations", "/hopital/examens", "/hopital/assistant", "/hopital/alertes", "/hopital/agenda", "/hopital/transmission", "/hopital/transmission-garde", "/hopital/renouvellements", "/hopital/urgences", "/hopital/maternite", "/hopital/bloc", "/hopital/dietetique", "/hopital/sterilisation", "/hopital/pediatrie", "/hopital/transferts", "/hopital/banque-sang", "/hopital/planning"],
     "Infirmière":             ["/hopital/dashboard", "/hopital/patients", "/hopital/consultations", "/hopital/lits", "/hopital/mon-service", "/hopital/alertes", "/hopital/transmission-garde", "/hopital/urgences", "/hopital/maternite", "/hopital/bloc", "/hopital/pediatrie", "/hopital/sterilisation", "/hopital/planning"],
     "Dieteticien":            ["/hopital/dashboard", "/hopital/dietetique", "/hopital/alertes"],
     "Cuisiniere":             ["/hopital/dashboard", "/hopital/dietetique", "/hopital/alertes"],
@@ -80,7 +81,7 @@ const PERMISSIONS_DEFAUT = {
     "Radiologue":             ["/hopital/dashboard", "/hopital/examens", "/hopital/alertes", "/hopital/planning"],
     "Pharmacien hospitalier": ["/hopital/stock", "/hopital/patients", "/hopital/scanner", "/hopital/alertes", "/hopital/fournisseurs", "/hopital/planning"],
     "Secrétaire médicale":    ["/hopital/dashboard", "/hopital/consultations", "/hopital/patients", "/hopital/facturation", "/hopital/caisse", "/hopital/agenda", "/hopital/planning"],
-    "Laborantin":             ["/hopital/examens", "/hopital/alertes", "/hopital/planning"],
+    "Laborantin":             ["/hopital/examens", "/hopital/banque-sang", "/hopital/alertes", "/hopital/planning"],
     "Caissier":               ["/hopital/facturation", "/hopital/caisse", "/hopital/planning"],
     "Aide-soignant":          ["/hopital/lits", "/hopital/mon-service", "/hopital/alertes", "/hopital/planning"],
   },

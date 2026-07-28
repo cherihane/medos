@@ -902,7 +902,7 @@ const STATUT_ORD = {
 
 // ── Dossier médical — agrégation chronologique ─────────────────────────────
 async function fetchDossierMedical(patient_id) {
-  const [cRes, oRes, hRes, cvRes, dRes, fRes, eRes, nRes] = await Promise.all([
+  const [cRes, oRes, hRes, cvRes, dRes, fRes, eRes, nRes, tRes] = await Promise.all([
     supabase.from("consultations").select("*").eq("patient_id", patient_id).order("created_at", { ascending: false }),
     supabase.from("ordonnances").select("*").eq("patient_id", patient_id).order("date_emission", { ascending: false }),
     supabase.from("hospitalisations").select("*").eq("patient_id", patient_id).order("date_entree", { ascending: false }),
@@ -911,6 +911,7 @@ async function fetchDossierMedical(patient_id) {
     supabase.from("factures_hopital").select("*").eq("patient_id", patient_id).order("date_facture", { ascending: false }),
     supabase.from("examens").select("*").eq("patient_id", patient_id).order("created_at", { ascending: false }),
     supabase.from("notes_evolution").select("*").eq("patient_id", patient_id).order("created_at", { ascending: false }),
+    supabase.from("transfusions").select("*").eq("patient_id", patient_id).order("date_transfusion", { ascending: false }),
   ]);
   const events = [
     ...(cRes.data  ?? []).map((e) => ({ ...e, _type: "consultation",    _date: e.created_at })),
@@ -921,6 +922,7 @@ async function fetchDossierMedical(patient_id) {
     ...(fRes.data  ?? []).map((e) => ({ ...e, _type: "facture",         _date: e.date_facture ?? e.created_at })),
     ...(eRes.data  ?? []).map((e) => ({ ...e, _type: "examen",          _date: e.created_at })),
     ...(nRes.data  ?? []).map((e) => ({ ...e, _type: "note_evolution",  _date: e.created_at })),
+    ...(tRes.data  ?? []).map((e) => ({ ...e, _type: "transfusion",     _date: e.date_transfusion })),
   ].sort((a, b) => new Date(b._date) - new Date(a._date));
   return events;
 }
@@ -934,6 +936,7 @@ const DOSSIER_TYPES = {
   facture:         { label: "Facture",         color: "#6B7280" },
   examen:          { label: "Examen",          color: "#06B6D4" },
   note_evolution:  { label: "Note evolution",  color: "#0891B2" },
+  transfusion:     { label: "Transfusion",     color: "#B91C1C" },
 };
 
 function fmtDateEvt(d) {
@@ -1033,6 +1036,16 @@ function EventCard({ evt, onRenouveler }) {
           <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 7px", borderRadius: 6, backgroundColor: nb.bg, color: nb.color }}>{nb.label}</span>
         </div>
         <div style={{ fontSize: 12, color: "#374151" }}>{(evt.contenu ?? "").slice(0, 80)}{(evt.contenu ?? "").length > 80 ? "…" : ""}</div>
+      </>
+    );
+  } else if (evt._type === "transfusion") {
+    content = (
+      <>
+        <div style={{ fontSize: 12 }}>
+          <strong>Poche :</strong> {evt.numero_poche ?? "—"} ({evt.groupe_sanguin_poche}) — <strong>Patient :</strong> {evt.groupe_sanguin_patient}
+          {evt.effectue_par && <span> — <strong>Par :</strong> {evt.effectue_par}</span>}
+        </div>
+        {evt.notes && <div style={{ fontSize: 12, color: "#374151" }}>{evt.notes}</div>}
       </>
     );
   }

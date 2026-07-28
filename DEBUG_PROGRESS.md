@@ -5087,4 +5087,129 @@ Build de production locale, compte réel Direction `cherihaneadam123+hopitalaudi
   externes) supprimés.
 - Allergies/antécédents/groupe sanguin temporaires sur Fatou Kone revertis à leur état d'origine
   (`[]`/`[]`/`null`).
+
+## Banque de sang (Partie 2 de la mission transfert/banque de sang/accès élargi)
+
+Nouveau module rattaché au rôle Laborantin (accès existant, pas de nouveau rôle), avec vue
+lecture+réservation pour Médecin. Module à enjeu de sécurité patient direct (erreur de groupe
+sanguin = risque vital), donc double barrière de compatibilité (app + base) et test explicite du cas
+d'échec avant de considérer la partie terminée.
+
+### Modèle de données
+
+`poches_sang` (nouvelle table) : une ligne par poche individuelle (pas un compteur agrégé) — groupe
+sanguin, numéro de poche généré, date de réception/péremption, volume, origine, statut
+(`disponible`→`reservee`→`transfusee`, ou →`ecartee` à tout moment sauf après transfusion), patient
+réservataire, qui a réservé/transfusé et quand. Pas de policy DELETE — traçabilité complète
+conservée même pour une poche écartée.
+
+`transfusions` (nouvelle table) : un acte clinique immuable — capture explicitement **les deux**
+groupes sanguins (patient et poche) au moment de l'acte, jamais recalculés après coup depuis des
+tables qui peuvent changer. Pas de policy UPDATE/DELETE. Intégrée à `fetchDossierMedical`
+(Patients.jsx) comme nouveau type d'événement `transfusion` dans le dossier chronologique du
+patient, au même titre qu'une consultation ou un examen.
+
+### Rigueur non négociable — compatibilité ABO/Rhésus à DEUX niveaux
+
+1. **Frontend** (`src/utils/compatibiliteSanguine.js`) : vraie table de compatibilité (ABO du
+   donneur : O→tous, A→A/AB, B→B/AB, AB→AB seul ; Rhésus : donneur Rh- compatible avec tout receveur,
+   donneur Rh+ compatible seulement avec receveur Rh+), vérifiée indépendamment via un script Node
+   autonome testant les 8 groupes et plusieurs cas d'incompatibilité avant toute intégration UI.
+2. **Base de données** (trigger `verifier_compatibilite_poche_sang`, migration
+   `20260729b_banque_de_sang.sql`) : **même règle, réimplémentée en PL/pgSQL**, appliquée en
+   `BEFORE INSERT OR UPDATE OF patient_id, groupe_sanguin` sur `poches_sang`. C'est la vraie ligne de
+   défense — un bug d'interface ou un appel API/SQL direct ne peut PAS créer une réservation ou une
+   transfusion incompatible, ni pour un patient dont le groupe est inconnu (`RAISE EXCEPTION` dans
+   les deux cas). Testé indépendamment de l'UI (voir preuve réelle, point 2).
+
+### Flux de réservation (Laborantin + Médecin)
+
+Design volontaire : la modale "Réserver pour un patient" affiche **toutes** les poches disponibles
+(pas seulement les compatibles), avec un badge Compatible/INCOMPATIBLE par poche. Un choix délibéré
+plutôt que de ne montrer que les poches déjà filtrées : ça permet de démontrer et tester le blocage
+plutôt que de le rendre invisible en cachant simplement l'option. Sélectionner une poche incompatible
+et cliquer "Réserver cette poche" affiche un message de blocage explicite et n'appelle jamais la
+mutation — le blocage est visible, pas silencieux.
+
+Si le groupe sanguin du patient sélectionné est inconnu, la liste de poches ne s'affiche même pas :
+un encart obligatoire ("Groupe sanguin inconnu — obligatoire avant toute réservation") force à le
+renseigner et l'enregistrer (`updatePatient`) avant de pouvoir choisir quoi que ce soit.
+
+### Flux de transfusion (Laborantin uniquement) — double confirmation explicite
+
+Modale dédiée affichant groupe du patient et groupe de la poche **côte à côte**, avec une case à
+cocher obligatoire ("Je confirme avoir vérifié que le groupe du patient... et celui de la poche...")
+qui doit être cochée avant que le bouton "Confirmer la transfusion" ne devienne actif. La mutation
+`transfuserPocheSang` décrémente le stock (poche → `transfusee`) et insère la ligne `transfusions`
+dans la même opération logique.
+
+### Répartition des rôles
+
+- **Laborantin** (et Direction/accès complet) : réception, réservation, transfusion, écartement —
+  propriétaire du module.
+- **Médecin** : lecture du stock + réservation uniquement (pas de réception/transfusion/écartement)
+  — cohérent avec "vue en lecture pour vérifier la disponibilité avant de réserver" de la mission,
+  élargi à la réservation elle-même puisque c'est un médecin qui prescrit la transfusion.
+
+Alertes de stock bas (≤ 2 poches par groupe, seuil arbitraire documenté dans le code) et péremption
+proche (≤ 7 jours) : calculées côté client à l'affichage, même mécanisme que
+`pharmacie/Alertes.jsx` (ratio stock_actuel/stock_minimum) et `Sterilisation.jsx` (lots périmés) —
+pas d'insertion dans la table `alertes` partagée, pour rester cohérent avec le pattern déjà établi
+pour ce type d'alerte dérivée.
+
+### Bug de découverte : permissions_nav personnalisées ne suivent pas les ajouts de NAV_INTERNE
+
+En testant avec le compte Laborantin réel déjà utilisé dans les missions précédentes
+(`r2laborantin@gmail.com`), la nouvelle page n'apparaissait pas dans son menu malgré l'ajout correct
+dans `NAV_INTERNE.hopital.Laborantin`. Cause : ce compte a une entrée `membres_personnel.permissions_nav`
+personnalisée (allowlist explicite posée par Direction lors d'une mission antérieure,
+`["/hopital/examens", "/hopital/alertes"]`), qui **prime** sur le rôle par défaut
+(`enrichWithEtablissement`, AuthContext.jsx). Ce n'est pas un bug applicatif — c'est le comportement
+voulu (permissions explicites = source de vérité) — mais ça signifie qu'ajouter une page à
+`NAV_INTERNE` ne suffit pas à la rendre visible pour un membre déjà personnalisé : Direction doit
+l'ajouter manuellement via Paramètres → Permissions. Fait pour les deux comptes de test
+(`r2laborantin`, `r2medecin`) via le vrai flux UI (case "Banque de sang" cochée, Enregistrer) —
+changement **conservé**, pas une donnée de test à retirer, puisqu'il reflète l'état cible réel.
+
+### Preuve réelle
+
+Build de production locale, comptes réels `r2laborantin@gmail.com` (Laborantin) et
+`r2medecin@gmail.com` (Médecin), patients réels Chahrazad Adam (B+, groupe pré-existant) et Fatou
+Kone (groupe sanguin renseigné pour ce test : A-, reverti après coup).
+
+1. **Réception** : poches O+, B+, A+ réceptionnées via le vrai formulaire (Laborantin) — stock par
+   groupe mis à jour en temps réel à l'écran, numéros de poche générés (`SANG-2026-XXXXXX`).
+2. **Cas d'échec obligatoire — réservation incompatible bloquée** : Fatou Kone, groupe A-, tentative
+   de réserver la poche A+ (incompatible : Rhésus). Message affiché : "Groupe incompatible : patient
+   A- / poche A+ — réservation bloquée." Vérifié en base **après** la tentative : poche toujours
+   `statut = disponible`, `patient_id = null` — aucune écriture n'a eu lieu, le blocage est réel, pas
+   cosmétique.
+   **Défense en profondeur vérifiée séparément** : tentative de contournement via une commande SQL
+   directe (`UPDATE poches_sang SET statut='reservee', patient_id=...`), en dehors de toute UI —
+   bloquée par le trigger PostgreSQL avec la même erreur (`P0001: Groupe incompatible...`), preuve
+   que la règle vit en base et pas seulement dans le JS de l'app.
+3. **Cas succès — réservation compatible** : Chahrazad Adam (B+), poche O+ (compatible, donneur
+   universel ABO) réservée avec succès — poche passée à `reservee`, visible avec le nom du patient
+   dans la liste filtrée.
+4. **Transfusion avec double confirmation** : modale affichant B+ (patient) / O+ (poche) côte à
+   côte, bouton désactivé tant que la case de confirmation n'est pas cochée. Après confirmation :
+   poche → `transfusee`, ligne `transfusions` créée avec les deux groupes capturés
+   (`groupe_sanguin_patient: B+`, `groupe_sanguin_poche: O+`, `effectue_par: r2laborantin@gmail.com`)
+   — vérifié en base.
+5. **Intégration dossier patient** : l'événement transfusion apparaît dans le dossier chronologique
+   de Chahrazad Adam (`Dossier (3)` → filtre "Transfusion"), avec poche/groupes/opérateur affichés,
+   confirmant l'exigence "s'enregistre dans le dossier du patient".
+6. **Vue Médecin confirmée distincte** : connecté en Médecin, la page affiche le bandeau
+   "Accès en lecture et réservation", aucun bouton Réceptionner/Écarter/Transfuser visible — seul
+   "Réserver pour un patient" est disponible, cohérent avec le rôle voulu.
+7. **Exigence "groupe inconnu" confirmée** : tentative de réservation pour un patient sans groupe
+   sanguin renseigné (Fatou Kone avant test) — aucune liste de poches affichée, encart obligatoire
+   demandant de renseigner le groupe avant toute suite.
+
+### Nettoyage — fait, confirmé
+
+- Toutes les poches de test (`poches_sang`) et la transfusion de test (`transfusions`) supprimées.
+- Groupe sanguin de test sur Fatou Kone reverti à `null`.
+- `permissions_nav` ajoutées pour `r2laborantin`/`r2medecin` (accès Banque de sang) **conservées** —
+  changement de configuration réel, pas une donnée de test.
 - `COUNT(*)` sur les transferts de test → **0**.
