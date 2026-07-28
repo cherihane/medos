@@ -10,12 +10,10 @@
 --     humain (Direction n'a pas répondu), jamais un accès silencieux : il doit
 --     toujours déclencher une revue obligatoire et rester visible en permanence
 --     à l'écran pour la personne concernée (bandeau, voir composants React).
---   - Il n'existe pas de tâche planifiée (cron) côté serveur dans ce projet.
---     L'octroi automatique après le délai est donc évalué PARESSEUSEMENT (lazy) :
---     dès qu'un client hôpital connecté de cet établissement recharge son
---     contexte d'accès élargi (toutes les ~30s, voir AccesElargiContext.jsx),
---     pas à l'instant exact où le délai expire. C'est une limitation assumée et
---     documentée, pas un vrai ordonnanceur.
+--   - L'octroi automatique après délai est déclenché par une vraie tâche
+--     planifiée pg_cron, exécutée chaque minute côté serveur — voir
+--     `executer_verification_acces_elargi()` dans la migration
+--     20260731_acces_elargi_cron.sql. Il ne dépend d'aucun client connecté.
 
 -- ── Rôles de secours pré-assignés par Direction ─────────────────────────────
 ALTER TABLE membres_personnel ADD COLUMN IF NOT EXISTS roles_secours TEXT[];

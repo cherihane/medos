@@ -7,11 +7,13 @@
  * par ailleurs (même règle que le heartbeat de Layout.jsx) et ajoute, en plus,
  * un accès temporaire à des pages normalement hors du rôle habituel.
  *
- * Pas de tâche planifiée (cron) côté serveur dans ce projet : l'octroi
- * automatique après le délai est donc réévalué PARESSEUSEMENT par ce contexte
- * (toutes les POLL_MS), sur n'importe quel client hôpital connecté de
- * l'établissement — pas à l'instant exact où le délai expire. Limitation
- * assumée et documentée, pas un vrai ordonnanceur.
+ * L'octroi automatique après le délai est déclenché côté serveur par une
+ * vraie tâche planifiée pg_cron (`executer_verification_acces_elargi`,
+ * exécutée chaque minute — voir migration 20260731_acces_elargi_cron.sql),
+ * pas par ce contexte : ce composant se contente de RELIRE l'état déjà
+ * décidé en base (polling d'affichage toutes les POLL_MS), il ne décide plus
+ * rien lui-même. L'accès s'active donc bien tout seul, même si aucun client
+ * n'a jamais rechargé de page pendant le délai.
  */
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "../supabaseClient";
@@ -23,7 +25,6 @@ import {
   approuverDemandeAcces,
   refuserDemandeAcces,
   marquerRevueFaite,
-  verifierEtAccorderAutomatique,
   insertJournalAccesElargi,
 } from "../hooks/useMutations";
 
@@ -76,10 +77,6 @@ export function AccesElargiProvider({ children }) {
         .single();
       const delai = etab?.delai_acces_elargi_minutes ?? 15;
       setDelaiMinutes(delai);
-
-      // Octroi automatique paresseux — évalué à chaque rafraîchissement, sur
-      // n'importe quel client hôpital connecté de cet établissement.
-      await verifierEtAccorderAutomatique(etabId, delai).catch(() => {});
 
       const [active, mine, all] = await Promise.all([
         fetchDemandeActive(etabId, email),

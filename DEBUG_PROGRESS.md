@@ -5246,20 +5246,14 @@ ligne, aucune logique modifiée) pour que le nouveau contexte puisse calculer le
 
 ### Limitations assumées et documentées explicitement (pas de sur-promesse)
 
-1. **Pas de tâche planifiée (cron) côté serveur dans ce projet.** L'octroi automatique après le
-   délai n'est donc PAS déclenché à l'instant exact où le délai expire, mais évalué paresseusement
-   (`verifierEtAccorderAutomatique`) à chaque fois qu'un client hôpital connecté de l'établissement
-   rafraîchit son contexte d'accès élargi (toutes les ~30s). Si personne n'a l'app ouverte dans
-   l'établissement, l'octroi est simplement retardé jusqu'à la prochaine connexion d'un client. Testé
-   et documenté comme tel, jamais présenté comme un vrai ordonnanceur.
-2. **Durée de l'accès non reliée à l'heure de fin de garde planifiée.** La table `planning_gardes`
+1. **Durée de l'accès non reliée à l'heure de fin de garde planifiée.** La table `planning_gardes`
    ne stocke qu'un nom en texte libre (`personnel_nom`), et `membres_personnel` n'a pas de colonne
    "nom" — il n'existe aucune clé fiable pour rapprocher une demande d'accès élargi (identifiée par
    email) d'une ligne de planning. Tenter un rapprochement par correspondance de texte aurait été
    fragile et aurait pu accorder silencieusement une mauvaise durée. Choix assumé : durée fixe de 4h
    (`DUREE_ACCES_ELARGI_HEURES`, documentée, ajustable dans le code — "quelques heures" selon la
    mission), plutôt qu'un rapprochement non fiable.
-3. **Portée de l'accès élargi = accès aux PAGES du rôle emprunté, pas fusion fine des permissions
+2. **Portée de l'accès élargi = accès aux PAGES du rôle emprunté, pas fusion fine des permissions
    internes de chaque page.** Un accès élargi actif étend `auth.nav` de façon additive (jamais
    retirer, seulement ajouter — voir ProtectedRoute dans App.js) pour les pages du rôle demandé que
    l'utilisateur n'avait pas déjà, et journalise chaque page ainsi atteinte. Les branches internes de
@@ -5269,10 +5263,47 @@ ligne, aucune logique modifiée) pour que le nouveau contexte puisse calculer le
    pouvoir toutes les retester correctement dans le temps imparti. La portée testée et garantie est
    l'accès à la page elle-même (ce qui est la manifestation principale et testable d'un "accès
    élargi" dans cette application), documentée honnêtement plutôt que sur-promise.
-4. **Lien avec le planning des gardes (point 1 de la mission)** : pas de jointure technique fiable
-   possible (voir limitation 2), donc traité comme un lien conceptuel/documentaire — le texte
+3. **Lien avec le planning des gardes (point 1 de la mission)** : pas de jointure technique fiable
+   possible (voir limitation 1), donc traité comme un lien conceptuel/documentaire — le texte
    d'aide dans Paramètres précise que les rôles de secours sont notamment destinés à être utilisés
    pendant les gardes planifiées de ce membre.
+
+### Suivi — octroi automatique remplacé par une vraie tâche planifiée pg_cron
+
+La version initiale ci-dessus évaluait l'octroi automatique PARESSEUSEMENT (uniquement quand un
+client hôpital connecté rechargeait son contexte, toutes les ~30s) — limitation assumée à l'époque
+faute de mécanisme de tâche planifiée connu dans ce projet. Sur demande explicite de durcir ce point,
+remplacé par une vraie tâche planifiée côté serveur :
+
+- Extension `pg_cron` activée (`CREATE EXTENSION IF NOT EXISTS pg_cron`), disponible sur ce projet
+  Supabase et jusque-là jamais utilisée.
+- `public.executer_verification_acces_elargi()` (migration `20260731_acces_elargi_cron.sql`) :
+  reprend **exactement** la logique de décision qui vivait auparavant dans la fonction JS
+  `verifierEtAccorderAutomatique` (désormais supprimée de `useMutations.js`) — même durée accordée
+  (4h), même fenêtre de détection d'abus (24h), même contenu d'alerte, y compris le signalement
+  "ABUS POTENTIEL" en cas d'octrois automatiques répétés. Fonction `SECURITY DEFINER`, insensible à
+  la présence ou non d'un client connecté.
+- Planifiée via `cron.schedule('acces-elargi-auto-octroi', '* * * * *', ...)` — exécution chaque
+  minute, indépendamment de toute action utilisateur.
+- Côté client (`AccesElargiContext.jsx`), le polling toutes les ~30s devient un simple
+  **rafraîchissement d'affichage** (relire l'état déjà décidé en base) — il ne décide plus rien.
+  Bandeau, journal d'audit, formulaire de demande, approbation manuelle, détection d'abus : **tout
+  ça reste strictement inchangé**, seul le déclenchement de l'octroi automatique a changé de nature.
+
+**Preuve réelle en conditions réelles, sans aucune interaction pendant le délai** : délai réduit à 2
+minutes sur l'établissement de test (`Hopital Audit Test 2`) pour rendre le test pratique tout en
+exerçant exactement le même mécanisme. Demande réelle créée via l'interface par l'Infirmière
+(`cherihaneadam123+r2infirmiere@gmail.com`) à 17:45:01 UTC. **Aucune page de l'application n'a été
+rechargée ni visitée entre la création de la demande et la vérification** — seule une requête SQL
+externe (Supabase CLI, hors application) a interrogé la base toutes les 10s en tâche de fond pour
+observer le changement d'état, sans jamais déclencher quoi que ce soit côté client. La demande est
+passée à `statut = auto_accorde` à 17:48:02 UTC — dans la minute suivant l'expiration du délai de 2
+minutes (17:47:01), cohérent avec une exécution cron chaque minute. `revue_requise = true`,
+`date_limite_revue` fixée à +24h, et l'alerte "Accès élargi accordé automatiquement — revue requise"
+créée automatiquement — confirmé en base. Reconnectée ensuite, l'Infirmière voit immédiatement le
+bandeau "Accès élargi actif (Médecin) jusqu'à 28/07 23:48 — motif : ...", confirmant que l'état
+décidé côté serveur est fidèlement reflété côté client. Délai de l'établissement reverti à 15 minutes
+et toutes les données de ce test supprimées après vérification.
 
 ### Rôles de secours (Paramètres)
 

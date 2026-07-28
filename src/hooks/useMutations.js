@@ -1537,59 +1537,9 @@ export async function fetchJournalAccesElargi(etablissement_id) {
   return data ?? [];
 }
 
-// Octroi automatique paresseux (pas de tâche planifiée serveur — voir
-// commentaire de migration 20260730_acces_elargi.sql) : à appeler
-// périodiquement par n'importe quel client hôpital connecté de
-// l'établissement. Traite toutes les demandes en_attente dont le délai est
-// dépassé, accorde l'accès, marque la revue obligatoire, et signale tout
-// compte ayant déjà déclenché un octroi automatique récent comme abus
-// potentiel à examiner en priorité.
-export async function verifierEtAccorderAutomatique(etablissement_id, delai_minutes) {
-  if (!etablissement_id) return;
-  const seuil = new Date(Date.now() - delai_minutes * 60 * 1000).toISOString();
-  const { data: enAttente } = await supabase
-    .from("demandes_acces_elargi")
-    .select("*")
-    .eq("etablissement_id", etablissement_id)
-    .eq("statut", "en_attente")
-    .lt("created_at", seuil);
-
-  for (const demande of enAttente ?? []) {
-    const jusqu_a = new Date(Date.now() + DUREE_ACCES_ELARGI_HEURES * 3600 * 1000).toISOString();
-    const dateLimiteRevue = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
-    const { data: accordee, error } = await supabase
-      .from("demandes_acces_elargi")
-      .update({
-        statut: "auto_accorde", accorde_jusqu_a: jusqu_a,
-        revue_requise: true, date_limite_revue: dateLimiteRevue,
-      })
-      .eq("id", demande.id).eq("statut", "en_attente")
-      .select().single();
-    if (error || !accordee) continue; // déjà traitée entre-temps par un autre client
-
-    const depuis = new Date(Date.now() - FENETRE_ABUS_HEURES * 3600 * 1000).toISOString();
-    const { count: octroisRecents } = await supabase
-      .from("demandes_acces_elargi")
-      .select("id", { count: "exact", head: true })
-      .eq("etablissement_id", etablissement_id)
-      .eq("demandeur_email", demande.demandeur_email)
-      .eq("statut", "auto_accorde")
-      .gt("created_at", depuis);
-
-    const estAbusPotentiel = (octroisRecents ?? 0) > 1; // celle-ci incluse = au moins la 2e
-
-    await supabase.from("alertes").insert({
-      etablissement_id,
-      titre: estAbusPotentiel
-        ? "ABUS POTENTIEL — accès élargi auto-accordé plusieurs fois"
-        : "Accès élargi accordé automatiquement — revue requise",
-      message: estAbusPotentiel
-        ? `${demande.demandeur_email} a déclenché plusieurs octrois automatiques d'accès élargi (${octroisRecents} en ${FENETRE_ABUS_HEURES}h) — à examiner en priorité. Motif le plus récent : ${demande.motif}`
-        : `${demande.demandeur_email} → ${demande.role_demande} accordé automatiquement (Direction n'a pas répondu sous ${delai_minutes} min). Motif : ${demande.motif}. Revue obligatoire sous 24h.`,
-      type: "acces_elargi",
-      lu: false,
-      severite: estAbusPotentiel ? "critique" : "alerte",
-      resolu: false,
-    }).catch(() => {});
-  }
-}
+// L'octroi automatique n'est plus déclenché depuis le client : une vraie
+// tâche planifiée pg_cron (`executer_verification_acces_elargi`, exécutée
+// chaque minute côté serveur) s'en charge désormais — voir migration
+// 20260731_acces_elargi_cron.sql. Elle réplique exactement la même logique
+// de décision (durée accordée, fenêtre de détection d'abus, contenu des
+// alertes) qui vivait auparavant ici.
