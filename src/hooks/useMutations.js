@@ -672,7 +672,10 @@ export async function fetchTransfertsStock(etablissement_id) {
 // ─── Transferts de patients inter-établissements (référé, pas redistribution
 // de stock — voir transferts_stock ci-dessus, mécanisme distinct) ──────────────
 export async function insertTransfertPatient(fields) {
-  return run(supabase.from("transferts_patients").insert({ ...fields, statut: "propose" }).select().single());
+  // "propose" par défaut (cycle MedOS-à-MedOS) — un appelant peut passer un
+  // statut explicite (ex. "emis" pour un transfert externe, sans cycle
+  // proposé/accepté), jamais écrasé silencieusement.
+  return run(supabase.from("transferts_patients").insert({ statut: "propose", ...fields }).select().single());
 }
 
 export async function fetchTransfertsPatients(etablissement_id) {
@@ -690,6 +693,26 @@ export async function updateStatutTransfertPatient(id, statut) {
     supabase
       .from("transferts_patients")
       .update({ statut, date_reponse: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .select()
+      .single(),
+  );
+}
+
+// Journal d'audit des notifications email envoyées sur un transfert (propose/
+// accepte/refuse/fiche_externe) — append-only, jamais de faux succès
+// silencieux si un envoi échoue (statut/erreur toujours tracés).
+export async function ajouterNotificationTransfert(id, notification) {
+  const { data: existing } = await supabase
+    .from("transferts_patients")
+    .select("notifications_envoyees")
+    .eq("id", id)
+    .single();
+  const arr = existing?.notifications_envoyees ?? [];
+  return run(
+    supabase
+      .from("transferts_patients")
+      .update({ notifications_envoyees: [...arr, { ...notification, date: new Date().toISOString() }] })
       .eq("id", id)
       .select()
       .single(),

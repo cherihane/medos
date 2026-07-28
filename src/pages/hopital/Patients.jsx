@@ -10,7 +10,8 @@ import Layout from "../../components/Layout";
 import { usePatientsPaginated, usePatientsStats, useMedicaments, useSpecialiteMedecin, useEtablissements } from "../../hooks/useSupabaseData";
 import { getSpecialiteConfig, CHAMP_LABEL_PAR_CLE } from "../../config/specialitesMedecin";
 import Pagination from "../../components/Pagination";
-import { insertPatient, insertOrdonnance, upsertHospitalisation, fetchHospitalisation, insertConstante, fetchConstantes, updatePatientTriage, insertNoteEvolution, fetchNotesEvolution, fetchPlanSoinsPatient, fetchPerfusionsPatient, insertAdministration, insertPlanSoins, insertDeces, fetchDecesEtablissement, genererNumeroCertificat, updatePatient, fetchRegimePatient, insertImagerie, fetchImageriePatient, insertCompteRendu, insertTransfertPatient } from "../../hooks/useMutations";
+import { insertPatient, insertOrdonnance, upsertHospitalisation, fetchHospitalisation, insertConstante, fetchConstantes, updatePatientTriage, insertNoteEvolution, fetchNotesEvolution, fetchPlanSoinsPatient, fetchPerfusionsPatient, insertAdministration, insertPlanSoins, insertDeces, fetchDecesEtablissement, genererNumeroCertificat, updatePatient, fetchRegimePatient, insertImagerie, fetchImageriePatient, insertCompteRendu, insertTransfertPatient, ajouterNotificationTransfert } from "../../hooks/useMutations";
+import { imprimerFicheTransfertExterne, envoyerFicheTransfertExterne } from "../../utils/ficheTransfertExterne";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../supabaseClient";
 import Toast from "../../components/Toast";
@@ -657,8 +658,41 @@ function ModalNouveauCompteRendu({ patient, etablissement_id, medecinNom, onClos
   );
 }
 
+// Email au destinataire MedOS quand un transfert est proposé — best-effort,
+// ne bloque jamais la création du transfert (déjà enregistrée) si l'envoi
+// échoue, mais toujours tracé dans notifications_envoyees pour audit.
+async function notifierTransfertPropose(transfertId, destinationEtablissementId, { patientNom, patientPrenom, motif, urgence, etabOrigineNom }) {
+  try {
+    const { data: destEtab } = await supabase.from("etablissements").select("email").eq("id", destinationEtablissementId).maybeSingle();
+    if (!destEtab?.email) {
+      await ajouterNotificationTransfert(transfertId, { evenement: "propose", destinataire: null, statut: "echec", erreur: "Établissement destination sans email." });
+      return;
+    }
+    const html = `
+<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+  <div style="background:#0A1628;padding:24px 32px;border-radius:8px 8px 0 0"><h1 style="color:white;font-size:18px;margin:0">Nouveau transfert proposé</h1></div>
+  <div style="padding:24px 32px;border:1px solid #e5e7eb;border-top:none">
+    <p style="font-size:14px;color:#374151"><strong>${etabOrigineNom}</strong> propose le transfert de <strong>${patientPrenom} ${patientNom}</strong> vers votre établissement.</p>
+    <p style="font-size:13px;color:#374151"><strong>Motif :</strong> ${motif}<br/><strong>Urgence :</strong> ${urgence === "urgente" ? "Urgente" : "Normale"}</p>
+    <p style="font-size:13px;color:#374151">Connectez-vous à MedOS (Transferts patients) pour accepter ou refuser ce transfert et consulter le contexte clinique transmis.</p>
+  </div>
+  <div style="background:#F8FAFC;padding:16px 32px;border-top:1px solid #e5e7eb;text-align:center"><p style="font-size:12px;color:#9CA3AF;margin:0">MedOS</p></div>
+</div>`;
+    const { error } = await supabase.functions.invoke("send-app-email", {
+      body: { to: destEtab.email, subject: `MedOS — Transfert proposé : ${patientPrenom} ${patientNom}`, html },
+    });
+    await ajouterNotificationTransfert(transfertId, {
+      evenement: "propose", destinataire: destEtab.email,
+      statut: error ? "echec" : "envoye", erreur: error ? error.message : null,
+    });
+  } catch (e) {
+    await ajouterNotificationTransfert(transfertId, { evenement: "propose", destinataire: null, statut: "echec", erreur: e.message }).catch(() => {});
+  }
+}
+
 // ── Modal Transfert vers un autre établissement ───────────────────────────────
 function ModalTransfertPatient({ patient, comptes, etablissement_id, medecinNom, onClose, onSaved }) {
+  const { toasts: transfertToasts, error: toastError } = useToast();
   // useEtablissements("hopital") inclut aussi NOTRE propre hôpital (visible via
   // mes_etablissements(), toujours vrai peu importe la policy publique
   // etab_select_hopitaux_publics) — on y récupère le vrai nom de l'origine
@@ -666,20 +700,35 @@ function ModalTransfertPatient({ patient, comptes, etablissement_id, medecinNom,
   const { data: hopitaux, loading: loadingHopitaux } = useEtablissements("hopital");
   const destinations = (hopitaux ?? []).filter((h) => h.id !== etablissement_id);
   const etablissementOrigineNom = (hopitaux ?? []).find((h) => h.id === etablissement_id)?.nom ?? null;
-  const [form, setForm] = useState({ destination_id: "", motif: "", urgence: "normale", notes_cliniques: "" });
+  const [mode, setMode] = useState("medos"); // "medos" | "externe"
+  const [form, setForm] = useState({
+    destination_id: "", motif: "", urgence: "normale", notes_cliniques: "",
+    destination_externe_nom: "", destination_externe_contact: "", destination_externe_email: "",
+  });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(null);
   const set = (k, v) => { setErr(null); setForm((f) => ({ ...f, [k]: v })); };
 
   const dernierCR = comptes?.[0] ?? null;
+  const contexteClinique = {
+    antecedents: patient.antecedents ?? [],
+    allergies: patient.allergies ?? [],
+    groupe_sanguin: patient.groupe_sanguin ?? null,
+    dernier_compte_rendu: dernierCR ? {
+      date_consultation: dernierCR.date_consultation,
+      motif: dernierCR.motif,
+      diagnostic: dernierCR.diagnostic,
+      traitement: dernierCR.traitement,
+    } : null,
+  };
 
-  const handleSave = async () => {
+  const handleSaveMedos = async () => {
     if (!form.destination_id) { setErr("Sélectionnez l'établissement destination."); return; }
     if (!form.motif.trim()) { setErr("Le motif du transfert est obligatoire."); return; }
     const destination = destinations.find((h) => h.id === form.destination_id);
     setSaving(true);
     try {
-      await insertTransfertPatient({
+      const transfert = await insertTransfertPatient({
         patient_id: patient.id,
         patient_nom: patient.nom,
         patient_prenom: patient.prenom,
@@ -693,18 +742,56 @@ function ModalTransfertPatient({ patient, comptes, etablissement_id, medecinNom,
         motif: form.motif.trim(),
         urgence: form.urgence,
         notes_cliniques: form.notes_cliniques.trim() || null,
-        contexte_clinique: {
-          antecedents: patient.antecedents ?? [],
-          allergies: patient.allergies ?? [],
-          groupe_sanguin: patient.groupe_sanguin ?? null,
-          dernier_compte_rendu: dernierCR ? {
-            date_consultation: dernierCR.date_consultation,
-            motif: dernierCR.motif,
-            diagnostic: dernierCR.diagnostic,
-            traitement: dernierCR.traitement,
-          } : null,
-        },
+        contexte_clinique: contexteClinique,
       });
+      // Best-effort : la proposition est déjà enregistrée, un échec d'email
+      // ne doit jamais faire perdre le transfert lui-même.
+      notifierTransfertPropose(transfert.id, form.destination_id, {
+        patientNom: patient.nom, patientPrenom: patient.prenom,
+        motif: form.motif.trim(), urgence: form.urgence, etabOrigineNom: etablissementOrigineNom,
+      }).catch(() => {});
+      onSaved();
+    } catch (e) { setErr(e.message); setSaving(false); }
+  };
+
+  const handleSaveExterne = async () => {
+    if (!form.destination_externe_nom.trim()) { setErr("Le nom de l'établissement destinataire est obligatoire."); return; }
+    if (!form.motif.trim()) { setErr("Le motif du transfert est obligatoire."); return; }
+    setSaving(true);
+    try {
+      const transfert = await insertTransfertPatient({
+        patient_id: patient.id,
+        patient_nom: patient.nom,
+        patient_prenom: patient.prenom,
+        patient_date_naissance: patient.date_naissance ?? null,
+        patient_genre: patient.genre ?? null,
+        etablissement_origine_id: etablissement_id,
+        etablissement_origine_nom: etablissementOrigineNom,
+        est_externe: true,
+        destination_externe_nom: form.destination_externe_nom.trim(),
+        destination_externe_contact: form.destination_externe_contact.trim() || null,
+        destination_externe_email: form.destination_externe_email.trim() || null,
+        medecin_demandeur: medecinNom ?? null,
+        motif: form.motif.trim(),
+        urgence: form.urgence,
+        notes_cliniques: form.notes_cliniques.trim() || null,
+        statut: "emis",
+        contexte_clinique: contexteClinique,
+      });
+
+      // Fiche imprimable systématique — c'est la seule trace tangible pour un
+      // destinataire qui n'a pas accès à MedOS.
+      imprimerFicheTransfertExterne({ transfert, etabOrigineNom: etablissementOrigineNom });
+
+      if (form.destination_externe_email.trim()) {
+        try {
+          await envoyerFicheTransfertExterne({ transfert, etabOrigineNom: etablissementOrigineNom });
+          await ajouterNotificationTransfert(transfert.id, { evenement: "fiche_externe", destinataire: form.destination_externe_email.trim(), statut: "envoye", erreur: null });
+        } catch (emailErr) {
+          await ajouterNotificationTransfert(transfert.id, { evenement: "fiche_externe", destinataire: form.destination_externe_email.trim(), statut: "echec", erreur: emailErr.message });
+          toastError(`Fiche enregistrée et imprimée, mais l'email n'a pas pu être envoyé : ${emailErr.message}`);
+        }
+      }
       onSaved();
     } catch (e) { setErr(e.message); setSaving(false); }
   };
@@ -713,6 +800,7 @@ function ModalTransfertPatient({ patient, comptes, etablissement_id, medecinNom,
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <Toast toasts={transfertToasts} />
       <div style={{ background: "white", borderRadius: 16, width: "100%", maxWidth: 560, maxHeight: "92vh", overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
         <div style={{ padding: "22px 26px 0", flexShrink: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
@@ -722,16 +810,45 @@ function ModalTransfertPatient({ patient, comptes, etablissement_id, medecinNom,
             </div>
             <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: colors.textMuted }}>×</button>
           </div>
+          <div style={{ display: "flex", gap: 4, marginBottom: 4, backgroundColor: "#F1F5F9", borderRadius: 8, padding: 4 }}>
+            {[{ key: "medos", label: "Hôpital MedOS" }, { key: "externe", label: "Établissement hors MedOS" }].map((t) => (
+              <button key={t.key} type="button" onClick={() => { setMode(t.key); setErr(null); }} style={{ flex: 1, padding: "7px", borderRadius: 6, border: "none", fontSize: 12, fontWeight: 600, cursor: "pointer", backgroundColor: mode === t.key ? "white" : "transparent", color: mode === t.key ? "#0A1628" : "#6B7280", boxShadow: mode === t.key ? "0 1px 3px rgba(0,0,0,0.08)" : "none" }}>
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div style={{ overflowY: "auto", padding: "0 26px 10px", flexGrow: 1, display: "flex", flexDirection: "column", gap: 14 }}>
-          <div>
-            <label style={labelSt}>Établissement destination <span style={{ color: "#EF4444" }}>*</span></label>
-            <select style={inputSt} value={form.destination_id} onChange={(e) => set("destination_id", e.target.value)}>
-              <option value="">{loadingHopitaux ? "Chargement…" : "— Sélectionner —"}</option>
-              {destinations.map((h) => <option key={h.id} value={h.id}>{h.nom} {h.ville ? `(${h.ville})` : ""}</option>)}
-            </select>
-          </div>
+        <div style={{ overflowY: "auto", padding: "14px 26px 10px", flexGrow: 1, display: "flex", flexDirection: "column", gap: 14 }}>
+          {mode === "medos" ? (
+            <div>
+              <label style={labelSt}>Établissement destination <span style={{ color: "#EF4444" }}>*</span></label>
+              <select style={inputSt} value={form.destination_id} onChange={(e) => set("destination_id", e.target.value)}>
+                <option value="">{loadingHopitaux ? "Chargement…" : "— Sélectionner —"}</option>
+                {destinations.map((h) => <option key={h.id} value={h.id}>{h.nom} {h.ville ? `(${h.ville})` : ""}</option>)}
+              </select>
+            </div>
+          ) : (
+            <>
+              <div style={{ padding: "8px 12px", backgroundColor: "#FFFBEB", color: "#92400E", borderRadius: 8, fontSize: 12, fontWeight: 600 }}>
+                Pas de cycle proposé/accepté pour un établissement externe — une fiche de transfert est générée et, si un email est renseigné, envoyée immédiatement.
+              </div>
+              <div>
+                <label style={labelSt}>Nom de l'établissement <span style={{ color: "#EF4444" }}>*</span></label>
+                <input style={inputSt} value={form.destination_externe_nom} onChange={(e) => set("destination_externe_nom", e.target.value)} placeholder="Ex : Clinique Sainte-Marie" />
+              </div>
+              <div className="form-row-2">
+                <div>
+                  <label style={labelSt}>Contact</label>
+                  <input style={inputSt} value={form.destination_externe_contact} onChange={(e) => set("destination_externe_contact", e.target.value)} placeholder="Ex : Dr. Nom Prénom" />
+                </div>
+                <div>
+                  <label style={labelSt}>Email</label>
+                  <input style={inputSt} type="email" value={form.destination_externe_email} onChange={(e) => set("destination_externe_email", e.target.value)} placeholder="contact@etablissement.com" />
+                </div>
+              </div>
+            </>
+          )}
           <div>
             <label style={labelSt}>Urgence du transfert</label>
             <select style={inputSt} value={form.urgence} onChange={(e) => set("urgence", e.target.value)}>
@@ -748,13 +865,15 @@ function ModalTransfertPatient({ patient, comptes, etablissement_id, medecinNom,
             <textarea style={textareaSt} value={form.notes_cliniques} onChange={(e) => set("notes_cliniques", e.target.value)} placeholder="Éléments cliniques utiles à la prise en charge par l'équipe destinataire…" />
           </div>
 
-          <div style={{ padding: "12px 14px", backgroundColor: "#F8FAFC", borderRadius: 10, border: "1px solid var(--border-light)" }}>
+          <div style={{ padding: "12px 14px", backgroundColor: (patient.allergies ?? []).length > 0 ? "#FEF2F2" : "#F8FAFC", borderRadius: 10, border: (patient.allergies ?? []).length > 0 ? "2px solid #DC2626" : "1px solid var(--border-light)" }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: colors.textSecondary, textTransform: "uppercase", marginBottom: 8 }}>
               Contexte clinique transmis à la destination
             </div>
             <div style={{ fontSize: 12, color: colors.text, lineHeight: 1.7 }}>
+              <div style={{ fontWeight: (patient.allergies ?? []).length > 0 ? 800 : 400, color: (patient.allergies ?? []).length > 0 ? "#DC2626" : colors.text }}>
+                <span style={{ fontWeight: 700 }}>Allergies : </span>{(patient.allergies ?? []).join(", ") || "aucune connue"}
+              </div>
               <div><span style={{ fontWeight: 600 }}>Antécédents : </span>{(patient.antecedents ?? []).join(", ") || "aucun connu"}</div>
-              <div><span style={{ fontWeight: 600 }}>Allergies : </span>{(patient.allergies ?? []).join(", ") || "aucune connue"}</div>
               <div><span style={{ fontWeight: 600 }}>Groupe sanguin : </span>{patient.groupe_sanguin || "non renseigné"}</div>
               <div><span style={{ fontWeight: 600 }}>Dernier compte rendu : </span>{dernierCR ? `${fmtDate(dernierCR.date_consultation)} — ${dernierCR.diagnostic ?? dernierCR.motif}` : "aucun"}</div>
             </div>
@@ -765,8 +884,8 @@ function ModalTransfertPatient({ patient, comptes, etablissement_id, medecinNom,
 
         <div style={{ display: "flex", gap: 10, padding: "16px 26px", borderTop: "1px solid var(--border-light)", flexShrink: 0 }}>
           <button onClick={onClose} style={{ flex: 1, padding: 11, background: "#F8FAFC", color: colors.text, border: "1px solid var(--border)", borderRadius: 10, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>Annuler</button>
-          <button onClick={handleSave} disabled={saving} style={{ flex: 2, padding: 11, background: saving ? "#E5E7EB" : ACCENT, color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-            {saving ? <><Spin />Envoi…</> : "Proposer le transfert"}
+          <button onClick={mode === "medos" ? handleSaveMedos : handleSaveExterne} disabled={saving} style={{ flex: 2, padding: 11, background: saving ? "#E5E7EB" : ACCENT, color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+            {saving ? <><Spin />Envoi…</> : mode === "medos" ? "Proposer le transfert" : "Générer la fiche et transférer"}
           </button>
         </div>
       </div>

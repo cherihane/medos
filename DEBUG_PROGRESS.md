@@ -4991,3 +4991,100 @@ utilisé avant** :
   permissions accordées (Fournisseurs pour r2pharmacien, Planning pour r2medecin/r2infirmiere,
   Stérilisation pour r2infirmiere) sont **volontairement conservées** : elles reflètent l'état cible
   réel de cette mission, pas des données de test.
+
+## Transfert externe (hors MedOS) + notifications email manquantes sur le cycle MedOS-à-MedOS
+
+Mission à 3 volets (transfert externe, banque de sang, rôles de secours/accès élargi) — le module
+touche à des vies humaines réelles, donc rigueur de test maximale sur chaque partie, y compris les
+cas d'échec. Ce point documente la Partie 1.
+
+### Modèle de données
+
+`transferts_patients` (déjà existant, voir session précédente) étendu :
+- `etablissement_destination_id` devient nullable (un transfert externe n'a pas d'établissement
+  MedOS à référencer).
+- `est_externe BOOLEAN`, `destination_externe_nom/contact/email TEXT`.
+- Contrainte CHECK garantissant qu'un transfert est **soit** MedOS (destination_id rempli, champs
+  externes vides) **soit** externe (l'inverse) — jamais les deux, jamais aucun.
+- `notifications_envoyees JSONB` : journal d'audit append-only de chaque email envoyé sur ce
+  transfert (`propose`/`accepte`/`refuse`/`fiche_externe`, destinataire, statut envoyé/échec,
+  erreur) — jamais de faux succès silencieux.
+- Nouveau statut `emis` (transfert externe — pas de cycle proposé/accepté, juste une trace
+  d'émission avec la fiche générée).
+
+### Transfert externe
+
+Dans `ModalTransfertPatient` (Patients.jsx), un sélecteur "Hôpital MedOS" / "Établissement hors
+MedOS" (même pattern que le mode distributeur/externe des fournisseurs pharmacie) :
+- **Hôpital MedOS** : flux existant inchangé (cycle proposé→accepté, voir session précédente).
+- **Hors MedOS** : nom (obligatoire), contact et email (texte libre, comme les fournisseurs
+  externes en pharmacie). Pas de cycle proposé/accepté — le transfert est créé avec `statut: "emis"`
+  directement. Une fiche de transfert est **systématiquement imprimée** (fenêtre navigateur,
+  `imprimerFicheTransfertExterne`) et, si un email est renseigné, **envoyée réellement** avec la
+  fiche en PDF joint (nouvelle Edge Function `generate-fiche-transfert-pdf`, pdf-lib, même pattern
+  que `generate-bon-commande-pdf`).
+
+**Exigence non négociable — allergies en évidence** : sur les deux formats (impression HTML et PDF
+email), les allergies sont affichées dans un encart rouge encadré, en gras, **avant même** les
+antécédents ou le motif du transfert — jamais noyées dans le texte. Codé indépendamment sur les deux
+générateurs (le HTML client via `imprimerFicheTransfertExterne`, le PDF serveur via
+`generate-fiche-transfert-pdf`, dessiné en premier avec `drawRectangle`+bordure rouge avant tout
+autre contenu).
+
+### Notifications email manquantes sur le cycle MedOS-à-MedOS
+
+Ajoutées (best-effort — un échec d'email ne fait jamais perdre l'action déjà enregistrée en base,
+mais est toujours tracé) :
+- **Proposé** → email à l'établissement destinataire (`notifierTransfertPropose`, Patients.jsx),
+  déclenché juste après l'insertion réussie du transfert.
+- **Accepté/Refusé** → email à l'établissement d'origine (`notifierReponseTransfert`,
+  Transferts.jsx), déclenché dans `handleAction`.
+
+### Bug trouvé et corrigé en testant réellement (pas seulement en lecture de code)
+
+`insertTransfertPatient` (`useMutations.js`) écrasait **systématiquement** `statut: "propose"` après
+avoir étalé les champs reçus (`{ ...fields, statut: "propose" }`) — un premier test réel du
+transfert externe a bien créé la ligne avec `est_externe: true` et tous les bons champs, mais
+`statut` valait "propose" au lieu de "emis" (vérifié en base, pas supposé). Corrigé en inversant
+l'ordre (`{ statut: "propose", ...fields }`) : "propose" reste la valeur par défaut pour le flux
+MedOS existant, mais un appelant peut désormais fournir un statut explicite sans qu'il soit
+silencieusement écrasé.
+
+### Preuve réelle
+
+Build de production locale, compte réel Direction `cherihaneadam123+hopitalaudit2@gmail.com`
+(Hopital Audit Test 2), patiente réelle Fatou Kone avec allergies renseignées pour ce test
+(Pénicilline, Aspirine) — revert à `[]` après coup.
+
+1. **Allergies en évidence confirmées à 3 endroits** : (a) dans le formulaire de transfert
+   lui-même, l'encart contexte clinique passe en fond rouge/bordure rouge/texte gras dès qu'il y a
+   des allergies ; (b) dans l'email réellement reçu (recherche Gmail directe) — encart rouge
+   "ALLERGIES / Penicilline, Aspirine" en tout premier, avant motif/urgence ; (c) pièce jointe PDF
+   réelle présente (`fiche-transfert-DDEB7A8C.pdf`) générée par la même Edge Function qui dessine ce
+   même encart en premier.
+2. **Transfert externe avec email** : "Clinique Sainte-Marie Externe Test" / Dr. Jean Externe /
+   email réel → email reçu **et vérifié dans la vraie boîte Gmail**
+   (`cherihaneadam123@gmail.com`, sujet "Transfert de patient — Fatou Kone", allergies visibles,
+   PDF joint) — `notifications_envoyees` tracé `{evenement: fiche_externe, statut: envoye}`.
+3. **Transfert externe sans email** (après correctif du bug de statut) : "Clinique Externe Test 2",
+   aucun email renseigné → transfert créé avec `statut = "emis"` (confirmé en base),
+   `notifications_envoyees = null` (aucune tentative d'envoi, comportement correct puisqu'aucun
+   email n'était fourni) — la fiche reste imprimable via "Réimprimer la fiche" dans Transferts.jsx.
+   Affichage confirmé : badge "Émis (hors MedOS)", aucun bouton Accepter/Refuser/Annuler (transfert
+   externe = pas de cycle).
+4. **Transfert MedOS-à-MedOS — notifications email** : proposé vers Hopital Audit Test Destination
+   → email "MedOS — Transfert proposé : Fatou Kone" reçu par la destination (vérifié Gmail) ;
+   accepté côté destination → email "MedOS — Transfert accepté : Fatou Kone" reçu par l'origine
+   (vérifié Gmail) ; admission testée à la suite → dossier créé en continuité côté destination,
+   confirmant que l'ajout des notifications n'a rien cassé du cycle existant.
+5. **Aucun chemin ne casse l'autre** : les deux chemins (MedOS et externe) ont été exercés dans la
+   même session sans interférence — la contrainte CHECK garantit qu'aucune ligne ne peut être
+   ambiguë entre les deux modes.
+
+### Nettoyage — fait, confirmé
+
+- 3 transferts de test (1 MedOS-à-MedOS complet + patient créé côté destination par l'admission, 2
+  externes) supprimés.
+- Allergies/antécédents/groupe sanguin temporaires sur Fatou Kone revertis à leur état d'origine
+  (`[]`/`[]`/`null`).
+- `COUNT(*)` sur les transferts de test → **0**.

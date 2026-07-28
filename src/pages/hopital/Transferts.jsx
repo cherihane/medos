@@ -10,7 +10,40 @@ import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../supabaseClient";
-import { fetchTransfertsPatients, updateStatutTransfertPatient, admettrePatientTransfert } from "../../hooks/useMutations";
+import { fetchTransfertsPatients, updateStatutTransfertPatient, admettrePatientTransfert, ajouterNotificationTransfert } from "../../hooks/useMutations";
+import { imprimerFicheTransfertExterne } from "../../utils/ficheTransfertExterne";
+
+// Email à l'établissement d'ORIGINE quand la destination accepte/refuse — le
+// temps réel couvre déjà l'écran ouvert, l'email couvre le cas où personne
+// ne regarde l'écran au moment de la décision. Best-effort, jamais bloquant,
+// toujours tracé (ajouterNotificationTransfert) pour audit.
+async function notifierReponseTransfert(t, accepte) {
+  try {
+    const { data: origineEtab } = await supabase.from("etablissements").select("email").eq("id", t.etablissement_origine_id).maybeSingle();
+    if (!origineEtab?.email) {
+      await ajouterNotificationTransfert(t.id, { evenement: accepte ? "accepte" : "refuse", destinataire: null, statut: "echec", erreur: "Établissement origine sans email." });
+      return;
+    }
+    const html = `
+<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+  <div style="background:${accepte ? "#16A34A" : "#DC2626"};padding:24px 32px;border-radius:8px 8px 0 0"><h1 style="color:white;font-size:18px;margin:0">Transfert ${accepte ? "accepté" : "refusé"}</h1></div>
+  <div style="padding:24px 32px;border:1px solid #e5e7eb;border-top:none">
+    <p style="font-size:14px;color:#374151"><strong>${t.etablissement_destination_nom ?? "L'établissement destinataire"}</strong> a ${accepte ? "accepté" : "refusé"} le transfert de <strong>${t.patient_prenom} ${t.patient_nom}</strong>.</p>
+    <p style="font-size:13px;color:#374151">Connectez-vous à MedOS (Transferts patients) pour la suite.</p>
+  </div>
+  <div style="background:#F8FAFC;padding:16px 32px;border-top:1px solid #e5e7eb;text-align:center"><p style="font-size:12px;color:#9CA3AF;margin:0">MedOS</p></div>
+</div>`;
+    const { error } = await supabase.functions.invoke("send-app-email", {
+      body: { to: origineEtab.email, subject: `MedOS — Transfert ${accepte ? "accepté" : "refusé"} : ${t.patient_prenom} ${t.patient_nom}`, html },
+    });
+    await ajouterNotificationTransfert(t.id, {
+      evenement: accepte ? "accepte" : "refuse", destinataire: origineEtab.email,
+      statut: error ? "echec" : "envoye", erreur: error ? error.message : null,
+    });
+  } catch (e) {
+    await ajouterNotificationTransfert(t.id, { evenement: accepte ? "accepte" : "refuse", destinataire: null, statut: "echec", erreur: e.message }).catch(() => {});
+  }
+}
 
 function fmtDate(iso) {
   if (!iso) return "—";
@@ -32,6 +65,7 @@ const STATUT_LABEL = {
   en_cours: { label: "En cours", color: "#7C3AED", bg: "#F5F3FF" },
   termine:  { label: "Terminé",  color: "#16A34A", bg: "#DCFCE7" },
   annule:   { label: "Annulé",   color: "#6B7280", bg: "#F3F4F6" },
+  emis:     { label: "Émis (hors MedOS)", color: "#0369A1", bg: "#F0F9FF" },
 };
 
 function StatutBadge({ statut }) {
@@ -71,18 +105,25 @@ function TransfertCard({ t, sens, onAction, busy }) {
   const [showCtx, setShowCtx] = useState(false);
   const ageAns = age(t.patient_date_naissance);
   return (
-    <div style={{ background: "white", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px", marginBottom: 10 }}>
+    <div style={{ background: "white", border: t.est_externe ? "1px solid #BAE6FD" : "1px solid var(--border)", borderRadius: 12, padding: "14px 16px", marginBottom: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}>
         <div>
           <div style={{ fontSize: 14, fontWeight: 700, color: colors.navy }}>
             {t.patient_prenom} {t.patient_nom} {ageAns != null ? `· ${ageAns} ans` : ""} {t.patient_genre ? `· ${t.patient_genre}` : ""}
           </div>
           <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 3 }}>
-            {sens === "entrant"
-              ? <>Depuis <strong>{t.etablissement_origine_nom ?? "établissement inconnu"}</strong></>
-              : <>Vers <strong>{t.etablissement_destination_nom ?? "établissement inconnu"}</strong></>}
+            {t.est_externe
+              ? <>Vers <strong>{t.destination_externe_nom}</strong> <span style={{ color: "#0369A1", fontWeight: 600 }}>(hors MedOS)</span></>
+              : sens === "entrant"
+                ? <>Depuis <strong>{t.etablissement_origine_nom ?? "établissement inconnu"}</strong></>
+                : <>Vers <strong>{t.etablissement_destination_nom ?? "établissement inconnu"}</strong></>}
             {t.medecin_demandeur ? ` · Dr. ${t.medecin_demandeur}` : ""}
           </div>
+          {t.est_externe && (t.destination_externe_contact || t.destination_externe_email) && (
+            <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>
+              {t.destination_externe_contact ?? ""}{t.destination_externe_contact && t.destination_externe_email ? " · " : ""}{t.destination_externe_email ?? ""}
+            </div>
+          )}
           <div style={{ fontSize: 12, color: colors.text, marginTop: 6 }}>{t.motif}</div>
           {t.notes_cliniques && <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 3, fontStyle: "italic" }}>{t.notes_cliniques}</div>}
           <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 6 }}>Demandé le {fmtDateTime(t.date_demande)}</div>
@@ -101,22 +142,27 @@ function TransfertCard({ t, sens, onAction, busy }) {
       {showCtx && <ContexteClinique ctx={t.contexte_clinique} />}
 
       <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-        {sens === "entrant" && t.statut === "propose" && (
+        {t.est_externe && (
+          <button onClick={() => imprimerFicheTransfertExterne({ transfert: t, etabOrigineNom: t.etablissement_origine_nom })} style={{ padding: "7px 14px", background: "#EFF6FF", color: "#2563EB", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+            Réimprimer la fiche
+          </button>
+        )}
+        {!t.est_externe && sens === "entrant" && t.statut === "propose" && (
           <>
             <button disabled={busy} onClick={() => onAction(t, "accepter")} style={{ padding: "7px 14px", background: "#16A34A", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: busy ? "wait" : "pointer" }}>Accepter</button>
             <button disabled={busy} onClick={() => onAction(t, "refuser")} style={{ padding: "7px 14px", background: "#FEF2F2", color: "#DC2626", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: busy ? "wait" : "pointer" }}>Refuser</button>
           </>
         )}
-        {sens === "entrant" && t.statut === "accepte" && (
+        {!t.est_externe && sens === "entrant" && t.statut === "accepte" && (
           <button disabled={busy} onClick={() => onAction(t, "admettre")} style={{ padding: "7px 14px", background: "#7C3AED", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: busy ? "wait" : "pointer" }}>Admettre le patient</button>
         )}
-        {sens === "entrant" && t.statut === "en_cours" && (
+        {!t.est_externe && sens === "entrant" && t.statut === "en_cours" && (
           <button disabled={busy} onClick={() => onAction(t, "cloturer")} style={{ padding: "7px 14px", background: "#0A1628", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: busy ? "wait" : "pointer" }}>Clôturer le transfert</button>
         )}
-        {sens === "sortant" && t.statut === "propose" && (
+        {!t.est_externe && sens === "sortant" && t.statut === "propose" && (
           <button disabled={busy} onClick={() => onAction(t, "annuler")} style={{ padding: "7px 14px", background: "#F8FAFC", color: colors.text, border: "1px solid var(--border)", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: busy ? "wait" : "pointer" }}>Annuler</button>
         )}
-        {t.statut === "en_cours" && t.patient_id_destination && sens === "entrant" && (
+        {!t.est_externe && t.statut === "en_cours" && t.patient_id_destination && sens === "entrant" && (
           <div style={{ fontSize: 11, color: colors.textMuted, alignSelf: "center" }}>Dossier créé côté destination — n° {t.patient_id_destination.slice(0, 8)}</div>
         )}
       </div>
@@ -155,8 +201,16 @@ export default function Transferts() {
   const handleAction = async (t, action) => {
     setBusyId(t.id);
     try {
-      if (action === "accepter") { await updateStatutTransfertPatient(t.id, "accepte"); success("Transfert accepté."); }
-      else if (action === "refuser") { await updateStatutTransfertPatient(t.id, "refuse"); success("Transfert refusé."); }
+      if (action === "accepter") {
+        await updateStatutTransfertPatient(t.id, "accepte");
+        notifierReponseTransfert(t, true).catch(() => {}); // best-effort, ne bloque jamais la décision déjà enregistrée
+        success("Transfert accepté.");
+      }
+      else if (action === "refuser") {
+        await updateStatutTransfertPatient(t.id, "refuse");
+        notifierReponseTransfert(t, false).catch(() => {});
+        success("Transfert refusé.");
+      }
       else if (action === "annuler") { await updateStatutTransfertPatient(t.id, "annule"); success("Transfert annulé."); }
       else if (action === "cloturer") { await updateStatutTransfertPatient(t.id, "termine"); success("Transfert clôturé."); }
       else if (action === "admettre") {
