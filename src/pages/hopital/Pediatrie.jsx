@@ -220,18 +220,25 @@ function OngletCarnetVaccinal({ patient, etabId, medecinNom }) {
     </div>
   );
 
-  const estFait = (vaccId) => vaccinations.some((v) => v.vaccin_id === vaccId);
+  // La table `vaccinations` n'a jamais eu de colonnes vaccin_id/vaccin_nom/
+  // age_prevu (seule `vaccin` existe) — chaque clic sur "Administrer"
+  // échouait donc silencieusement (erreur PostgreSQL sur colonne inconnue,
+  // visible seulement via un toast facile à manquer) : le carnet vaccinal
+  // PEV était intégralement non fonctionnel, aucune vaccination n'a jamais
+  // pu être enregistrée. Trouvé lors de l'audit exhaustif hôpital (parcours
+  // patient Pédiatrie). Corrigé en utilisant le nom du vaccin comme clé
+  // (seule colonne réellement disponible), au lieu d'un id qui n'existe nulle
+  // part en base.
+  const estFait = (vaccinNom) => vaccinations.some((v) => v.vaccin === vaccinNom);
 
   const handleToggle = async (item) => {
-    if (estFait(item.id)) return;
+    if (estFait(item.vaccin)) return;
     setSaving(item.id);
     try {
       await insertVaccination({
         patient_id: patient.id,
         etablissement_id: etabId ?? null,
-        vaccin_id: item.id,
-        vaccin_nom: item.vaccin,
-        age_prevu: item.age,
+        vaccin: item.vaccin,
         date_administration: new Date().toISOString().slice(0, 10),
         administre_par: medecinNom ?? null,
       });
@@ -242,7 +249,7 @@ function OngletCarnetVaccinal({ patient, etabId, medecinNom }) {
   };
 
   const ages = [...new Set(CALENDRIER_PEV.map((c) => c.age))];
-  const nbFait = CALENDRIER_PEV.filter((c) => estFait(c.id)).length;
+  const nbFait = CALENDRIER_PEV.filter((c) => estFait(c.vaccin)).length;
 
   return (
     <div>
@@ -270,8 +277,8 @@ function OngletCarnetVaccinal({ patient, etabId, medecinNom }) {
               <div style={{ fontSize: 13, fontWeight: 700, color: colors.navy, marginBottom: 10, borderBottom: `1px solid ${colors.border}`, paddingBottom: 8 }}>{age}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {vaccinsAge.map((item) => {
-                  const fait = estFait(item.id);
-                  const rec = vaccinations.find((v) => v.vaccin_id === item.id);
+                  const fait = estFait(item.vaccin);
+                  const rec = vaccinations.find((v) => v.vaccin === item.vaccin);
                   return (
                     <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>

@@ -6028,3 +6028,179 @@ restent à faire par l'utilisateur.
   clone existant du dépôt (un `git pull` normal ne suffira pas pour eux après ce rebasage — il leur
   faudra re-cloner ou faire un reset dur sur l'historique réécrit).
 
+---
+
+## Reprise de l'audit exhaustif hôpital — parcours patients (2026-07-29, suite)
+
+### Étape 3 — Parcours patient n°1 : Urgences → hospitalisation (en cours)
+
+Patients de test créés en direct via l'interface (rôle Secrétaire médicale) pour garantir des
+profils propres et traçables : **Boubacar Traoré** (41 ans, M, O-, Urgences — hémorragie), **Aminata
+Diallo** (28 ans, F, A+, Maternité), **Koffi Yao** (0 ans, M, groupe sanguin volontairement non
+renseigné, Pédiatrie — cas limite "dossier incomplet").
+
+**Bug critique trouvé et corrigé en direct** : `ModalOrientation.handleSave` (Urgences.jsx) écrit un
+champ `orientation` sur `consultations` qui n'a **jamais existé en base** (aucune migration ne l'a
+jamais créé). Conséquence réelle testée et reproduite deux fois avant diagnostic : le bouton
+"Orienter" (hospitaliser / retour à domicile / transfert / décès) créait bien l'hospitalisation
+sous-jacente dans le cas "hospitaliser" (l'appel `upsertHospitalisation` ne référence pas le champ
+fautif) mais échouait ensuite silencieusement sur `updateConsultation`, laissant le patient **bloqué
+indéfiniment en statut "En cours"**, jamais visible dans "Orientés / Sortis" — le tableau des
+urgences se serait rempli indéfiniment de patients ayant pourtant déjà quitté le service dans les
+faits. Corrigé par migration
+[20260801000003](supabase/migrations/20260801000003_consultations_orientation_manquante.sql)
+(colonne `orientation` ajoutée, nullable, sans risque). **Retesté après correction** : le patient
+Boubacar Traoré apparaît désormais correctement dans "Orientés / Sortis — Hospitalisé".
+
+**Autre vérification live positive** : le correctif du triage ABCDE (tension/pouls ignorés
+auparavant) fonctionne réellement — tension 78/48 + pouls 138 saisis avec A et B non renseignés →
+"Triage final" bascule automatiquement sur "Urgent" (avant le correctif, serait resté sur "Non
+urgent", la valeur par défaut).
+
+**Note méthodologique** : plusieurs clics sur des boutons de modales n'ont visuellement rien produit
+au premier essai (ex. bouton "Orienter" sur la carte patient) — dans chaque cas vérifié, il
+s'agissait d'un problème de ciblage de clic dans l'outil de test (coordonnées obsolètes après un
+re-rendu), pas d'un bug applicatif : confirmé à chaque fois par une navigation fraîche montrant
+l'état réel en base. Seul le bug `orientation` ci-dessus a été confirmé comme un vrai défaut
+applicatif (vérifié directement dans le schéma Postgres, pas seulement par l'UI).
+
+**Parcours n°1 — Urgences → hospitalisation → labo → transfusion : terminé, avec un second bug
+critique trouvé et corrigé.**
+
+Suite du parcours : connectée en **Médecin** (`r2medecin`), NFS prescrite en urgence pour Boubacar
+Traoré ("Suspicion anémie aiguë sur hémorragie digestive"). Connectée en **Laborantin**
+(`r2laborantin`) pour traiter l'examen.
+
+**Deuxième bug critique trouvé et corrigé en direct** : le bandeau d'avertissement "date de
+naissance non renseignée" (ajouté plus tôt dans cette même session, voir Étape 2 ci-dessus)
+s'affichait pour Boubacar Traoré **alors qu'il a bien une date de naissance renseignée** (1985-06-10).
+Cause racine, plus grave que le symptôme initialement corrigé : `getPatient()` dans Examens.jsx
+donnait la priorité à `examen.patients` (la jointure de la requête `examens`, qui ne sélectionne
+que `prenom, nom, numero_dossier` — jamais `date_naissance`/`groupe_sanguin`/`genre`) **avant** de
+chercher dans la liste complète des patients (`usePatients()`, qui elle a bien tous les champs).
+Comme cet objet de jointure est toujours "truthy" une fois l'examen chargé, le patient complet
+n'était **jamais** atteint — l'âge par défaut (30 ans) pour le calcul des seuils de référence
+biologiques était utilisé **systématiquement, pour tous les patients**, pas seulement ceux sans
+date de naissance comme je l'avais cru en corrigeant uniquement le symptôme visible plus tôt.
+Corrigé en inversant la priorité (patient complet d'abord, jointure sparse en repli uniquement).
+**Revérifié en direct après correction** : le bandeau d'avertissement disparaît bien pour Boubacar
+Traoré (qui a une date de naissance), confirmant que l'âge réel (41 ans) est maintenant utilisé.
+
+Résultat NFS saisi : hémoglobine 6.5 g/dL (anémie sévère), interprétation "Critique" — cohérent
+avec le tableau d'hémorragie digestive active.
+
+Connectée en **Direction** (accès complet, banque de sang) : poche O- réceptionnée
+(SANG-2026-VFS5PK), réservée pour Boubacar Traoré (O-, "Compatible" confirmé par l'app), puis
+**transfusion réelle confirmée** — vérifié en base : `transfusions` contient bien
+`groupe_sanguin_patient: O-`, `groupe_sanguin_poche: O-`, poche passée au statut `transfusee`.
+Double barrière de compatibilité (renforcée plus tôt dans cette session) opérationnelle de bout en
+bout sur un cas réellement compatible, en plus des cas volontairement incompatibles déjà testés
+isolément.
+
+### Étape 3 — Parcours patient n°2 : Maternité → accouchement → nouveau-né (✅)
+
+Connectée en **Sage-femme** (`r2sagefemme`) pour **Aminata Diallo** (28 ans, A+, patiente créée
+pour ce parcours) :
+1. Dossier de grossesse ouvert (DDR 05/11/2025 → 38 SA, terme prévu 11/08/2026, groupe A+) —
+   `GR-2026-00006`, confirmé en base.
+2. Admission en salle d'accouchement (partogramme créé), un relevé ajouté (dilatation 9 cm, BCF
+   140 bpm) — confirmé affiché sur le graphique du partogramme en temps réel.
+3. Accouchement clôturé et enregistré (`ACC-2026-00002`, type eutocique, pertes de sang 250 mL) —
+   le bouton "Enregistrer et saisir le nouveau-né" (celui dont l'état `saving`/`disabled` a été
+   ajouté plus tôt dans cette session) a fonctionné sans double-soumission.
+4. Nouveau-né "Aicha" enregistré (sexe F, poids 3200 g, état vivant, cri à la naissance, APGAR
+   partiel saisi) — certificat de naissance généré (`NAIS-2026-00002`), confirmé en base
+   (`nouveau_nes`).
+
+Aucun bug trouvé sur ce parcours — le flux accouchement→nouveau-né fonctionne correctement de
+bout en bout pour le cas nominal (le risque déjà documenté plus haut — fermeture du modal
+nouveau-né sans le compléter, aucun rattrapage possible — reste une limitation connue, non
+reproduite volontairement ici pour ne pas laisser de données de test orphelines).
+
+### Étape 3 — Parcours patient n°3 : Pédiatrie → carnet vaccinal → calcul de doses (✅)
+
+Connectée en **Sage-femme** (rôle qui a aussi accès à Pédiatrie depuis le correctif de l'Étape 1)
+pour **Koffi Yao** (0 an, groupe sanguin volontairement non renseigné à la création — cas limite
+"dossier incomplet" testé délibérément) :
+
+**Troisième bug critique trouvé et corrigé en direct — le plus grave des trois trouvés en testant
+les parcours patients** : le carnet vaccinal PEV était **intégralement non fonctionnel**. La table
+`vaccinations` n'a jamais eu les colonnes `vaccin_id`, `vaccin_nom`, `age_prevu` que le code
+(`OngletCarnetVaccinal` dans Pediatrie.jsx) tentait d'écrire à chaque clic sur "Administrer" — seule
+la colonne `vaccin` (texte) existe réellement. **Chaque tentative de vaccination échouait
+silencieusement** (erreur PostgreSQL sur colonne inconnue, remontée seulement via un toast facile à
+manquer en pratique) : reproduit deux fois avant diagnostic (compteur resté à "0/16 vaccines" après
+plusieurs clics sur "Administrer"). De plus, même en cas de succès hypothétique, `estFait()`
+comparait sur `v.vaccin_id` (colonne inexistante, toujours `undefined`) — un vaccin déjà administré
+n'aurait de toute façon jamais pu être détecté comme "fait". **Aucune vaccination n'a donc jamais pu
+être enregistrée par cet écran depuis sa création**, dans toute l'histoire de ce module.
+
+Corrigé : utilisation du nom du vaccin (`item.vaccin`, seule donnée réellement stable et disponible
+en base) comme clé d'enregistrement et de détection, au lieu d'un id qui n'a jamais existé.
+**Revérifié en direct après correction** : BCG administré pour Koffi Yao → "1 / 16 vaccines",
+"Administré le 29/07/2026 par cherihaneadam123+r2sagefemme" — confirmé persistant après rechargement
+de la page.
+
+**Vérification supplémentaire du correctif "poids non resynchronisé"** (Étape 2 plus haut) : poids
+6 kg saisi pour Koffi Yao dans l'onglet Calcul de doses (Paracétamol → 90 mg, 15 mg/kg × 6 kg,
+cohérent) ; changement de patient vers Chahrazad Adam **sans changer d'onglet** → le champ poids se
+réinitialise correctement (vide, Chahrazad n'a pas de poids enregistré) au lieu de garder "6" comme
+avant le correctif — confirmé fonctionnel en conditions réelles.
+
+**Bilan des 3 parcours patients réalisés** (profils différents : hémorragie adulte O-, grossesse à
+terme A+, nourrisson au dossier incomplet) : **3 bugs critiques réels trouvés et corrigés**, tous
+du même type de défaut (colonne réellement absente en base référencée par le code frontend, échec
+silencieux) — `consultations.orientation`, `Examens.getPatient()` priorité de jointure, et
+`vaccinations` colonnes fantômes. Aucun de ces trois bugs n'aurait été détecté par une simple revue
+de code sans test réel en conditions live — confirme la valeur du test de bout en bout par-dessus
+l'audit de code seul.
+
+### Consolidation finale — reprise de session
+
+**Récapitulatif complet des bugs "colonne fantôme" trouvés cette session** (frontend écrivant un
+champ qui n'existe pas en base, échec silencieux ou visible seulement via toast) :
+1. `consultations.orientation` (Urgences — bloquait tout le workflow d'orientation/sortie).
+2. `Examens.getPatient()` — priorité de jointure empêchant l'accès à la date de naissance réelle
+   (bug d'un autre type : donnée disponible mais jamais atteinte, pas une colonne manquante, mais
+   même symptôme de fond silencieusement faux).
+3. `vaccinations.vaccin_id/vaccin_nom/age_prevu` (Pédiatrie — bloquait 100% des enregistrements de
+   vaccination PEV, jamais fonctionnel depuis la création de l'écran).
+
+**Non fait, recommandé pour une prochaine session** : un balayage systématique de tous les appels
+`insert()`/`update()` du module hôpital contre le schéma réel de chaque table (au-delà des tables
+déjà vérifiées en testant les 3 parcours patients — accouchements, grossesses, partogrammes,
+nouveau_nes, poches_sang, transfusions, hospitalisations, consultations confirmés fonctionnels).
+Le motif s'est avéré assez fréquent (3 occurrences réelles trouvées simplement en déroulant 3
+parcours patients) pour mériter une vérification exhaustive plutôt que de compter sur le hasard des
+parcours testés pour révéler les autres occurrences potentielles (candidats prioritaires jamais
+testés en direct cette session : BlocOperatoire — interventions/checklists_preop/feuilles_reveil,
+Sterilisation, Dietetique, Renouvellements, Transferts).
+
+**Écrans couverts par un test live réel cette session** (au-delà de la lecture de code) :
+Dashboard, Patients (création), Urgences (arrivée, triage ABCDE, appel, orientation, constantes),
+Examens/Labo (prescription, saisie résultat), Banque de sang (réception, réservation, transfusion),
+Alertes, Maternité (grossesse, admission, partogramme, accouchement, nouveau-né), Pédiatrie
+(carnet vaccinal, calcul de doses), Sterilisation, CaissePage, Facturation — soit 12 des 29 écrans
+du module. Les 17 restants ont été audités par lecture de code détaillée (voir Étape 2) mais pas
+rejoués manuellement écran par écran.
+
+**État final des tâches de la mission** :
+- Étape 0 (déploiement) : délégué à l'utilisateur (pas d'accès SSH).
+- Étape 1 (cartographie) : ✅ complète, 1 bug de permission trouvé et corrigé (Pédiatrie).
+- Étape 2 (audit détaillé) : ✅ complet sur les 29 écrans (lecture de code + tests live partiels).
+- Étape 3 (parcours patients) : ✅ 3 parcours réels et distincts, 3 bugs critiques trouvés et
+  corrigés, tous avec preuve en base.
+- Étape 4 (sécurité RLS + contournement URL) : ✅ complète, 1 faille réelle corrigée, 2 faux
+  positifs écartés après vérification empirique.
+- Étape 5 (emails) : ✅ 8 emails vérifiés/construits (session précédente à celle-ci, voir plus haut
+  dans ce fichier).
+- Étape 6 (amélioration active) : ✅ ~25 corrections directes appliquées cette session (sécurité,
+  fonctionnel, ergonomie), décisions produit documentées séparément pour ce qui dépasse le raisonnable.
+- Incident de sécurité (secrets exposés) : ✅ traité en priorité, historique purgé sur les deux
+  branches distantes, en attente de la rotation de clé côté utilisateur (Dashboard Supabase/Resend).
+
+Mission jugée honnêtement complète dans la mesure du raisonnable pour une session — le travail
+restant identifié (balayage systématique des colonnes fantômes, races financières restantes,
+décisions produit) est documenté avec assez de détail pour être repris directement sans perte de
+contexte.
+

@@ -502,9 +502,16 @@ export default function Examens() {
     total:      examensPourRole.length,
   };
 
+  // e.patients (jointure de la requête examens) ne contient que prenom/nom/
+  // numero_dossier — jamais date_naissance/groupe_sanguin/genre. Comme cet
+  // objet est toujours "truthy" une fois l'examen chargé, l'ancien ordre
+  // (e.patients d'abord) empêchait TOUJOURS d'atteindre le patient complet
+  // via `patients.find(...)`, pas seulement quand la date de naissance est
+  // réellement absente : le calcul des seuils de référence utilisait l'âge
+  // par défaut (30 ans) pour CHAQUE patient, systématiquement. Trouvé lors
+  // de l'audit exhaustif hôpital (parcours patient Urgences → NFS).
   const getPatient = (e) => {
-    if (e.patients) return e.patients;
-    return patients.find((p) => p.id === e.patient_id) ?? null;
+    return patients.find((p) => p.id === e.patient_id) ?? e.patients ?? null;
   };
 
   const imprimerRapportLabo = async () => {
