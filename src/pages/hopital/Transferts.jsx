@@ -45,6 +45,38 @@ async function notifierReponseTransfert(t, accepte) {
   }
 }
 
+// Email à l'établissement de DESTINATION quand l'origine annule un transfert
+// proposé — sans ça, la destination peut préparer un lit/du personnel pour un
+// patient qui ne viendra jamais, sans jamais être prévenue si elle n'a pas
+// l'écran ouvert (même logique que notifierReponseTransfert ci-dessus).
+async function notifierAnnulationTransfert(t) {
+  try {
+    const { data: destEtab } = await supabase.from("etablissements").select("email").eq("id", t.etablissement_destination_id).maybeSingle();
+    if (!destEtab?.email) {
+      await ajouterNotificationTransfert(t.id, { evenement: "annule", destinataire: null, statut: "echec", erreur: "Établissement destination sans email." });
+      return;
+    }
+    const html = `
+<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+  <div style="background:#6B7280;padding:24px 32px;border-radius:8px 8px 0 0"><h1 style="color:white;font-size:18px;margin:0">Transfert annulé</h1></div>
+  <div style="padding:24px 32px;border:1px solid #e5e7eb;border-top:none">
+    <p style="font-size:14px;color:#374151"><strong>${t.etablissement_origine_nom ?? "L'établissement d'origine"}</strong> a annulé le transfert de <strong>${t.patient_prenom} ${t.patient_nom}</strong>.</p>
+    <p style="font-size:13px;color:#374151">Aucune action n'est requise de votre part pour ce patient.</p>
+  </div>
+  <div style="background:#F8FAFC;padding:16px 32px;border-top:1px solid #e5e7eb;text-align:center"><p style="font-size:12px;color:#9CA3AF;margin:0">MedOS</p></div>
+</div>`;
+    const { error } = await supabase.functions.invoke("send-app-email", {
+      body: { to: destEtab.email, subject: `MedOS — Transfert annulé : ${t.patient_prenom} ${t.patient_nom}`, html },
+    });
+    await ajouterNotificationTransfert(t.id, {
+      evenement: "annule", destinataire: destEtab.email,
+      statut: error ? "echec" : "envoye", erreur: error ? error.message : null,
+    });
+  } catch (e) {
+    await ajouterNotificationTransfert(t.id, { evenement: "annule", destinataire: null, statut: "echec", erreur: e.message }).catch(() => {});
+  }
+}
+
 function fmtDate(iso) {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" });
@@ -211,7 +243,11 @@ export default function Transferts() {
         notifierReponseTransfert(t, false).catch(() => {});
         success("Transfert refusé.");
       }
-      else if (action === "annuler") { await updateStatutTransfertPatient(t.id, "annule"); success("Transfert annulé."); }
+      else if (action === "annuler") {
+        await updateStatutTransfertPatient(t.id, "annule");
+        notifierAnnulationTransfert(t).catch(() => {});
+        success("Transfert annulé.");
+      }
       else if (action === "cloturer") { await updateStatutTransfertPatient(t.id, "termine"); success("Transfert clôturé."); }
       else if (action === "admettre") {
         await admettrePatientTransfert(t, etabId);

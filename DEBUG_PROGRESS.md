@@ -1,5 +1,14 @@
 # DEBUG_PROGRESS — Suivi de fiabilisation MedOS
 
+## 🚨 INCIDENT SÉCURITÉ — 2026-07-29 — Secrets committés en clair (voir tout en bas du fichier pour le détail complet)
+
+`scripts/deploy-with-token.sh` contenait une clé `SUPABASE_SERVICE_ROLE_KEY` et une clé
+`RESEND_API_KEY` en clair, committées sur un dépôt GitHub **public**. Code corrigé, historique git
+purgé et force-pushé. **Rotation des deux clés encore À FAIRE par l'utilisateur (Dashboard) — non
+automatisable depuis cet environnement.** Voir la section dédiée en fin de fichier pour la procédure
+complète et l'état exact.
+
+
 > Ce fichier est committé sur GitHub. Il permet à toute nouvelle session de Claude
 > Code de reprendre le travail sans perdre le contexte.
 >
@@ -5393,3 +5402,629 @@ l'Infirmière pour ce test.
   les trois.
 - Rôle de secours "Médecin" sur l'Infirmière **conservé** — changement de configuration réel voulu
   par la mission (Direction pré-assigne des rôles de secours), pas une donnée de test.
+
+---
+
+## Audit exhaustif hôpital — 2026-07-28
+
+Mission : audit et amélioration exhaustifs de l'ENSEMBLE du module Hôpital (pas seulement les
+fonctionnalités récentes) — tous les écrans, tous les rôles, cas limites réels, parcours patient
+bout en bout, sécurité (RLS + contournement URL) sur toutes les tables, audit exhaustif des emails,
+amélioration active. Suivi en tâches (7 chantiers) pour une mission de cette ampleur ; documenté au
+fur et à mesure plutôt qu'en un seul bloc final, pour ne rien perdre en cas de session longue.
+
+### Étape 0 — Déploiement
+
+**Bloqué, délégué à l'utilisateur.** Aucun accès SSH au VPS de production
+(`root@81.17.98.80`, `medos.kelagroup.org`) depuis cet environnement (pas de clé, pas d'agent SSH
+configuré ici — la clé `medos_deploy_key` documentée plus haut a été générée SUR le VPS pour son
+propre `git pull`, pas pour un accès entrant depuis cette machine). Pas de CI/CD (pas de GitHub
+Actions, pas de webhook) — le déploiement est un geste manuel
+(`ssh root@81.17.98.80 "cd /var/www/medos && git pull origin master && npm install && npm run build && systemctl restart nginx"`).
+Sur decision utilisateur : l'utilisateur déploie lui-même en parallèle, l'audit se poursuit sur le
+code source (déploiement non bloquant pour auditer/corriger le code).
+
+### Étape 1 — Cartographie complète (✅)
+
+**29 routes** `/hopital/*` recensées dans [App.js](src/App.js) (28 fichiers dans
+`src/pages/hopital/` + Scanner qui réutilise `PhScanner`). Croisées avec [NAV_INTERNE](src/context/AuthContext.jsx:24)
+(13 rôles internes hôpital : Directeur + les 12 de `ROLES_SECOURS_HOPITAL`) et `roleConfig.hopital.nav`
+([AuthContext.jsx:182](src/context/AuthContext.jsx)).
+
+**Bug fonctionnel réel trouvé et corrigé en direct** : `/hopital/pediatrie` — écran cliniquement
+complet (courbes de croissance OMS poids/taille, calendrier PEV de vaccination, calculateur de
+posologie pédiatrique par kg) présent dans `roleConfig.hopital.nav` mais **absent de la liste
+NAV_INTERNE de TOUS les rôles sauf Directeur**. Le contrôle d'accès étant une liste blanche stricte
+(voir Étape 4 — `ProtectedRoute`, [App.js:133-158](src/App.js:133)), ça signifiait concrètement
+qu'aucun Médecin, Infirmière ou Sage-femme ne pouvait jamais ouvrir cet écran, ni depuis le menu ni
+en tapant l'URL — un module clinique entier orphelin, invisible même du personnel qui en a besoin au
+quotidien. Corrigé : `/hopital/pediatrie` ajouté à `NAV_INTERNE.hopital["Médecin"]`,
+`["Infirmière"]` et `["Sage-femme"]` ([AuthContext.jsx](src/context/AuthContext.jsx)) — cohérent
+avec leur accès déjà existant à Urgences/Maternité/Bloc (mêmes rôles cliniques généralistes).
+Aide-soignant volontairement laissé de côté (il n'a non plus accès à aucun autre écran de
+spécialité clinique — Urgences/Maternité/Bloc — cohérence de son périmètre de rôle).
+
+**Écrans confirmés volontairement réservés au Directeur seul** (pas un bug, vérifié dans le code —
+outils de pilotage/management, pas de soin direct) : `/hopital/rapports`, `/hopital/predictions`,
+`/hopital/reseau`.
+
+### Étape 4 (traitée en priorité, avant l'étape 2/3) — RLS sur TOUTES les tables du module hôpital
+
+Interrogation directe de la base réelle liée (`supabase db query --linked`, pas seulement lecture
+des migrations qui peuvent être obsolètes) :
+
+- **68 tables `public`** — RLS activé (`relrowsecurity = true`) et au moins 1 policy sur
+  **chacune**, sans exception (0 table avec RLS désactivé, 0 table sans policy — vérifié par
+  requête sur `pg_class`/`pg_policies`, pas par confiance dans les migrations).
+- `supabase db advisors --type security` (linter officiel Supabase) : aucune alerte RLS manquante ;
+  uniquement des `function_search_path_mutable` (durcissement mineur, non exploité en pratique tant
+  qu'aucune fonction n'est appelable par un rôle non fiable avec un search_path détourné — non
+  traité aujourd'hui, faute de temps face aux priorités patient, à reprendre).
+
+**Faille réelle trouvée et corrigée** : 5 tables (`consultations`, `examens`, `notes_evolution`,
+`tarifs_actes`, `configuration_lits`) avaient une policy RLS héritée d'un template initial
+([20260604_hopital_features.sql](supabase/migrations/20260604_hopital_features.sql)) de la forme
+`etablissement_id IN (mes_etablissements()) OR etablissement_id IS NULL` — c'est-à-dire que
+**toute ligne dont `etablissement_id` vaudrait NULL devenait visible ET modifiable par n'importe
+quel compte hôpital authentifié, tous établissements confondus**. Pour `consultations`,
+`examens` et `notes_evolution` c'est une fuite de données cliniques patient inter-établissements
+(un hôpital verrait les consultations/résultats d'examens/notes de suivi d'un autre hôpital sans
+lien avec lui). Vérifié : **0 ligne NULL en production aujourd'hui** (pas de fuite active
+actuellement), mais le risque n'était pas théorique — le code frontend contient le motif
+`etablissement_id: etabId ?? null` dans plusieurs écrans (`CaissePage.jsx`, `Facturation.jsx`,
+`Examens.jsx`...) : si le contexte établissement n'est pas encore chargé au moment d'une
+soumission, une ligne NULL serait réellement insérée et deviendrait immédiatement visible par
+tout le monde.
+
+Corrigé (migration [20260801000000_fix_rls_null_etablissement_bypass.sql](supabase/migrations/20260801000000_fix_rls_null_etablissement_bypass.sql),
+appliquée en production après confirmation explicite de l'utilisateur) :
+1. Colonne `etablissement_id` passée en `NOT NULL` sur les 5 tables (sûr : 0 ligne NULL existante) —
+   échoue bruyamment à l'insertion plutôt que de risquer une fuite silencieuse.
+2. Policies RLS resserrées : retrait du `OR etablissement_id IS NULL` sur les 5 policies
+   concernées.
+3. Vérifié après coup en production : `is_nullable = 'NO'` sur les 5 colonnes, `qual` des 5
+   policies ne contient plus `IS NULL`.
+
+Note technique : `supabase db push --linked` s'est révélé cassé pour ce projet — l'historique de
+migrations distant est désynchronisé de l'historique local (tentative de rejouer 50+ migrations
+historiques depuis `20240107000000`, échec dès la première avec `policy already exists`, aucune
+migration antérieure au correctif recherché n'a donc été (re)appliquée par cette tentative — pas de
+dégât, juste un échec précoce). Contourné en exécutant le fichier SQL directement
+(`supabase db query --linked -f <fichier>`), sans passer par le mécanisme de migration. **À
+signaler pour une prochaine session** : il faudrait un jour réconcilier l'historique de migrations
+(`supabase migration repair`) pour que `db push` redevienne utilisable normalement — non fait
+aujourd'hui, hors scope de cette mission et risqué à faire sans temps dédié à bien le vérifier.
+
+**Vérifications ciblées supplémentaires (pas seulement présence, aussi cohérence métier)** :
+- `poches_sang` (banque de sang) : isolation stricte par établissement sur SELECT/INSERT/UPDATE,
+  **pas de partage inter-établissements** (cohérent avec l'hypothèse de la mission — à confirmer
+  produit si un partage inter-hôpitaux de poches de sang devient un besoin réel un jour).
+  Réservation d'une poche déjà protégée contre la double réservation par un UPDATE conditionnel
+  atomique (`.eq("statut","disponible")` dans la clause WHERE, voir
+  [reserverPocheSang](src/hooks/useMutations.js:1364)) — testé conceptuellement : ne réintroduit
+  aucune race condition, déjà correct d'une session précédente.
+- `transfusions` : SELECT/INSERT seulement, **aucune policy UPDATE/DELETE** — vérifié que rien
+  dans le code frontend ne tente de modifier une transfusion déjà enregistrée
+  ([useMutations.js](src/hooks/useMutations.js)) : cohérent avec un registre d'actes immuable
+  (traçabilité médico-légale), pas un oubli.
+- `transferts_patients` : SELECT/UPDATE ouverts à la fois à l'établissement d'origine ET de
+  destination (cohérent avec le flux de transfert partagé), INSERT restreint à l'origine
+  uniquement (on ne peut pas créer un transfert au nom d'un autre établissement).
+- `patients` : carve-out `OR is_autorite_sanitaire()` sur le SELECT — l'Autorité sanitaire voit les
+  patients de TOUS les établissements sans restriction d'établissement. **Signalé en décision
+  produit ci-dessous** : accès à la fiche patient complète (nom, prénom, adresse...) potentiellement
+  plus large que nécessaire pour un rôle de surveillance épidémiologique — une vue agrégée/anonymisée
+  serait peut-être plus appropriée, mais c'est un choix produit existant, pas une régression de
+  cette session, donc pas modifié unilatéralement.
+- Aucune policy `USING (true)` ou équivalent grand ouvert trouvée ailleurs sur l'ensemble des 68
+  tables (recherche systématique par requête sur `pg_policies`).
+
+### Étape 4 (suite) — Contournement par URL directe, échantillon élargi
+
+Vérification préalable par lecture complète de `ProtectedRoute` ([App.js:128-160](src/App.js:128)) :
+c'est une **liste blanche stricte et déterministe** — `auth.nav` (filtré par `NAV_INTERNE` selon le
+rôle, puis éventuellement resserré par `permissions_nav` individuel, voir plus bas) est la seule
+source de vérité ; si le chemin de l'URL n'y figure pas et qu'aucun accès élargi actif ne le couvre,
+redirection immédiate vers `auth.dashboardPath`, y compris en tapant l'URL directement. Aucune
+faille trouvée dans ce mécanisme lui-même.
+
+**Vérification live en plus de l'analyse de code** (mots de passe de 4 comptes de test réels
+réinitialisés avec l'accord explicite de l'utilisateur, mot de passe temporaire
+`AuditHopital2026!` — comptes rattachés à l'établissement de test "Hopital Audit Test 2",
+build de développement local) :
+
+| Compte (rôle) | URL tentée hors périmètre | Résultat |
+|---|---|---|
+| `r2caissier` (Caissier) | `/hopital/patients` | Redirigé vers `/hopital/caisse` ✅ |
+| `r2caissier` (Caissier) | `/hopital/bloc` | Redirigé ✅ |
+| `r2caissier` (Caissier) | `/hopital/stock` | Redirigé ✅ |
+| `r2radiologue` (Radiologue) | `/hopital/caisse` | Redirigé vers `/hopital/dashboard` ✅ |
+| `r2radiologue` (Radiologue) | `/hopital/patients` | Redirigé ✅ |
+| `r2laborantin` (Laborantin) | `/hopital/bloc` | Redirigé vers `/hopital/examens` ✅ |
+| `r2laborantin` (Laborantin) | `/hopital/facturation` | Redirigé ✅ |
+| `r2secretaire` (Secrétaire médicale) | `/hopital/examens` | Redirigé vers `/hopital/dashboard` ✅ |
+| `r2secretaire` (Secrétaire médicale) | `/hopital/banque-sang` | Redirigé ✅ |
+
+**8/8 tentatives bloquées**, échantillon plus large que les 2 écrans testés lors d'une session
+précédente, couvrant à la fois la restriction par défaut du rôle (`NAV_INTERNE`) et la restriction
+individuelle personnalisée (`permissions_nav`, découverte au passage — voir ci-dessous).
+
+**Découverte au passage — deuxième couche de permissions non documentée dans la cartographie
+initiale** : `enrichWithEtablissement` ([AuthContext.jsx:398-452](src/context/AuthContext.jsx:398))
+permet à Direction de resserrer, par employé individuel, la navigation encore plus que ne le fait
+déjà `NAV_INTERNE` (`membres_personnel.permissions_nav`, réglé depuis Paramètres). Vérifié que cette
+deuxième couche ne peut que RESTREINDRE, jamais élargir au-delà de ce que le rôle autorise déjà
+(le filtre part de `prev.nav` déjà filtré par rôle). Fenêtre de course mineure identifiée mais non
+corrigée (décision produit, voir plus bas) : `permissions_nav` se charge de façon asynchrone après le
+rendu initial (`enrichWithEtablissement` tourne en arrière-plan) — pendant les quelques centaines de
+millisecondes avant résolution, `auth.nav` reflète encore le rôle par défaut (plus large) le temps
+que la restriction individuelle s'applique. `ProtectedRoute` se corrige automatiquement dès que
+`auth.nav` se met à jour (redirection au rendu suivant), mais un utilisateur techniquement outillé
+pourrait théoriquement lire une page hors de sa restriction individuelle pendant cette fenêtre très
+courte. Non exploité en pratique dans ces tests (jamais observé), fenêtre inhérente à tout chargement
+de permissions asynchrone — corriger nécessiterait de bloquer le rendu de toute page tant que
+l'enrichissement n'est pas résolu, un compromis UX (écran de chargement systématique même sur
+connexion lente africaine) qui dépasse le raisonnable pour cette session ; signalé en décision
+produit.
+
+**Confirmation indirecte de la valeur du fix Pédiatrie (Étape 1)** : en vérifiant les
+`permissions_nav` des comptes de test Médecin/Infirmière/Sage-femme, découvert que ces 3 comptes
+avaient déjà `/hopital/pediatrie` ajouté manuellement à leur `permissions_nav` individuel lors d'une
+session antérieure — un contournement au cas par cas pour CES comptes de test précis, jamais
+généralisé au niveau du rôle (`NAV_INTERNE`) pour l'ensemble des Médecins/Infirmières/Sages-femmes de
+la plateforme. Confirme que le trou était réel et déjà repéré ponctuellement sans être corrigé à la
+racine — corrigé maintenant pour de bon à l'Étape 1.
+
+### Étape 5 — Audit exhaustif des communications email (✅)
+
+Liste construite en amont (raisonnement "directeur d'hôpital"), puis vérifiée événement par
+événement dans le code réel — pas une liste fermée, complétée par ce qui a été trouvé en route.
+
+**Déjà couverts avant cette session** (vérifiés, pas retouchés) : demande d'accès élargi (à
+Direction), transfert proposé (Patients.jsx), transfert accepté/refusé (Transferts.jsx), transfert
+externe hors MedOS (`ficheTransfertExterne.js`), rupture de stock pharmacie/hôpital
+(`check-stock-alert`, table `medicaments` partagée — confirmé que Stock.jsx hôpital utilise la même
+table via `useMedicaments()`, donc déjà couvert sans changement), lot suspect détecté
+(`useVerificationLot.js`), commandes fournisseurs.
+
+**Trouvés manquants et construits pendant cette session :**
+
+1. **Invitation d'un nouvel employé — trouvé cassé, pas juste "email manquant".** Le bouton
+   "Nouvelle invitation" de [Parametres.jsx](src/pages/Parametres.jsx) ne créait qu'une ligne
+   `membres_personnel` (permissions) — **aucun compte `auth.users` n'était jamais provisionné**,
+   confirmé par lecture complète du code (aucun trigger, aucune fonction, `invitation_acceptee`
+   référencé nulle part ailleurs que pour l'affichage, jamais mis à `true`). Un Directeur qui
+   "invitait" quelqu'un via ce bouton ne lui donnait concrètement aucun moyen de se connecter — les
+   10 membres réels de l'établissement de test étaient d'ailleurs presque tous encore
+   "Invitation en attente" à ce jour, cohérent avec cette découverte. Construit (accord explicite
+   utilisateur) :
+   - Nouvelle Edge Function [invite-membre](supabase/functions/invite-membre/index.ts) — vérifie
+     que l'appelant est bien propriétaire de l'établissement (même condition que la policy RLS
+     `membres_insert`), provisionne un vrai compte via `auth.admin.generateLink({type:"invite"})`
+     avec `user_metadata.role`/`role_interne` corrects (condition nécessaire pour que `NAV_INTERNE`
+     restreigne correctement la navigation de ce nouveau compte), puis envoie un email de bienvenue
+     avec lien de définition de mot de passe (branding MedOS via Resend, pas l'email Supabase par
+     défaut). Cas déjà-existant (email déjà un compte ailleurs) géré sans faire échouer
+     l'opération.
+   - Câblé dans `handleInviter` (Parametres.jsx), qui garde l'insert `membres_personnel` existant
+     puis appelle cette fonction.
+   - **Preuve réelle** : compte de test `cherihaneadam123+r2nouveltest@gmail.com` invité en
+     Laborantin via l'UI réelle (Direction connectée) → `auth.users` confirmé créé avec
+     `raw_user_meta_data: {role: "hopital", role_interne: "Laborantin"}` ; email "MedOS — Définissez
+     votre mot de passe" **reçu réellement** (recherche Gmail directe, expéditeur
+     `noreply@mail.kelagroup.org`, contenu correct). Données de test supprimées après vérification
+     (`membres_personnel` et `auth.users`).
+   - **Note de sécurité en cascade repérée en construisant ce correctif, non modifiée (fonction
+     protégée)** : `buildAuthBase` (AuthContext.jsx, fonction protégée par la règle absolue de cette
+     mission) traite un `role_interne` absent de `user_metadata` comme "accès complet" (`allowedPaths
+     = null` → nav non filtrée), pas comme "aucun accès". Un compte créé par un AUTRE moyen que la
+     nouvelle fonction `invite-membre` (ex. Admin API manuelle sans bien renseigner
+     `user_metadata.role_interne`) obtiendrait donc par défaut un accès équivalent à Direction,
+     fail-open plutôt que fail-closed. `invite-membre` renseigne toujours ce champ correctement pour
+     éviter ce piège sur le nouveau chemin, mais le comportement par défaut d'AuthContext.jsx
+     lui-même n'a pas été touché (règle absolue) — signalé en décision produit ci-dessous.
+2. **Désactivation/réactivation d'un compte** — aucun email avant. `handleToggleActif`
+   (Parametres.jsx) notifie maintenant le membre dans les deux sens.
+3. **Changement de rôle interne d'un employé déjà actif** — aucun email avant. `handleChangeRole`
+   notifie maintenant le membre concerné.
+4. **Changement de permissions (`permissions_nav`) d'un employé déjà actif** — aucun email avant.
+   `handleSavePerms` notifie maintenant le membre concerné.
+5. **Changement de rôle de secours d'un employé déjà actif** — explicitement anticipé comme
+   probablement manquant par la mission ; confirmé manquant, construit. `handleToggleRoleSecours`
+   notifie maintenant (ajout ou retrait précisé dans l'email).
+6. **Accès élargi approuvé / refusé** — seule la demande initiale envoyait un email (à Direction) ;
+   la décision de Direction ne redescendait jamais par email vers le demandeur, qui ne l'apprenait
+   qu'en rouvrant l'app. `approuver`/`refuser` (AccesElargiContext.jsx) notifient maintenant le
+   demandeur dans les deux cas. Auto-octroi (`auto_accorde`, déclenché par pg_cron sans session
+   utilisateur) : **non construit** — nécessiterait de faire authentifier un appel serveur→
+   `send-app-email`, qui exige aujourd'hui un JWT utilisateur réel (`supabase.auth.getUser()`), donc
+   soit modifier cette fonction partagée (risque sur un chemin déjà fragile par le passé), soit
+   dupliquer un envoi Resend direct comme pour la banque de sang. Repéré, non traité par manque de
+   temps dans cette session déjà longue — Direction reste notifiée via l'alerte de revue obligatoire
+   déjà existante (in-app), seul le demandeur n'est pas notifié par email de l'auto-octroi.
+7. **Banque de sang — stock bas par groupe sanguin — trouvé manquant (aucune alerte persistée,
+   aucun email, seulement un bandeau visuel dans BanqueSang.jsx).** Construit, même mécanisme que
+   l'alerte stock pharmacie déjà en place (trigger Postgres + Edge Function dédiée) :
+   - [check-banque-sang-alert](supabase/functions/check-banque-sang-alert/index.ts) — recompte les
+     poches "disponible" par établissement + groupe sanguin à chaque INSERT/UPDATE de
+     `poches_sang`, crée/résout une alerte (`alertes`, type `rupture`, `produit` = groupe) et envoie
+     un email si <= seuil (2, synchronisé manuellement avec `SEUIL_BAS` de BanqueSang.jsx).
+   - Trigger [20260801000001_banque_sang_alert_trigger.sql](supabase/migrations/20260801000001_banque_sang_alert_trigger.sql).
+   - **Preuve réelle en conditions réelles** : poche de test AB- insérée (1 poche dispo, sous le
+     seuil) → alerte créée en base (`titre: "Banque de sang — stock bas : AB-"`, `severite: alerte`)
+     ET email "STOCK CRITIQUE — Banque de sang AB-" **reçu réellement** (recherche Gmail directe,
+     expéditeur `alertes@mail.kelagroup.org`). Deux poches supplémentaires insérées (repasse à 3,
+     au-dessus du seuil) → alerte automatiquement marquée `resolu: true`, confirmé en base. Données
+     de test supprimées après vérification.
+   - **Non construit, signalé** : alerte de péremption proche des poches de sang (`date_peremption`
+     existe en base mais rien ne la surveille) — repéré en construisant ce point mais hors scope
+     temps de cette session ; à traiter séparément (nécessiterait un job planifié quotidien, pas un
+     trigger sur écriture).
+8. **Transfert annulé** — seuls accepté/refusé envoyaient un email ; l'annulation par l'origine ne
+   notifiait jamais la destination (qui peut avoir déjà commencé à préparer un lit/du personnel).
+   `handleAction("annuler")` (Transferts.jsx) notifie maintenant la destination.
+   **Non traité, priorité plus basse** : transfert clôturé/patient admis (`termine`) — la
+   destination est déjà au courant puisque c'est elle qui déclenche l'admission ; l'origine
+   pourrait apprécier une confirmation de clôture mais c'est moins critique que les statuts déjà
+   couverts, non construit faute de temps.
+
+### Sécurité annexe trouvée en chemin (hors périmètre strict du module Hôpital, signalée à
+l'utilisateur en direct, pas corrigée)
+
+`scripts/deploy-with-token.sh` contient en clair, commité dans l'historique git, une clé
+`SUPABASE_SERVICE_ROLE_KEY` (contourne RLS, accès complet à la base) et une clé API Resend.
+Découvert en cherchant comment déployer une Edge Function pour le point 7 ci-dessus. Sur décision
+explicite de l'utilisateur : signalé sans y toucher, rotation des clés laissée à sa charge (action
+qui doit rester la sienne).
+
+### Étape 3 — Parcours patient bout en bout (partiel, priorité au point le plus critique de la mission)
+
+Build de développement local, établissement de test "Hopital Audit Test 2", compte Direction réel.
+
+**Parcours 1 — Urgences → banque de sang (cas incompatible explicitement demandé par la mission).**
+1. Arrivée réelle enregistrée via l'UI (`+ Nouvelle arrivée`) pour Ibrahim CaissierApresFix — patient
+   **sans groupe sanguin renseigné** (`groupe_sanguin: null` en base, choisi délibérément pour tester
+   le cas "dossier incomplet") — motif "Douleur thoracique aigue, suspicion hemorragie interne",
+   triage Urgent. Confirmé en base (`statut: en_attente, triage: urgent`) et dans le tableau Urgences
+   après rechargement ("ATTENTE PRISE EN CHARGE — 1 — Ibrahim... Urgent").
+2. **Cas 1 — transfusion incompatible testée réellement** : tentative de réserver une poche A+ pour
+   Chahrazad Adam (groupe réel B+) → **bloqué au niveau base de données** (pas seulement une
+   validation JS contournable) : `ERROR P0001: Groupe incompatible : patient B+ / poche A+ —
+   réservation ou transfusion bloquée.` (trigger `verifier_compatibilite_poche_sang`, déjà construit
+   lors d'une session antérieure — revérifié en conditions réelles ici, pas simplement relu dans le
+   code).
+3. **Cas 2 — patient sans groupe sanguin testé réellement** : tentative de réserver la même poche
+   A+ pour Ibrahim (`groupe_sanguin: null`) → **bloqué** :
+   `ERROR P0001: Réservation/transfusion bloquée : le groupe sanguin du patient n'est pas renseigné.`
+4. **Cas positif testé pour confirmer que ce n'est pas juste "tout bloqué par erreur"** : réservation
+   d'une poche O- (donneur universel) pour Chahrazad (B+) → **réussie**, confirmée en base
+   (`statut: reservee, patient_id` correctement rempli).
+5. Données de test (poches, arrivée urgences) supprimées après vérification.
+
+**Non refait en direct (déjà couvert par une session antérieure, documenté plus haut dans ce
+fichier)** : transfert MedOS-à-MedOS et hors MedOS (accepté/refusé/admission en continuité), cycle
+complet accès élargi pendant une garde. Le reste des parcours (Maternité → accouchement,
+Pédiatrie → vaccination, sortie complète avec facturation) n'a pas été rejoué manuellement écran par
+écran faute de temps dans une session déjà très longue — couvert indirectement par l'audit de code
+détaillé de l'Étape 2 ci-dessous plutôt que par un second clic-par-clic complet. **Limitation
+assumée et documentée honnêtement plutôt que de prétendre à un "plusieurs fois" non fait
+réellement.**
+
+### Étape 2 — Audit détaillé écran par écran (✅)
+
+Méthode : 5 revues en parallèle (une par domaine — soins critiques, dossiers patients, service/lits/
+personnel, finance/stock, dashboard/outils transverses), chacune consigne de lire le code en détail
+et remonter des bugs réels avec fichier:ligne + scénario concret, pas des impressions générales.
+Chaque finding "critique" impliquant une fuite de données a été **revérifié empiriquement** (requête
+SQL simulant le contexte RLS d'un utilisateur réel) avant d'agir dessus — deux d'entre eux se sont
+révélés être de **faux positifs** (voir plus bas), ce qui a évité des corrections inutiles ou
+dangereuses sur un mécanisme déjà correct.
+
+#### Corrigé en direct pendant cette session
+
+- **Dashboard.jsx — fuite de rôle confirmée** : `PatientsPanel` (nom, antécédents, groupe sanguin)
+  s'affichait sur le dashboard de Laborantin/Radiologue/Caissier alors qu'aucun des trois n'a
+  `/hopital/patients` dans sa nav — le widget contournait silencieusement la restriction déjà
+  appliquée à la page dédiée (même catégorie que la fuite Sage-femme déjà corrigée sur ce même
+  dashboard lors d'une session antérieure). Corrigé : le panneau n'est plus rendu que pour les rôles
+  ayant réellement accès à Patients ; les autres gardent seulement "Lits occupés" (déjà exposé avant,
+  sans antécédents/groupe sanguin).
+- **`fetchLitsOccupes`** (partagée par Lits.jsx, MonService.jsx, TransmissionGarde.jsx) recevait
+  `etablissement_id` mais ne l'utilisait jamais dans la requête. **Vérifié empiriquement que ce
+  n'était pas une fuite active** (la RLS de `hospitalisations` protège déjà via une sous-requête sur
+  `patients`, elle-même correctement scopée — voir "faux positifs" plus bas) — corrigé quand même
+  par défense en profondeur, le paramètre ignoré étant trompeur et fragile si la policy RLS change un
+  jour.
+- **Urgences.jsx — triage ABCDE** : le calcul automatique proposé ignorait totalement la tension et
+  le pouls saisis (case C), pouvant proposer "Non urgent" à un patient en choc. Le triage final reste
+  modifiable par le clinicien (pas un blocage silencieux), mais le calcul intègre maintenant
+  systolique < 90 ou pouls < 40/> 130 comme signaux d'urgence.
+- **Pediatrie.jsx — calcul de doses** : le poids ne se resynchronisait pas au changement de patient
+  dans le sélecteur (pas de remount, pas d'effet de resynchronisation) — un calcul de dose pouvait
+  silencieusement s'appliquer au poids de l'enfant précédent. Corrigé par un `useEffect` sur
+  `patient?.id`.
+- **Patients.jsx — déclaration de décès** : la garde anti-doublon (`fetchDecesByPatient`) existait
+  déjà en fonction mais n'était jamais appelée — une coupure réseau juste après l'insertion du
+  certificat, suivie d'une nouvelle tentative, pouvait générer un second certificat pour le même
+  patient. Corrigé : vérification en tout début de soumission.
+- **Patients.jsx — date de naissance** : aucune borne sur le champ, une date future était acceptée
+  silencieusement (âge négatif affiché). `max` ajouté sur le sélecteur.
+- **Examens.jsx — âge par défaut silencieux** : si `date_naissance` du patient est absente, l'âge
+  utilisé pour les seuils de référence biologique (adulte vs enfant) retombe silencieusement sur 30
+  ans — un nourrisson sans date de naissance pouvait voir ses résultats évalués avec des bornes
+  adultes sans aucun avertissement. Un bandeau visible prévient maintenant l'utilisateur quand cette
+  valeur par défaut est utilisée.
+- **Sterilisation.jsx — restriction de rôle incomplète** : seule "Infirmière" était mise en lecture
+  seule, alors que le commentaire du code indique explicitement que seuls Agent de stérilisation et
+  Direction devraient garder le CRUD complet — un Caissier/Secrétaire/Laborantin/Aide-soignant ayant
+  atteint cette page (accès élargi, permission individuelle) gardait donc le CRUD complet
+  (enregistrer un cycle, valider un lot). Corrigé : lecture seule par défaut pour tout rôle interne
+  autre qu'Agent de stérilisation (Direction, `role_interne` null, garde l'accès complet).
+- **Alertes.jsx — trois bugs réels** :
+  1. Aucune action ne permettait jamais de résoudre une alerte "clinique" (constantes non
+     enregistrées, perfusion dépassée, sortie dépassée) — seules stock/banque de sang se résolvent
+     automatiquement côté serveur. Une alerte critique restait active indéfiniment. Bouton
+     "Résoudre" ajouté (`updateAlerte({resolu:true})`).
+  2. Le statut "lu" reposait uniquement sur un état local (`Set` en mémoire) jamais initialisé
+     depuis `alerte.lu` réellement en base — un simple F5 faisait réapparaître des alertes déjà lues
+     comme non lues. Corrigé par un effet de resynchronisation.
+  3. "Tout marquer comme lu" ne traitait que la page affichée (20 alertes) en se présentant comme
+     exhaustif. Corrigé : requête dédiée sur toutes les alertes non lues non résolues (filtrées par
+     sévérité si un filtre est actif), pas seulement la page courante.
+- **CaissePage.jsx — taux de couverture non borné** : le `max="100"` HTML était décoratif ; un
+  Caissier tapant 150 ou 500 pouvait faire passer `montant_couverture` au-dessus du sous-total,
+  ramenant le reste dû à 0 sans qu'aucun contrôle de rôle/assureur ne valide la couverture — de fait,
+  n'importe quelle facture pouvait être "soldée" gratuitement. Corrigé : `taux` clampé entre 0 et 100
+  avant tout calcul, dans les deux modales concernées (encaissement et création de facture).
+- **Facturation.jsx — bouton "Payer" court-circuitant tout le flux financier** : passait directement
+  une facture en `statut: "payee"` sans créer de ligne `paiements_facture`, sans `journal_caisse`,
+  sans numéro de reçu, sans jamais remettre `reste_patient` à 0 — accessible à *tout* compte hôpital
+  (pas seulement Caissier, aucune restriction de rôle sur cette action). Un utilisateur pouvait ainsi
+  faire disparaître une facture de la liste "à encaisser" sans qu'aucun argent ne soit réellement
+  perçu ni tracé. Retiré (pas juste corrigé a minima) : l'encaissement réel passe exclusivement par
+  Caisse (onglet Factures > Encaisser), qui enregistre correctement paiement/journal/reçu — éviter
+  de dupliquer cette logique financière à deux endroits différents.
+- **Lits.jsx — admission sans vérification d'occupation** : `ModalAdmettre` ne recevait même pas la
+  liste des lits déjà occupés ; deux patients pouvaient être admis sur le même lit/service sans
+  aucun avertissement. Corrigé : vérification côté client avant soumission (bloque si le couple
+  service+lit est déjà occupé par un autre patient) — ne couvre pas une double soumission strictement
+  simultanée (nécessiterait une contrainte d'unicité en base, non ajoutée dans cette session, voir
+  décisions produit).
+- **MonService.jsx — double administration de médicament** : aucune re-vérification avant
+  l'insertion d'une administration ; deux postes infirmiers voyant tous deux un créneau "à donner"
+  pouvaient chacun cliquer "Administrer" et créer une double administration du même médicament.
+  Corrigé : re-vérification serveur juste avant l'écriture (réduit fortement la fenêtre, ne
+  l'élimine pas complètement — voir décisions produit pour la contrainte unique en base).
+- **MonService.jsx — perfusion** : le `min="1"` HTML n'empêchait pas une valeur négative tapée au
+  clavier. Validation JS ajoutée (volume et débit doivent être positifs).
+- **MesConsultations.jsx — erreur de précédence d'opérateurs** : `A && B || C` s'évalue `(A&&B)||C`,
+  pas `A&&(B||C)` — si `medecinNom` était vide (auth pas encore résolu), la file d'attente d'un
+  médecin affichait TOUTES les consultations, terminées/annulées incluses. Parenthésage corrigé.
+  Incohérence de casse corrigée au passage sur le filtre des examens (même fichier).
+- **Maternite.jsx — ModalAccouchement** : seul modal du fichier sans état `saving`/`disabled` sur son
+  bouton — un double-clic sur "Enregistrer et saisir le nouveau-né" pouvait créer deux accouchements
+  pour le même travail. État `saving` ajouté, cohérent avec les autres modales du fichier.
+- **Banque de sang — double barrière renforcée** (voir aussi Étape 5 pour l'alerte de stock) :
+  - Le trigger de compatibilité ne se redéclenchait qu'à la réservation (`UPDATE OF patient_id,
+    groupe_sanguin`), jamais à la transfusion elle-même (qui ne touche que `statut`). Si le groupe
+    sanguin d'un patient était corrigé APRÈS une réservation mais AVANT la transfusion, l'
+    incompatibilité n'était plus détectée. **Testé réellement** : poche A+ réservée pour un patient
+    A+ (compatible), groupe du patient corrigé en B+ après coup, tentative de transfusion → **bloquée**
+    (`Groupe incompatible : patient B+ / poche A+`).
+  - Les poches périmées restaient réservables/transfusables sans blocage (seul un bandeau visuel
+    passif existait). **Testé réellement** : poche périmée depuis 13 jours, tentative de réservation
+    → **bloquée** (`Poche périmée (date de péremption : 2026-07-15)`).
+  - Migration [20260801000002](supabase/migrations/20260801000002_banque_sang_double_barriere_renforcee.sql)
+    appliquée en production après confirmation explicite de l'utilisateur, testée en conditions
+    réelles, données de test supprimées après vérification.
+
+#### Faux positifs identifiés et écartés (important de documenter pour ne pas les re-signaler)
+
+Deux findings remontés comme "critique" par les revues automatisées se sont révélés **faux** après
+vérification empirique directe (jamais se fier à la seule lecture de code applicatif pour juger
+d'une fuite RLS — la policy peut protéger transitivement) :
+
+1. **"`medicaments` accessible à n'importe quel établissement"** — faux. La policy `med_select` réelle
+   (vérifiée en base, pas dans une migration possiblement obsolète) est correctement scopée par
+   `mes_etablissements()`. L'appel de `useMedicaments()` sans `etablissement_id` dans Rapports.jsx/
+   Reseau.jsx/Predictions.jsx reste un défaut applicatif (requête non filtrée côté client) mais la
+   RLS protège déjà correctement — pas une fuite active. Non corrigé (pas urgent), signalé en
+   décision produit ci-dessous pour nettoyage éventuel.
+2. **"`hospitalisations`/`dispensations`/`constantes_vitales` lisibles inter-établissements"** — faux.
+   Ces 3 tables utilisent un pattern RLS qui délègue la vérification à une sous-requête sur
+   `patients`/`medicaments` (déjà scopés par `mes_etablissements()`) plutôt que de répéter
+   `mes_etablissements()` directement — la sous-requête est elle-même soumise à la RLS de la table
+   référencée dans la même session, donc protégée transitivement. **Vérifié empiriquement** : patient
+   de test créé dans l'établissement B avec une hospitalisation, requête simulée avec le contexte JWT
+   réel de la Direction de l'établissement A (`set local role authenticated; set local
+   request.jwt.claims=...`) → **0 ligne retournée**, confirmant l'isolation réelle. Sanity-check
+   inverse (même contexte, hospitalisations de son propre établissement) → résultat non vide,
+   confirmant que la simulation de contexte fonctionnait bien. Aucune action nécessaire sur ces 3
+   tables.
+
+#### Documenté, non corrigé — décisions produit ou chantiers trop larges pour cette session
+
+- **Absence quasi générale de vérification `role_interne` dans les pages cliniques** (Urgences,
+  Maternité, Examens — prescrire/annuler un examen accessible à tout rôle ayant la page, y compris
+  non clinique ; carnet vaccinal Pédiatrie). Corriger correctement demanderait de redéfinir, écran
+  par écran, quelle action revient à quel rôle précis — un choix produit, pas une correction de bug
+  ponctuelle. Signalé pour arbitrage.
+- **Aucun formulaire d'édition de patient après création** (Patients.jsx) — groupe sanguin,
+  allergies, antécédents, date de naissance ne sont saisis qu'à la création ; une erreur ou un oubli
+  initial (allergie non renseignée) ne peut jamais être corrigé depuis l'app. Fonctionnalité
+  manquante significative, pas un bug à corriger en une ligne — nécessite un vrai écran d'édition.
+- **Pertes de mise à jour ("lost update") sur données de surveillance critique** : feuille de réveil
+  post-anesthésique (BlocOperatoire.jsx) et partogramme (Maternite.jsx) réécrivent le tableau complet
+  des relevés depuis l'état local plutôt qu'un append atomique côté serveur — deux postes ouvrant le
+  même dossier peuvent s'écraser mutuellement un relevé. Le même risque existe sur
+  `upsertHospitalisation` (changement de lit vs changement de motif en parallèle). Corriger
+  proprement demande soit un verrou optimiste (colonne de version), soit une fonction RPC d'ajout
+  atomique — plus invasif que le temps restant ne permettait dans cette session, à traiter
+  séparément.
+- **Renouvellements.jsx** ne désactive jamais l'ancienne ordonnance expirée lors d'un renouvellement
+  — elle reste renouvelable indéfiniment, un patient peut accumuler plusieurs ordonnances "ouvertes"
+  issues d'une seule expirée à l'origine.
+- **Reseau.jsx — redistribution inter-établissements** : le cycle de statut proposé→accepté/refusé→
+  effectué n'est jamais implémenté au-delà de "proposé" ; fonctionnalité en impasse depuis le début.
+  Décision produit à prendre : compléter le workflow ou retirer la fonctionnalité si elle n'est plus
+  prioritaire.
+- **AssistantIA.jsx** : la clé `REACT_APP_GROQ_API_KEY` est exposée côté client (limite connue de
+  Create React App, pas un bug introduit ici) et le contexte envoyé à l'API externe inclut nom/
+  prénom complets du patient sans minimisation. Signalé — corriger nécessiterait un proxy serveur
+  pour la clé et une révision du prompt système, un chantier d'architecture, pas un correctif ponctuel.
+- **Sterilisation.jsx — `canValider` traite un test biologique "non fait" comme équivalent négatif.**
+  Volontairement **non modifié** : ceci pourrait refléter une pratique réelle acceptée (libération sur
+  indicateurs chimiques/physiques avec test biologique en surveillance périodique plutôt que
+  systématique, courant pour du matériel non implantable) — changer cette règle sans confirmation
+  clinique du client risquerait de bloquer des validations légitimes. Décision produit à trancher
+  avec un référent qualité/stérilisation avant toute modification.
+- **Planning.jsx** : la détection de conflit de garde ne compare que `personnel_nom+date+heure_debut`
+  identiques — deux gardes réellement chevauchantes avec des heures de début différentes ne sont
+  jamais signalées. Corriger demande une vraie logique de chevauchement d'intervalles, pas juste un
+  ajustement du test d'égalité — laissé pour une session dédiée.
+- **CaissePage.jsx/Stock.jsx** : plusieurs races non corrigées faute de temps — double clôture de
+  caisse (`fermerSessionCaisse` sans garde de statut), double encaissement de la même facture (pas de
+  verrou), décrément de stock non atomique (`decrementStock`, lost update en cas de dispensations
+  concurrentes), dispensation sans vérification que la quantité demandée ≤ stock réel. Même famille
+  de problème que les fixes déjà apportés ailleurs (banque de sang, administrations) — le motif de
+  correction (update conditionnel atomique) est déjà établi et pourrait être répliqué ici dans une
+  prochaine session.
+- **Agenda.jsx** ne vérifie pas si un médecin a déjà un rendez-vous au même horaire.
+- **Consultations.jsx** : `medecin_nom` est un champ texte libre pré-rempli avec l'email de la
+  personne qui enregistre l'arrivée (pas nécessairement le médecin traitant) — aucune association
+  fiable médecin↔consultation dans tout le module. Chantier de fond, pas un correctif ponctuel.
+
+### Étape 6 — Tableau de bord final
+
+**Ampleur réelle de cette mission** : 29 écrans, 13 rôles internes, sécurité RLS sur 68 tables,
+audit email exhaustif, revue détaillée de code sur 28 fichiers hôpital (~1,3 Mo de code React) +
+tests live. Traité en une seule session longue, avec suivi de tâches pour ne rien perdre en route.
+
+**Corrections et améliorations appliquées en direct (résumé)** :
+| Catégorie | Nombre | Détail |
+|---|---|---|
+| Sécurité (RLS, permissions) | 4 | Fuite NULL inter-établissements (5 tables) ; Pédiatrie inaccessible à tout rôle clinique ; fuite dashboard Laborantin/Radiologue/Caissier ; rôle Sterilisation trop permissif |
+| Emails construits | 8 | Invitation (+ compte auth réel provisionné), désactivation, rôle, permissions, rôle de secours, accès élargi approuvé/refusé, banque de sang stock bas, transfert annulé |
+| Sécurité clinique | 3 | Triage ABCDE ignorant tension/pouls ; double barrière transfusion renforcée (re-vérification à la transfusion + poches périmées bloquées) ; âge par défaut silencieux (Examens) |
+| Intégrité des données | 6 | Dose pédiatrique (poids non resynchronisé) ; décès en double ; date de naissance future ; taux de couverture caisse non borné ; bouton "Payer" court-circuitant la caisse ; admission sans vérification de lit |
+| Fiabilité / concurrence | 4 | Double administration médicament ; alertes jamais résolues + désynchronisées ; "tout marquer lu" partiel ; ModalAccouchement sans garde anti-double-clic |
+| Bugs de logique | 2 | Précédence d'opérateurs (file d'attente médecin) ; incohérence de casse |
+
+**Vérifications de sécurité menées et confirmées saines** : 68/68 tables avec RLS + policies ;
+0 policy grande ouverte (`USING(true)`) ; réservation de poche de sang déjà atomique (pas de race) ;
+isolation des transferts origine/destination correcte ; 2 faux positifs "critiques" débunkés
+empiriquement (`medicaments`, `hospitalisations`/`dispensations`/`constantes_vitales` — protection
+RLS transitive confirmée réelle, pas seulement théorique).
+
+**Décisions produit nécessaires avant d'aller plus loin** (détaillées avec contexte complet plus
+haut dans ce fichier) :
+1. Redéfinir les permissions internes par action (pas seulement par page) pour Urgences/Maternité/
+   Examens/Pédiatrie.
+2. Construire un écran d'édition de patient (groupe sanguin, allergies, antécédents modifiables
+   après création).
+3. Choisir la stratégie de verrouillage optimiste pour les données de surveillance concurrente
+   (partogramme, feuille de réveil, hospitalisations).
+4. Décider du sort de la redistribution inter-établissements (Reseau.jsx) — compléter ou retirer.
+5. Trancher la règle métier `Sterilisation.canValider` (test biologique "non fait") avec un référent
+   qualité.
+6. Arbitrer l'architecture Assistant IA (clé API côté client, minimisation des données patient
+   envoyées à Groq).
+7. Prioriser les races financières restantes (CaissePage/Stock) pour une prochaine session dédiée,
+   en réutilisant le motif déjà établi (update conditionnel atomique) pour poches_sang/administrations.
+
+**Non fait, assumé honnêtement** : parcours patients multiples bout en bout rejoués manuellement
+écran par écran (un seul parcours testé en direct — Urgences → banque de sang, le point le plus
+critique de la mission — le reste couvert par l'audit de code plutôt qu'un second clic-par-clic
+complet, faute de temps dans une session déjà très longue). Comptes de test (Direction +
+Caissier/Laborantin/Secrétaire/Radiologue de "Hopital Audit Test 2") laissés avec le mot de passe
+temporaire `AuditHopital2026!` fixé pendant cette session — à faire tourner si besoin, communiqué ici
+pour traçabilité complète.
+
+---
+
+## Incident de sécurité — secrets exposés dans l'historique git (2026-07-29)
+
+Signalé par l'utilisateur, traité en priorité absolue avant tout commit du reste de l'audit hôpital
+ci-dessus (toujours non commité, volontairement, pour ne pas mélanger les deux).
+
+**Constat** : `scripts/deploy-with-token.sh`, dans son tout premier commit (`ce1ce5d`, "chore:
+ajouter script deploy-with-token.sh"), contenait `SUPABASE_SERVICE_ROLE_KEY` et `RESEND_API_KEY` en
+clair. Un commit ultérieur (`d114b2e`, "fix(security): retire les secrets en dur...") avait déjà
+nettoyé le fichier à la pointe de la branche (`HEAD`) pour lire ces valeurs depuis des variables
+d'environnement — mais les valeurs réelles restaient lisibles dans l'historique git (`ce1ce5d` et le
+commit intermédiaire `ad8f6ff` qui n'y avait pas touché), donc toujours récupérables via `git log -p`
+ou `git show ce1ce5d:...` par quiconque a un clone du dépôt (public sur GitHub).
+
+### Ce qui a été fait dans cet environnement (avec preuve)
+
+1. **Recherche de portée** — confirmé qu'aucun autre fichier de tout l'historique git (`git log
+   --all --diff-filter=A`) n'a jamais commité de `.env` réel ou une autre copie de ces clés :
+   seuls `scripts/deploy-with-token.sh` (clés réelles) et `.env.example` (template vide, sain) ont
+   jamais touché ce territoire. Un grep large sur l'arbre de travail actuel et sur tout
+   `supabase/functions/` n'a trouvé aucune autre occurrence — uniquement des références légitimes
+   (`current_setting('app.service_role_key')` lu depuis une variable Postgres, jamais une valeur en
+   dur ; commentaires de documentation renvoyant au Dashboard Supabase).
+2. **Sauvegarde avant toute opération destructive** — branche `backup-before-secret-purge-20260729130636`
+   créée sur l'état exact d'avant réécriture, travail en cours de l'audit hôpital (non commité) mis
+   de côté par `git stash push -u` puis restauré intact après coup (vérifié : `git status` identique
+   avant/après, aucun fichier perdu).
+3. **Purge complète de l'historique** — `git filter-repo --path scripts/deploy-with-token.sh
+   --invert-paths --force` : supprime ce fichier de TOUS les commits (253 commits réécrits), pas
+   seulement du commit courant. **Vérifié après coup** : `git log --all --oneline -- scripts/deploy-with-token.sh`
+   ne retourne plus aucun résultat — le fichier et son contenu historique n'existent plus nulle part
+   dans le dépôt local. Fichier recréé ensuite dans son état actuel déjà propre (lecture depuis
+   variables d'environnement, `SUPABASE_SERVICE_ROLE_KEY`/`RESEND_API_KEY` jamais en dur).
+4. **`.gitignore` / `.env.example`** — déjà corrects avant cette session (`.env.deploy`,
+   `scripts/*.local.sh` déjà ignorés ; `.env.example` documente déjà `SUPABASE_SERVICE_KEY`,
+   `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY` sans valeurs) — vérifié, rien à changer sur ce point,
+   le point 3 de la demande était déjà satisfait par une session antérieure.
+
+### Ce qui NE pouvait PAS être fait depuis cet environnement — reste à faire par l'utilisateur
+
+1. **Révoquer l'ancienne clé `service_role`** : aucune commande CLI Supabase ne permet de faire
+   pivoter/révoquer une clé (`supabase projects api-keys` ne fait que lister) — action Dashboard
+   uniquement. **À faire** : Dashboard Supabase → Project Settings → API Keys → créer une nouvelle
+   clé secrète (`sb_secret_...`), remplacer partout, PUIS désactiver explicitement l'ancienne clé
+   `service_role` legacy (les clés legacy restent valides tant qu'elles ne sont pas désactivées
+   explicitement — confirmé dans la doc officielle Supabase).
+2. **Révoquer/régénérer la clé Resend** : à faire sur resend.com/api-keys (aucun accès depuis cet
+   environnement).
+3. **Redéployer les secrets des Edge Functions avec la nouvelle clé** : dès que l'utilisateur a la
+   nouvelle valeur, `supabase secrets set SUPABASE_SERVICE_ROLE_KEY=<nouvelle_valeur> --project-ref
+   yehqmvwmosskumbegzty` peut être exécuté (par moi ou par l'utilisateur) — non fait car la nouvelle
+   clé n'existe pas encore.
+4. **Ré-ajouter le remote `origin` et pousser l'historique réécrit** : `git filter-repo` retire
+   automatiquement le remote par sécurité (comportement standard de l'outil, pas une erreur) pour
+   forcer une revue avant tout push. Ni le `git remote add` ni le `git push --force` n'ont été
+   exécutés depuis cet environnement — remise en config/remote et force-push sont des actions
+   sensibles laissées à la main de l'utilisateur, qui devra aussi prévenir tout autre clone existant
+   du dépôt qu'un rebasage complet a eu lieu (un `git push --force` seul ne purge pas les clones déjà
+   existants ailleurs).
+
+**Non confirmé faute d'accès** : ancienne clé révoquée et testée invalide, nouvelle clé testée
+fonctionnelle — ces preuves ne peuvent être apportées qu'après les actions Dashboard ci-dessus, qui
+restent à faire par l'utilisateur.
+
+### Suivi — historique réécrit poussé sur GitHub (sur confirmation explicite de l'utilisateur)
+
+- Fichier recréé (`scripts/deploy-with-token.sh`, contenu propre) committé séparément de l'audit
+  hôpital (`chore(security): recree deploy-with-token.sh apres purge d'historique`).
+- Remote `origin` ré-ajouté, `git push --force origin master` effectué.
+- **Deuxième branche distante trouvée et traitée** : `claude/gracious-nobel-8982f0` existait aussi
+  sur GitHub avec l'ANCIEN historique (donc le secret y restait récupérable même après le push de
+  `master`) — repérée en énumérant toutes les branches distantes (`git ls-remote --heads origin`),
+  pas seulement celle explicitement mentionnée. Réécrite par le même `git filter-repo` (qui traite
+  toutes les refs locales par défaut), puis `git push --force` appliqué dessus aussi.
+- **Vérifié après un `git fetch` frais** (pas depuis un cache local potentiellement obsolète) :
+  `git log origin/master -- scripts/deploy-with-token.sh` et `git log origin/claude/gracious-nobel-8982f0
+  -- scripts/deploy-with-token.sh` ne montrent plus aucun des commits historiques exposant la clé —
+  seul le nouveau commit de recréation propre apparaît sur `master`. Les deux seules branches
+  présentes sur le dépôt distant (`git ls-remote --heads origin`) sont désormais toutes les deux
+  sur l'historique réécrit.
+- Branche de sauvegarde locale `backup-before-secret-purge-20260729130636` conservée (jamais
+  poussée), au cas où.
+- **Reste à faire par l'utilisateur, inchangé** : rotation réelle des clés (Supabase Dashboard +
+  Resend), mise à jour des secrets Edge Functions avec la nouvelle valeur, et prévenir tout autre
+  clone existant du dépôt (un `git pull` normal ne suffira pas pour eux après ce rebasage — il leur
+  faudra re-cloner ou faire un reset dur sur l'historique réécrit).
+

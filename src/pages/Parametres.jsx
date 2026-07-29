@@ -428,6 +428,24 @@ function SectionTicketCaisse({ etablissement_id }) {
   );
 }
 
+// Email best-effort vers un membre du personnel dont le compte a changé
+// (invitation, désactivation/réactivation, rôle, permissions, rôle de secours)
+// — sans notification, un employé qui n'est pas connecté en permanence n'a
+// aucun moyen de savoir que son accès a changé (voir audit exhaustif hôpital).
+async function notifierMembre(email, titre, corpsHtml) {
+  try {
+    const html = `<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto">
+  <div style="background:#0F172A;padding:20px 32px"><p style="color:white;font-size:18px;font-weight:700;margin:0">MedOS</p></div>
+  <div style="padding:24px 32px">
+    <h2 style="color:#0F172A;font-size:17px;margin:0 0 12px">${titre}</h2>
+    ${corpsHtml}
+  </div>
+  <div style="background:#F8FAFC;padding:16px 32px;border-top:1px solid #e5e7eb;text-align:center"><p style="font-size:12px;color:#9CA3AF;margin:0">MedOS</p></div>
+</div>`;
+    await supabase.functions.invoke("send-app-email", { body: { to: email, subject: `MedOS — ${titre}`, html } });
+  } catch { /* best-effort : le changement reste appliqué même si l'email échoue */ }
+}
+
 // ─── Section Gestion du personnel ────────────────────────────────────────────
 function SectionPersonnel({ etablissement_id, role }) {
   const { toasts, success, error: toastError } = useToast();
@@ -490,7 +508,28 @@ function SectionPersonnel({ etablissement_id, role }) {
         invitation_acceptee: false,
       });
       if (error) throw error;
-      success(`Invitation envoyée à ${inviteEmail.trim()}`);
+      // Provisionne le vrai compte de connexion (auth.users) + email avec lien
+      // de définition de mot de passe — sans ça, l'invitation ne crée qu'une
+      // ligne de permissions et la personne n'a aucun moyen de se connecter
+      // (trouvé lors de l'audit exhaustif hôpital).
+      try {
+        const { data: provResult, error: provError } = await supabase.functions.invoke("invite-membre", {
+          body: {
+            email: inviteEmail.trim().toLowerCase(),
+            role,
+            role_interne: inviteRole,
+            etablissement_id,
+          },
+        });
+        if (provError) throw provError;
+        if (provResult?.dejaExistant) {
+          success(`${inviteEmail.trim()} a déjà un compte MedOS — accès mis à jour, reconnexion suffira.`);
+        } else {
+          success(`Invitation envoyée à ${inviteEmail.trim()} — email avec lien d'activation transmis.`);
+        }
+      } catch (provErr) {
+        toastError(`Permissions enregistrées, mais l'envoi de l'invitation a échoué (${provErr.message}). Réessayez ou contactez le support.`);
+      }
       setInviteEmail("");
       setInviteRole("");
       setInvitePerms([]);
@@ -512,6 +551,14 @@ function SectionPersonnel({ etablissement_id, role }) {
         .eq("id", membre.id);
       if (error) throw error;
       setMembres((prev) => prev.map((m) => m.id === membre.id ? { ...m, actif: !m.actif } : m));
+      notifierMembre(
+        membre.email,
+        membre.actif ? "Votre accès MedOS a été désactivé" : "Votre accès MedOS a été réactivé",
+        membre.actif
+          ? `<p style="font-size:14px;color:#111827">Votre compte MedOS vient d'être désactivé par votre établissement. Vous ne pouvez plus vous connecter.</p>
+             <p style="font-size:13px;color:#6B7280">Si vous pensez qu'il s'agit d'une erreur, contactez votre établissement.</p>`
+          : `<p style="font-size:14px;color:#111827">Votre compte MedOS vient d'être réactivé. Vous pouvez de nouveau vous connecter normalement.</p>`
+      );
       success(membre.actif ? `${membre.email} désactivé.` : `${membre.email} réactivé.`);
     } catch (e) {
       toastError("Erreur : " + e.message);
@@ -542,6 +589,13 @@ function SectionPersonnel({ etablissement_id, role }) {
     try {
       await updateRolesSecours(membre.id, suivant.length ? suivant : null);
       setMembres((prev) => prev.map((m) => m.id === membre.id ? { ...m, roles_secours: suivant.length ? suivant : null } : m));
+      const ajoute = !actuels.includes(r);
+      notifierMembre(
+        membre.email,
+        "Vos rôles de secours MedOS ont changé",
+        `<p style="font-size:14px;color:#111827">Le rôle de secours <strong>${r}</strong> vient d'être ${ajoute ? "ajouté à" : "retiré de"} votre profil MedOS.</p>
+         <p style="font-size:13px;color:#6B7280">Un rôle de secours vous permet de demander un accès élargi temporaire vers ce rôle en cas de besoin (garde, urgence, absence d'un collègue).</p>`
+      );
     } catch (e) {
       toastError("Erreur : " + e.message);
     } finally {
@@ -558,6 +612,12 @@ function SectionPersonnel({ etablissement_id, role }) {
         .eq("id", membre.id);
       if (error) throw error;
       setMembres((prev) => prev.map((m) => m.id === membre.id ? { ...m, role_interne: nouveauRole } : m));
+      notifierMembre(
+        membre.email,
+        "Votre rôle MedOS a changé",
+        `<p style="font-size:14px;color:#111827">Votre rôle sur MedOS est passé de <strong>${membre.role_interne}</strong> à <strong>${nouveauRole}</strong>.</p>
+         <p style="font-size:13px;color:#6B7280">Les pages auxquelles vous avez accès ont pu changer en conséquence.</p>`
+      );
       success(`Rôle de ${membre.email} modifié.`);
     } catch (e) {
       toastError("Erreur : " + e.message);
@@ -586,6 +646,12 @@ function SectionPersonnel({ etablissement_id, role }) {
       if (error) throw error;
       setMembres((prev) => prev.map((m) => m.id === membre.id ? { ...m, permissions_nav: editPermsValues } : m));
       setEditPermsId(null);
+      notifierMembre(
+        membre.email,
+        "Vos accès MedOS ont changé",
+        `<p style="font-size:14px;color:#111827">Les pages auxquelles vous avez accès sur MedOS viennent d'être modifiées par votre établissement.</p>
+         <p style="font-size:13px;color:#6B7280">Reconnectez-vous pour voir vos accès à jour.</p>`
+      );
       success(`Permissions de ${membre.email} mises à jour.`);
     } catch (e) {
       toastError("Erreur : " + e.message);

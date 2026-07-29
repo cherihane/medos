@@ -382,11 +382,18 @@ export async function fetchHospitalisation(patient_id) {
 }
 
 export async function fetchLitsOccupes(etablissement_id) {
-  const { data } = await supabase
+  // etablissement_id n'était jusqu'ici jamais appliqué au filtre — la RLS de
+  // hospitalisations protège déjà via patients (vérifié), mais ce paramètre
+  // reçu-et-ignoré était trompeur et fragile (défense en profondeur absente
+  // si la policy RLS venait à changer). Trouvé lors de l'audit exhaustif
+  // hôpital.
+  let q = supabase
     .from("hospitalisations")
     .select("*, patients(prenom, nom, groupe_sanguin, triage)")
     .eq("statut", "hospitalise")
     .order("date_entree", { ascending: false });
+  if (etablissement_id) q = q.eq("etablissement_id", etablissement_id);
+  const { data } = await q;
   return data ?? [];
 }
 
@@ -1222,6 +1229,20 @@ export async function fetchPlanSoinsJour(etablissement_id) {
 // ─── Administrations ──────────────────────────────────────────────────────────
 export async function insertAdministration(fields) {
   return run(supabase.from("administrations_medicament").insert(fields).select().single());
+}
+
+// Re-vérification juste avant écriture (voir administrer() dans MonService.jsx)
+// — réduit la fenêtre de double administration entre deux postes infirmiers.
+export async function fetchAdministrationsAujourdhui(plan_soins_id, heure_prevue) {
+  const debut = new Date(); debut.setHours(0, 0, 0, 0);
+  const { data } = await supabase
+    .from("administrations_medicament")
+    .select("id")
+    .eq("plan_soins_id", plan_soins_id)
+    .eq("heure_prevue", heure_prevue)
+    .gte("heure_reelle", debut.toISOString())
+    .limit(1);
+  return (data?.length ?? 0) > 0;
 }
 
 export async function fetchAdministrationsJour(etablissement_id, dateISO) {

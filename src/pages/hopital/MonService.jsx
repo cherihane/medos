@@ -10,7 +10,7 @@ import {
   fetchLitsOccupes, insertConstante, fetchConstantes,
   insertNoteEvolution, fetchNotesEvolution,
   insertPerfusion, fetchPerfusionsActives, updatePerfusion,
-  fetchPlanSoinsJour, insertPlanSoins, insertAdministration,
+  fetchPlanSoinsJour, insertPlanSoins, insertAdministration, fetchAdministrationsAujourdhui,
   fetchMembresPersonnel, insertCommandeInterne, fetchCommandesInternes,
 } from "../../hooks/useMutations";
 import { useMedicaments, usePatients } from "../../hooks/useSupabaseData";
@@ -197,6 +197,10 @@ function ModalPerfusion({ hospi, auth, onClose, onSaved, showError }) {
 
   const handleSave = async () => {
     if (!form.volume_ml) return showError("Saisissez le volume.");
+    // Le min="1" HTML n'empêche pas une valeur négative tapée au clavier —
+    // trouvé lors de l'audit exhaustif hôpital.
+    if (Number(form.volume_ml) <= 0) return showError("Le volume doit être positif.");
+    if (form.debit_ml_h && Number(form.debit_ml_h) <= 0) return showError("Le débit doit être positif.");
     setSaving(true);
     try {
       await insertPerfusion({
@@ -600,6 +604,20 @@ function OngletPlanSoins({ litsOccupes, auth, etabId, success, showError }) {
   async function administrer(plan, heure, statut = "administre") {
     setSaving(`${plan.id}-${heure}`);
     try {
+      // Re-vérifie l'état réel juste avant l'écriture plutôt que de faire
+      // confiance à `dejaDonne` (calculé depuis le dernier chargement) : deux
+      // postes infirmiers voyant tous deux ce créneau "à donner" pouvaient
+      // chacun cliquer "Administrer" et créer une double administration du
+      // même médicament. Ne couvre pas une simultanéité stricte à la
+      // milliseconde près (nécessiterait une contrainte unique en base, non
+      // ajoutée dans cette session), mais réduit fortement la fenêtre.
+      // Trouvé lors de l'audit exhaustif hôpital.
+      const dejaExistant = await fetchAdministrationsAujourdhui(plan.id, heure);
+      if (dejaExistant) {
+        showError(`${plan.medicament_nom} — déjà administré à ${heure} par un autre poste. Rechargez la liste.`);
+        setSaving(null);
+        return;
+      }
       await insertAdministration({
         plan_soins_id: plan.id, patient_id: plan.patient_id,
         etablissement_id: etabId, infirmiere_email: auth?.user?.email ?? "",

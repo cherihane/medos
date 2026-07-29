@@ -1016,15 +1016,35 @@ function DashboardAideSoignant({ auth, navigate }) {
 
 // ── Wrappers nommés — réutilisent DashboardRole + panels existants ─────────────
 function DashboardRoleLayout({ ri }) {
+  const { auth } = useAuth();
+  // Le panneau "Patients enregistrés" affiche nom, antécédents et groupe
+  // sanguin — ne jamais l'afficher à un rôle qui n'a pas /hopital/patients
+  // dans sa nav (Laborantin, Radiologue, Caissier), sinon ce widget contourne
+  // silencieusement la restriction déjà appliquée à la page dédiée (même
+  // catégorie de bug que la fuite Sage-femme déjà corrigée sur ce dashboard,
+  // voir DEBUG_PROGRESS.md — audit exhaustif hôpital).
+  const aAccesPatients = Array.isArray(auth?.nav) && auth.nav.some((i) => i.path === "/hopital/patients");
   return (
     <Layout title="Dashboard Hopital" subtitle="Vue d'ensemble">
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
       <DashboardRole ri={ri} />
       <div className="dash-grid-2">
         <AlertesPanel />
-        <PatientsPanel />
+        {aAccesPatients ? <PatientsPanel /> : <LitsOccupesCard />}
       </div>
     </Layout>
+  );
+}
+
+// Remplace PatientsPanel pour les rôles sans accès à /hopital/patients —
+// garde le panneau "Lits occupés" (déjà présent dans PatientsPanel) sans les
+// données patients auxquelles ce rôle n'a normalement pas accès.
+function LitsOccupesCard() {
+  return (
+    <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+      <h3 style={{ margin: "0 0 10px", fontSize: 14, fontWeight: 700, color: colors.navy }}>Lits occupes</h3>
+      <LitsOccupesPanel />
+    </div>
   );
 }
 

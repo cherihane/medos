@@ -229,6 +229,13 @@ function ModalResultat({ examen, patient, etabId, onClose, onSaved }) {
           <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9CA3AF" }}>x</button>
         </div>
 
+        {refsDisponibles.length > 0 && !patient?.date_naissance && (
+          <div style={{ marginBottom: 12, padding: "8px 12px", backgroundColor: "#FEF3C7", borderRadius: 8, fontSize: 12, color: "#92400E", fontWeight: 600 }}>
+            ⚠ Date de naissance du patient non renseignée — les seuils de référence ci-dessous sont
+            calculés pour un adulte de {patientAge} ans par défaut, ce qui peut être faux (notamment
+            pour un enfant). Vérifiez l'interprétation manuellement.
+          </div>
+        )}
         {refsDisponibles.length > 0 && (
           <div style={{ marginBottom: 16 }}>
             <label style={labelSt}>Valeurs mesurees</label>

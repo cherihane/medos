@@ -525,12 +525,18 @@ function ModalAccouchement({ partogramme, grossesse, patients, etabId, auth, onC
   const [form, setForm] = useState({ date_heure_accouchement: new Date().toISOString().slice(0, 16), type_accouchement: "eutocique", indication_cesarienne: "", sage_femme: auth?.user?.email ?? "", medecin: "", perinee: "intact", delivrance: "naturelle", pertes_sang_ml: "", complications_mere: "", notes: "" });
   const [showNN, setShowNN] = useState(false);
   const [accData, setAccData] = useState(null);
+  const [saving, setSaving] = useState(false);
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
 
   const duree = partogramme ? Math.round((new Date(form.date_heure_accouchement) - new Date(partogramme.heure_debut_travail)) / 3600000 * 10) / 10 : null;
 
   const handleSave = async () => {
     if (!form.sage_femme.trim()) return showError("La sage-femme est obligatoire.");
+    if (saving) return;
+    // Seul modal de ce fichier sans état saving/disabled — un double-clic
+    // créait deux accouchements (et deux numéros) pour le même travail.
+    // Trouvé lors de l'audit exhaustif hôpital.
+    setSaving(true);
     try {
       const numero = await genererNumeroMaternite(etabId, "accouchement");
       const acc = await insertAccouchement({ ...form, grossesse_id: grossesse?.id ?? null, patient_id: partogramme?.patient_id ?? null, partogramme_id: partogramme?.id ?? null, etablissement_id: etabId, numero_accouchement: numero, date_heure_accouchement: new Date(form.date_heure_accouchement).toISOString(), duree_travail_heures: duree, pertes_sang_ml: form.pertes_sang_ml ? Number(form.pertes_sang_ml) : null });
@@ -538,7 +544,7 @@ function ModalAccouchement({ partogramme, grossesse, patients, etabId, auth, onC
       if (partogramme) await updatePartogramme(partogramme.id, { statut: "termine" });
       setAccData(acc);
       setShowNN(true);
-    } catch (e) { showError(e.message); }
+    } catch (e) { showError(e.message); setSaving(false); }
   };
 
   const patient = patients.find((p) => p.id === partogramme?.patient_id);
@@ -584,9 +590,9 @@ function ModalAccouchement({ partogramme, grossesse, patients, etabId, auth, onC
           <div style={{ gridColumn: "1/-1" }}><label style={labelSt}>Complications (mere)</label><input style={inputSt} value={form.complications_mere} onChange={(e) => set("complications_mere")(e.target.value)} placeholder="Optionnel" /></div>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={onClose} style={{ flex: 1, padding: 10, background: colors.bgSurface, border: `1px solid ${colors.border}`, borderRadius: 8, fontSize: 13, cursor: "pointer" }}>Annuler</button>
-          <button onClick={handleSave} style={{ flex: 2, padding: 10, background: ACCENT, color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-            Enregistrer et saisir le nouveau-ne
+          <button onClick={onClose} disabled={saving} style={{ flex: 1, padding: 10, background: colors.bgSurface, border: `1px solid ${colors.border}`, borderRadius: 8, fontSize: 13, cursor: "pointer" }}>Annuler</button>
+          <button onClick={handleSave} disabled={saving} style={{ flex: 2, padding: 10, background: saving ? "#D1D5DB" : ACCENT, color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer" }}>
+            {saving ? "Enregistrement..." : "Enregistrer et saisir le nouveau-ne"}
           </button>
         </div>
       </div>

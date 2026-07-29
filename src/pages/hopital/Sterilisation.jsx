@@ -637,10 +637,16 @@ function OngletEquipements({ etablissement_id, equipements, reload, lecture }) {
 export default function Sterilisation() {
   const { auth } = useAuth();
   const etabId = auth?.etablissement_id ?? null;
-  // Infirmière : accès lecture seule (voir les cycles/équipements, pas les
-  // enregistrer/valider/modifier) — Agent de stérilisation et Direction
-  // gardent le CRUD complet.
-  const lecture = auth?.role_interne === "Infirmière";
+  // Seuls Agent de stérilisation et Direction (role_interne null = accès
+  // complet) gardent le CRUD complet — tout autre rôle qui atteint cette
+  // page (Infirmière normalement, ou n'importe quel rôle via un accès élargi
+  // temporaire ou une permission individuelle personnalisée) est en lecture
+  // seule. Avant ce correctif, seule "Infirmière" était exclue explicitement :
+  // un Caissier/Secrétaire/Laborantin/Aide-soignant ayant atteint cette page
+  // (accès élargi, permissions_nav personnalisé) gardait silencieusement le
+  // CRUD complet, contrairement à l'intention documentée ci-dessus — trouvé
+  // lors de l'audit exhaustif hôpital.
+  const lecture = !!auth?.role_interne && auth.role_interne !== "Agent de sterilisation";
   const [onglet, setOnglet] = useState("jour");
   const [equipements, setEquipements] = useState([]);
 

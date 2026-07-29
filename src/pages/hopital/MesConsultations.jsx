@@ -394,7 +394,7 @@ export default function MesConsultations() {
       fetchExamens(eid),
     ]);
     setConsultations(cData);
-    setExamens(eData.filter((e) => e.statut === "resultat_disponible" && (e.prescripteur ?? "").includes(medecinNom.split("@")[0])));
+    setExamens(eData.filter((e) => e.statut === "resultat_disponible" && (e.prescripteur ?? "").toLowerCase().includes(medecinNom.split("@")[0].toLowerCase())));
     setLoading(false);
   }, [auth, todayISO, medecinNom]);
 
@@ -402,9 +402,14 @@ export default function MesConsultations() {
 
   // Filtrer consultations du medecin, triees par triage puis heure_arrivee
   const maFile = useMemo(() => {
+    // Erreur de précédence d'opérateurs corrigée : `A && B || C` s'évalue
+    // `(A && B) || C`, pas `A && (B || C)` — si medecinNom était vide (auth
+    // pas encore résolu), la clause `medecinNom === ""` rendait TOUTE ligne
+    // vraie, quel que soit son statut. Trouvé lors de l'audit exhaustif
+    // hôpital.
     const mes = consultations.filter((c) =>
       (c.statut === "en_attente" || c.statut === "en_cours") &&
-      (c.medecin_nom ?? "").toLowerCase().includes(medecinNom.split("@")[0].toLowerCase()) || medecinNom === ""
+      ((c.medecin_nom ?? "").toLowerCase().includes(medecinNom.split("@")[0].toLowerCase()) || medecinNom === "")
     );
     return [...mes].sort((a, b) => {
       const ta = TRIAGE_ORDER[a.triage] ?? 3;

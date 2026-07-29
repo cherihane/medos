@@ -305,6 +305,14 @@ function OngletCalculDoses({ patient }) {
   const [poids, setPoids] = useState(patient?.poids ? String(patient.poids) : "");
   const [medicamentIdx, setMedicamentIdx] = useState(0);
 
+  // Sans ce resync, changer de patient dans le sélecteur sans changer d'onglet
+  // laissait le poids de l'enfant précédent affiché — un calcul de dose
+  // silencieusement appliqué au mauvais poids (trouvé lors de l'audit
+  // exhaustif hôpital).
+  useEffect(() => {
+    setPoids(patient?.poids ? String(patient.poids) : "");
+  }, [patient?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const med = MEDICAMENTS_PED[medicamentIdx];
   const p = parseFloat(poids);
   const doseMg = !isNaN(p) && p > 0 && med.dose_mg_kg ? Math.min(p * med.dose_mg_kg, med.max_mg ?? Infinity) : null;

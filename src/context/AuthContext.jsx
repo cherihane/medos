@@ -46,6 +46,7 @@ export const NAV_INTERNE = {
       "/hopital/alertes",
       "/hopital/urgences",
       "/hopital/maternite",
+      "/hopital/pediatrie",
       "/hopital/bloc",
       "/hopital/dietetique",
       "/hopital/transferts",
@@ -60,6 +61,7 @@ export const NAV_INTERNE = {
       "/hopital/alertes",
       "/hopital/urgences",
       "/hopital/maternite",
+      "/hopital/pediatrie",
       "/hopital/bloc",
       "/hopital/sterilisation",
       "/hopital/planning",
@@ -67,6 +69,7 @@ export const NAV_INTERNE = {
     "Sage-femme": [
       "/hopital/dashboard",
       "/hopital/maternite",
+      "/hopital/pediatrie",
       "/hopital/patients",
       "/hopital/alertes",
       "/hopital/planning",

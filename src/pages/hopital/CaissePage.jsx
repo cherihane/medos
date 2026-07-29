@@ -87,7 +87,13 @@ function ModalEncaissement({ facture, patient, session, etabId, auth, config, on
   useEffect(() => { fetchPaiementsFacture(facture.id).then(setPaiementsExistants); }, [facture.id]);
 
   const sousTot       = facture.sous_total ?? 0;
-  const montCouv      = Math.round(sousTot * (Number(taux) || 0) / 100);
+  // Le max="100" HTML sur le champ n'empêche pas de taper une valeur hors
+  // borne — sans ce clamp, un taux > 100% rendait montCouv > sousTot,
+  // permettant d'enregistrer une facture "payée" avec un reste dû nul sans
+  // qu'aucun montant réel ne soit encaissé (trouvé lors de l'audit exhaustif
+  // hôpital).
+  const tauxClamp     = Math.min(100, Math.max(0, Number(taux) || 0));
+  const montCouv      = Math.round(sousTot * tauxClamp / 100);
   const tvaMont       = config?.tva_active && config?.tva_taux > 0 ? Math.round((sousTot - montCouv) * Number(config.tva_taux) / 100) : 0;
   const totalAPayer   = sousTot - montCouv + tvaMont;
   const dejaPayé      = paiementsExistants.reduce((s, p) => s + (p.montant ?? 0), 0);
@@ -123,12 +129,12 @@ function ModalEncaissement({ facture, patient, session, etabId, auth, config, on
       if (montEnc >= resteDu) {
         await updateFacture(facture.id, {
           statut: "payee", mode_paiement: mode, date_paiement: new Date().toISOString(),
-          taux_couverture: Number(taux), type_couverture: typeCouv || null,
+          taux_couverture: tauxClamp, type_couverture: typeCouv || null,
           montant_couverture: montCouv, reste_patient: 0,
         });
       } else {
         await updateFacture(facture.id, {
-          statut: "acompte", taux_couverture: Number(taux), type_couverture: typeCouv || null,
+          statut: "acompte", taux_couverture: tauxClamp, type_couverture: typeCouv || null,
           montant_couverture: montCouv, reste_patient: resteDu - montantPaye,
         });
       }
@@ -589,7 +595,8 @@ function FactureModal({ patients, etabId, config, onClose, onSaved }) {
   const stActes  = Object.values(actesCoches).reduce((s, a) => s + (Number(a.prix_unitaire) || 0), 0);
   const stLignes = lignes.reduce((s, l) => s + (Number(l.quantite)||0)*(Number(l.prix_unitaire)||0), 0);
   const sousTot  = stActes + stLignes;
-  const montCouv = Math.round(sousTot * (Number(taux) || 0) / 100);
+  const tauxClamp = Math.min(100, Math.max(0, Number(taux) || 0));
+  const montCouv = Math.round(sousTot * tauxClamp / 100);
   const tvaMont  = config?.tva_active && config?.tva_taux > 0 ? Math.round((sousTot - montCouv) * Number(config.tva_taux) / 100) : 0;
   const restePat = sousTot - montCouv + tvaMont;
   const assureurs = config?.assureurs ?? [];
@@ -605,7 +612,7 @@ function FactureModal({ patients, etabId, config, onClose, onSaved }) {
       await insertFacture({
         numero_facture: genNumero(), patient_id, etablissement_id: etabId ?? null,
         lignes: toutesLignes, sous_total: sousTot,
-        taux_couverture: Number(taux), type_couverture: typeCouv || null,
+        taux_couverture: tauxClamp, type_couverture: typeCouv || null,
         montant_couverture: montCouv, reste_patient: restePat,
         notes: notes || null, statut: "brouillon",
         date_facture: new Date().toISOString().slice(0, 10),

@@ -1,5 +1,5 @@
 import { colors } from "../../theme";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Layout from "../../components/Layout";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
@@ -29,6 +29,14 @@ export default function Alertes() {
   const [readIds, setReadIds] = useState(new Set());
   const [actioning, setActioning] = useState(null);
   const [generating, setGenerating] = useState(false);
+
+  // readIds ne reflétait que les clics de CETTE session — les alertes déjà
+  // lues en base (alert.lu) réapparaissaient "non lues" après un simple F5.
+  // Trouvé lors de l'audit exhaustif hôpital.
+  useEffect(() => {
+    const dejaLues = alertes.filter((a) => a.lu).map((a) => a.id);
+    if (dejaLues.length) setReadIds((prev) => new Set([...prev, ...dejaLues]));
+  }, [alertes]);
 
   const genererAlertesCliniques = async () => {
     if (!auth?.etablissement_id) return;
@@ -98,13 +106,40 @@ export default function Alertes() {
   };
 
   const markAllRead = async () => {
-    const unread = alertes.filter((a) => !readIds.has(a.id));
+    // Ne traitait que la page affichée (pageSize=20) en se présentant comme
+    // "tout marquer" — corrigé pour cibler explicitement toutes les alertes
+    // non lues non résolues de l'établissement, pas seulement celles
+    // actuellement à l'écran. Trouvé lors de l'audit exhaustif hôpital.
     try {
-      await Promise.all(unread.map((a) => updateAlerte(a.id, { lu: true })));
-      setReadIds(new Set(alertes.map((a) => a.id)));
-      success(`${unread.length} alertes marquées comme lues`);
+      let q = supabase.from("alertes").select("id").eq("resolu", false).eq("lu", false);
+      if (filter !== "tous") q = q.eq("severite", filter);
+      const { data: toutesNonLues } = await q;
+      const ids = (toutesNonLues ?? []).map((a) => a.id);
+      await Promise.all(ids.map((id) => updateAlerte(id, { lu: true })));
+      setReadIds((prev) => new Set([...prev, ...ids]));
+      success(`${ids.length} alerte(s) marquée(s) comme lue(s)`);
+      refetch();
     } catch (e) {
       toastError("Erreur : " + e.message);
+    }
+  };
+
+  // Aucune action ne permettait jamais de résoudre une alerte "clinique"
+  // (constantes non enregistrées, perfusion dépassée, sortie dépassée) —
+  // seules les alertes stock/banque de sang se résolvent automatiquement
+  // côté serveur. Une alerte clinique restait donc active indéfiniment,
+  // même des semaines après que le problème réel a été traité. Trouvé lors
+  // de l'audit exhaustif hôpital.
+  const resoudre = async (id) => {
+    setActioning(id);
+    try {
+      await updateAlerte(id, { resolu: true });
+      success("Alerte résolue");
+      refetch();
+    } catch (e) {
+      toastError("Erreur : " + e.message);
+    } finally {
+      setActioning(null);
     }
   };
 
@@ -197,14 +232,22 @@ export default function Alertes() {
                   <span style={{ fontSize: 12, color: colors.textMuted }}>{fmt(alert.created_at)}</span>
                 </div>
               </div>
-              {!isRead && (
+              <div style={{ display: "flex", gap: 8 }}>
+                {!isRead && (
+                  <button
+                    onClick={() => markRead(alert.id)}
+                    disabled={isActioning}
+                    style={{ padding: "6px 14px", backgroundColor: colors.bgCard, border: "1px solid var(--border)", borderRadius: 8, fontSize: 12, color: colors.text, cursor: isActioning ? "wait" : "pointer" }}>
+                    {isActioning ? "…" : "Marquer lu"}
+                  </button>
+                )}
                 <button
-                  onClick={() => markRead(alert.id)}
+                  onClick={() => resoudre(alert.id)}
                   disabled={isActioning}
-                  style={{ padding: "6px 14px", backgroundColor: colors.bgCard, border: "1px solid var(--border)", borderRadius: 8, fontSize: 12, color: colors.text, cursor: isActioning ? "wait" : "pointer" }}>
-                  {isActioning ? "…" : "Marquer lu"}
+                  style={{ padding: "6px 14px", backgroundColor: "#16A34A", border: "none", borderRadius: 8, fontSize: 12, color: "white", fontWeight: 600, cursor: isActioning ? "wait" : "pointer" }}>
+                  {isActioning ? "…" : "Résoudre"}
                 </button>
-              )}
+              </div>
               <div style={{ width: 7, height: 7, borderRadius: "50%", backgroundColor: isRead ? "#D1D5DB" : s.dot, flexShrink: 0 }} />
             </div>
           );

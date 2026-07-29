@@ -596,8 +596,17 @@ export default function Facturation() {
                     <td style={{ padding: "13px 16px" }}>
                       <div style={{ display: "flex", gap: 6 }}>
                         <button onClick={() => imprimerFacture(f, patients, auth)} style={{ padding: "4px 10px", backgroundColor: "#EFF6FF", color: "#2563EB", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>Imprimer</button>
+                        {/* Anciennement un bouton "Payer" qui passait la facture directement en
+                            statut="payee" sans passer par l'encaissement réel : aucune ligne
+                            paiements_facture, aucun journal_caisse, aucun numéro de reçu,
+                            reste_patient jamais remis à 0 — accessible à n'importe quel compte
+                            hôpital (pas seulement Caissier). Trouvé lors de l'audit exhaustif
+                            hôpital. Retiré : l'encaissement réel se fait uniquement via Caisse
+                            (onglet Factures > Encaisser), qui enregistre correctement le paiement. */}
                         {f.statut === "emise" && (
-                          <button onClick={async () => { await updateFacture(f.id, { statut: "payee" }); load(); success("Facture marquee payee"); }} style={{ padding: "4px 10px", backgroundColor: "#DCFCE7", color: "#16A34A", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>Payer</button>
+                          <span style={{ padding: "4px 10px", fontSize: 11, color: colors.textMuted, fontStyle: "italic" }}>
+                            Encaisser depuis Caisse
+                          </span>
                         )}
                         {f.statut === "brouillon" && (
                           <button onClick={async () => { await updateFacture(f.id, { statut: "emise" }); load(); success("Facture emise"); }} style={{ padding: "4px 10px", backgroundColor: "#FEF3C7", color: "#D97706", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>Emettre</button>

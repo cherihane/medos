@@ -133,11 +133,22 @@ function ModalTriage({ consultation, patients, onClose, onSaved }) {
 
   const patient = patients.find((p) => p.id === consultation.patient_id);
 
-  // Calcul automatique ESI selon ABCDE
+  // Calcul automatique ESI selon ABCDE — juste une proposition, le triage
+  // final reste modifiable ci-dessous par le clinicien. C (tension/pouls)
+  // était saisi mais jamais utilisé dans ce calcul (trouvé lors de l'audit
+  // exhaustif hôpital) : une tension systolique effondrée ou un pouls
+  // extrême passaient inaperçus si A/B/D restaient à leurs valeurs par
+  // défaut. Systolique < 90 ou pouls < 40 / > 130 = signes de choc/détresse.
   useEffect(() => {
     if (abcde.a === false || abcde.b === true) { setTriageFinal("urgent"); return; }
     if (abcde.d === "Douleur" || abcde.d === "Inconscient") { setTriageFinal("urgent"); return; }
-    if (abcde.b === null && abcde.a === null) return;
+    const systolique = parseInt((abcde.c_tension || "").split("/")[0], 10);
+    const pouls = parseInt(abcde.c_pouls, 10);
+    if ((!isNaN(systolique) && systolique < 90) || (!isNaN(pouls) && (pouls < 40 || pouls > 130))) {
+      setTriageFinal("urgent");
+      return;
+    }
+    if (abcde.b === null && abcde.a === null && !abcde.c_tension && !abcde.c_pouls) return;
     setTriageFinal("semi_urgent");
   }, [abcde]);
 

@@ -10,7 +10,7 @@ import Layout from "../../components/Layout";
 import { usePatientsPaginated, usePatientsStats, useMedicaments, useSpecialiteMedecin, useEtablissements } from "../../hooks/useSupabaseData";
 import { getSpecialiteConfig, CHAMP_LABEL_PAR_CLE } from "../../config/specialitesMedecin";
 import Pagination from "../../components/Pagination";
-import { insertPatient, insertOrdonnance, upsertHospitalisation, fetchHospitalisation, insertConstante, fetchConstantes, updatePatientTriage, insertNoteEvolution, fetchNotesEvolution, fetchPlanSoinsPatient, fetchPerfusionsPatient, insertAdministration, insertPlanSoins, insertDeces, fetchDecesEtablissement, genererNumeroCertificat, updatePatient, fetchRegimePatient, insertImagerie, fetchImageriePatient, insertCompteRendu, insertTransfertPatient, ajouterNotificationTransfert } from "../../hooks/useMutations";
+import { insertPatient, insertOrdonnance, upsertHospitalisation, fetchHospitalisation, insertConstante, fetchConstantes, updatePatientTriage, insertNoteEvolution, fetchNotesEvolution, fetchPlanSoinsPatient, fetchPerfusionsPatient, insertAdministration, insertPlanSoins, insertDeces, fetchDecesEtablissement, fetchDecesByPatient, genererNumeroCertificat, updatePatient, fetchRegimePatient, insertImagerie, fetchImageriePatient, insertCompteRendu, insertTransfertPatient, ajouterNotificationTransfert } from "../../hooks/useMutations";
 import { imprimerFicheTransfertExterne, envoyerFicheTransfertExterne } from "../../utils/ficheTransfertExterne";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../supabaseClient";
@@ -347,7 +347,7 @@ function ModalNouveauPatient({ etablissement_id, medecinNom, onClose, onSaved, o
           )}
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-            <div><label style={labelSt}>Date de naissance</label><input style={inputSt} type="date" value={form.date_naissance} onChange={(e) => set("date_naissance", e.target.value)} /></div>
+            <div><label style={labelSt}>Date de naissance</label><input style={inputSt} type="date" max={new Date().toISOString().slice(0, 10)} value={form.date_naissance} onChange={(e) => set("date_naissance", e.target.value)} /></div>
             <div>
               <label style={labelSt}>Sexe</label>
               <select style={{ ...inputSt, cursor: "pointer" }} value={form.genre} onChange={(e) => set("genre", e.target.value)}>
@@ -1172,6 +1172,16 @@ function ModalDeclarationDeces({ patient, hospitalisation, etablissement_id, aut
     setSaving(true);
     setErrMsg(null);
     try {
+      // Garde anti-doublon — existait déjà (fetchDecesByPatient) mais n'était
+      // jamais appelée : un second clic après une coupure réseau en fin de
+      // soumission pouvait générer un deuxième certificat pour le même patient
+      // (trouvé lors de l'audit exhaustif hôpital).
+      const decesExistant = await fetchDecesByPatient(patient.id);
+      if (decesExistant) {
+        setErrMsg(`Un décès est déjà enregistré pour ce patient (certificat ${decesExistant.numero_certificat ?? "—"}).`);
+        setSaving(false);
+        return;
+      }
       const numero_certificat = await genererNumeroCertificat(etablissement_id);
       const deces = await insertDeces({
         patient_id: patient.id,

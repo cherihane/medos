@@ -49,7 +49,7 @@ function BarreProgression({ valeur, total, couleur }) {
 }
 
 // ── Modal admettre ────────────────────────────────────────────────────────────
-function ModalAdmettre({ patients, serviceInitial, etabId, onClose, onSaved }) {
+function ModalAdmettre({ patients, litsOccupes, serviceInitial, etabId, onClose, onSaved }) {
   const [form, setForm] = useState({
     patient_id: "",
     service: serviceInitial ?? SERVICES[0],
@@ -72,8 +72,18 @@ function ModalAdmettre({ patients, serviceInitial, etabId, onClose, onSaved }) {
     })
     .slice(0, 80);
 
+  // Aucune vérification n'existait qu'un lit soit déjà occupé avant
+  // l'admission — deux patients pouvaient se retrouver affichés sur le même
+  // lit/chambre en même temps. Vérification côté client (best-effort, ne
+  // couvre pas une double soumission strictement simultanée) — trouvé lors
+  // de l'audit exhaustif hôpital.
+  const litDejaOccupe = form.lit?.trim() && (litsOccupes ?? []).some(
+    (h) => h.service === form.service && (h.lit ?? "").trim() === form.lit.trim() && h.patient_id !== form.patient_id
+  );
+
   const handleSave = async () => {
     if (!form.patient_id) { setErr("Selectionnez un patient."); return; }
+    if (litDejaOccupe) { setErr(`Le lit ${form.lit} (${form.service}) est déjà occupé par un autre patient.`); return; }
     setSaving(true);
     try {
       await upsertHospitalisation(form.patient_id, {
@@ -325,6 +335,7 @@ export default function Lits() {
       {modalAdmettre && (
         <ModalAdmettre
           patients={patients}
+          litsOccupes={lits}
           serviceInitial={modalAdmettre.service}
           etabId={etabId}
           onClose={() => setModalAdmettre(null)}

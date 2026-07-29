@@ -148,15 +148,39 @@ export function AccesElargiProvider({ children }) {
     return nouvelle;
   }, [etabId, email, roleInterne, delaiMinutes, refresh]);
 
+  // Notifie le demandeur par email — un employé qui a fait une demande n'est
+  // pas forcément devant l'app en train d'attendre une réponse (voir audit
+  // exhaustif hôpital : "accès élargi, tous les statuts").
+  const notifierDemandeur = useCallback(async (demandeId, titre, corps) => {
+    try {
+      const d = demandes.find((x) => x.id === demandeId);
+      if (!d?.demandeur_email) return;
+      const html = `<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto">
+  <div style="background:#0F172A;padding:20px 32px"><p style="color:white;font-size:18px;font-weight:700;margin:0">MedOS</p></div>
+  <div style="padding:24px 32px">
+    <h2 style="color:#0F172A;font-size:17px;margin:0 0 12px">${titre}</h2>
+    ${corps}
+  </div>
+  <div style="background:#F8FAFC;padding:16px 32px;border-top:1px solid #e5e7eb;text-align:center"><p style="font-size:12px;color:#9CA3AF;margin:0">MedOS</p></div>
+</div>`;
+      await supabase.functions.invoke("send-app-email", { body: { to: d.demandeur_email, subject: `MedOS — ${titre}`, html } });
+    } catch { /* best-effort */ }
+  }, [demandes]);
+
   const approuver = useCallback(async (id, duree_heures) => {
     await approuverDemandeAcces(id, { decide_par: email, duree_heures });
+    await notifierDemandeur(id, "Votre demande d'accès élargi a été approuvée",
+      `<p style="font-size:14px;color:#111827">Votre demande d'accès élargi a été approuvée pour ${duree_heures ?? 4}h.</p>
+       <p style="font-size:13px;color:#6B7280">Reconnectez-vous à MedOS pour en profiter — le bandeau d'accès élargi confirmera l'activation.</p>`);
     await refresh();
-  }, [email, refresh]);
+  }, [email, refresh, notifierDemandeur]);
 
   const refuser = useCallback(async (id) => {
     await refuserDemandeAcces(id, email);
+    await notifierDemandeur(id, "Votre demande d'accès élargi a été refusée",
+      `<p style="font-size:14px;color:#111827">Votre demande d'accès élargi a été refusée par votre établissement.</p>`);
     await refresh();
-  }, [email, refresh]);
+  }, [email, refresh, notifierDemandeur]);
 
   const marquerRevue = useCallback(async (id) => {
     await marquerRevueFaite(id, email);
