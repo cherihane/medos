@@ -26,3 +26,9 @@ yarn-error.log*
 # diagnostic (test scripts + credentials, jamais commité)
 /diagnostic
 .env.diagnostic
+
+# scripts de déploiement — contiennent des secrets réels une fois remplis
+# localement, ne doivent jamais être commités (voir scripts/deploy-with-token.sh
+# et .env.example pour la liste des variables attendues)
+scripts/*.local.sh
+.env.deploy
