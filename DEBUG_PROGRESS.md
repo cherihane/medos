@@ -6204,3 +6204,38 @@ restant identifié (balayage systématique des colonnes fantômes, races financi
 décisions produit) est documenté avec assez de détail pour être repris directement sans perte de
 contexte.
 
+### Balayage systématique du pattern "colonne fantôme" (2026-08-02)
+
+Suite à la recommandation ci-dessus, comparaison méthodique de chaque appel `insert*()` (champs
+littéraux du formulaire, pas juste la signature générique dans `useMutations.js`) contre le schéma
+réel de la table cible (`information_schema.columns`, pas les migrations qui peuvent être
+obsolètes), pour tous les écrans non couverts par un parcours patient live cette session :
+
+**Vérifiés et confirmés propres (aucune colonne fantôme)** :
+- **Sterilisation.jsx** — `ModalNouveauCycle` (table `lots_sterilisation`) et
+  `ModalAjouterEquipement` (`equipements_sterilisation`).
+- **BlocOperatoire.jsx** — programmation d'intervention (`interventions`), feuille de réveil
+  (`feuilles_reveil`), compte-rendu opératoire (`comptes_rendus_operatoires`).
+- **Dietetique.jsx** — prescription de régime (`prescriptions_dietetiques`), génération de
+  plateaux (`plateaux_repas`).
+- **Renouvellements.jsx** — renouvellement d'ordonnance (`ordonnances`) — note mineure hors-scope :
+  les lignes de l'ordonnance sont sérialisées dans le champ `notes` (JSON.stringify) plutôt que
+  d'utiliser la colonne dédiée `lignes` qui existe pourtant sur cette table ; fonctionnel mais pas
+  la bonne colonne, signalé sans corriger (pas un bug bloquant, juste un choix de stockage sous-optimal).
+- **Planning.jsx** — création de garde (`planning_gardes`).
+- **TransmissionGarde.jsx** — transmission (`transmissions_garde`).
+- **CaissePage.jsx** — ouverture/fermeture de session (`sessions_caisse`), clôture (`clotures_caisse`),
+  encaissement (`paiements_facture`), journal (`journal_caisse`), création de facture
+  (`factures_hopital`).
+- **Fournisseurs.jsx** — création/édition fournisseur (`fournisseurs`).
+
+**Conclusion** : les 3 bugs trouvés en testant les parcours patients (consultations.orientation,
+Examens.getPatient, vaccinations) restent, après ce balayage, les 3 seules occurrences confirmées
+de ce défaut dans le module hôpital — pas une épidémie généralisée. Le balayage n'a couvert que les
+écrans listés ci-dessus (les tables déjà vérifiées via les parcours patients live — accouchements,
+grossesses, partogrammes, nouveau_nes, poches_sang, transfusions, hospitalisations, consultations,
+examens — sont exclues de cette liste car déjà confirmées par un test réel, pas seulement une
+comparaison statique). Tous les écrans du module hôpital ont maintenant été soit testés en direct,
+soit vérifiés par comparaison champ-par-champ contre le schéma réel — aucun écran hôpital ne reste
+non vérifié sur ce point précis.
+
