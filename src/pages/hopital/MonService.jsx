@@ -311,7 +311,7 @@ function ModalPlanSoins({ litsOccupes, auth, onClose, onSaved, showError }) {
           titre: "Nouveau medicament au plan de soins",
           message: `${form.medicament_nom} — ${form.horaires?.join(", ") || ""}`,
           type: "soins",
-          statut: "non_lu",
+          lu: false,
           resolu: false,
         });
       } catch {

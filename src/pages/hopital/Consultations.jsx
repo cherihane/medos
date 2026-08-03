@@ -447,15 +447,18 @@ export default function Consultations() {
     setConsultations((prev) => prev.map((x) => x.id === c.id ? { ...x, ...updated } : x));
     success("Consultation terminee");
     if (etabId) {
-      supabase.from("alertes").insert({
-        etablissement_id: etabId,
-        patient_id: c.patient_id ?? null,
-        titre: "Consultation terminee",
-        message: `${c.medecin_nom || "Medecin"} — ${c.service || ""}${c.patient_id ? " — patient a reconduire" : ""}`,
-        type: "consultation",
-        statut: "non_lu",
-        resolu: false,
-      }).catch(() => {});
+      // Best-effort : le builder Supabase n'est pas un vrai Promise (pas de .catch()).
+      try {
+        await supabase.from("alertes").insert({
+          etablissement_id: etabId,
+          patient_id: c.patient_id ?? null,
+          titre: "Consultation terminee",
+          message: `${c.medecin_nom || "Medecin"} — ${c.service || ""}${c.patient_id ? " — patient a reconduire" : ""}`,
+          type: "consultation",
+          lu: false,
+          resolu: false,
+        });
+      } catch { /* best-effort */ }
     }
   };
 

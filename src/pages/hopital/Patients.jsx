@@ -476,14 +476,20 @@ function ModalNouvelleOrdonnance({ patient, etablissement_id, medecinNom, medica
         ...(etablissement_id ? { etablissement_id } : {}),
       });
       if (etablissement_id) {
-        await supabase.from("alertes").insert({
-          etablissement_id,
-          patient_id: patient.id,
-          titre: "Nouvelle ordonnance a dispenser",
-          message: `${patient.prenom} ${patient.nom} — ${lignesDetail.map((l) => l.nom).join(", ")}`,
-          type: "ordonnance",
-          statut: "non_lu",
-        }).catch(() => {});
+        // Best-effort : le builder Supabase n'est pas un vrai Promise (pas de .catch()).
+        // Bug préexistant confirmé : jusqu'ici, cet appel levait une exception
+        // ("catch is not a function") qui empêchait onSaved() de s'exécuter et affichait
+        // une fausse erreur alors que l'ordonnance était déjà créée avec succès.
+        try {
+          await supabase.from("alertes").insert({
+            etablissement_id,
+            patient_id: patient.id,
+            titre: "Nouvelle ordonnance a dispenser",
+            message: `${patient.prenom} ${patient.nom} — ${lignesDetail.map((l) => l.nom).join(", ")}`,
+            type: "ordonnance",
+            lu: false,
+          });
+        } catch { /* best-effort */ }
       }
       onSaved();
     } catch (e) { setErr(e.message); setSaving(false); }
@@ -1571,15 +1577,20 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
       if (alertesCritiques.length > 0 && etablissement_id) {
         const resumeConstantes = alertesCritiques.join(" · ");
 
-        await supabase.from("alertes").insert({
-          etablissement_id,
-          patient_id: patient.id,
-          titre: "Constante critique détectée",
-          message: `${patient.prenom} ${patient.nom} — ${resumeConstantes}`,
-          type: "constante_critique",
-          severite: "critique",
-          resolu: false,
-        }).catch(() => {});
+        // Best-effort : le builder Supabase n'est pas un vrai Promise (pas de .catch()).
+        // Bug préexistant confirmé : jusqu'ici, cette exception interrompait la fonction
+        // avant même le bloc de recommandation IA ci-dessous, qui ne s'exécutait donc jamais.
+        try {
+          await supabase.from("alertes").insert({
+            etablissement_id,
+            patient_id: patient.id,
+            titre: "Constante critique détectée",
+            message: `${patient.prenom} ${patient.nom} — ${resumeConstantes}`,
+            type: "constante_critique",
+            severite: "critique",
+            resolu: false,
+          });
+        } catch { /* best-effort */ }
 
         try {
           const ageAns = patient.date_naissance
@@ -1611,15 +1622,20 @@ En tant qu'assistant clinique, donne en 3 phrases maximum : 1) le risque princip
           const recommandation = data.choices?.[0]?.message?.content ?? null;
 
           if (recommandation) {
-            const { data: newRec } = await supabase.from("alertes").insert({
-              etablissement_id,
-              patient_id: patient.id,
-              titre: "Recommandation IA — constante critique",
-              message: recommandation,
-              type: "recommandation_ia",
-              severite: "critique",
-              resolu: false,
-            }).select().single().catch(() => ({ data: null }));
+            // Best-effort : le builder Supabase n'est pas un vrai Promise (pas de .catch()).
+            let newRec = null;
+            try {
+              const res = await supabase.from("alertes").insert({
+                etablissement_id,
+                patient_id: patient.id,
+                titre: "Recommandation IA — constante critique",
+                message: recommandation,
+                type: "recommandation_ia",
+                severite: "critique",
+                resolu: false,
+              }).select().single();
+              newRec = res.data;
+            } catch { /* best-effort */ }
             if (newRec) setRecommandationRecente(newRec);
           }
         } catch {

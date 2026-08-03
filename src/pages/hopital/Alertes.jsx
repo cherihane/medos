@@ -57,7 +57,7 @@ export default function Alertes() {
         const derniere = constantes?.[0];
         if (!derniere || (now - new Date(derniere.created_at)) > 6 * 3600000) {
           const nom = `${h.patients?.prenom ?? ""} ${h.patients?.nom ?? ""}`.trim();
-          alertesACreer.push({ etablissement_id: eid, titre: "Constantes non enregistrees", message: `${nom} — Aucune constante depuis plus de 6h (${h.service ?? ""} Lit ${h.lit ?? "—"})`, severite: "alerte", resolu: false });
+          alertesACreer.push({ etablissement_id: eid, patient_id: h.patient_id ?? null, titre: "Constantes non enregistrees", message: `${nom} — Aucune constante depuis plus de 6h (${h.service ?? ""} Lit ${h.lit ?? "—"})`, type: "constante_manquante", severite: "alerte", resolu: false });
         }
       }
 
@@ -66,7 +66,7 @@ export default function Alertes() {
         if (p.heure_fin_prevue && new Date(p.heure_fin_prevue) < now) {
           const nom = `${p.patients?.prenom ?? ""} ${p.patients?.nom ?? ""}`.trim();
           const retardMin = Math.round((now - new Date(p.heure_fin_prevue)) / 60000);
-          alertesACreer.push({ etablissement_id: eid, titre: "Fin de perfusion depassee", message: `${nom} — Perfusion ${p.type_solute} ${p.volume_ml}mL terminee depuis ${retardMin} min`, severite: "critique", resolu: false });
+          alertesACreer.push({ etablissement_id: eid, patient_id: p.patient_id ?? null, titre: "Fin de perfusion depassee", message: `${nom} — Perfusion ${p.type_solute} ${p.volume_ml}mL terminee depuis ${retardMin} min`, type: "perfusion", severite: "critique", resolu: false });
         }
       }
 
@@ -74,7 +74,7 @@ export default function Alertes() {
       for (const h of hospit) {
         if (h.date_sortie_prevue && new Date(h.date_sortie_prevue) < now) {
           const nom = `${h.patients?.prenom ?? ""} ${h.patients?.nom ?? ""}`.trim();
-          alertesACreer.push({ etablissement_id: eid, titre: "Sortie depassee", message: `${nom} — Sortie prevue le ${new Date(h.date_sortie_prevue).toLocaleDateString("fr-FR")} non effectuee (${h.service ?? ""} Lit ${h.lit ?? "—"})`, severite: "alerte", resolu: false });
+          alertesACreer.push({ etablissement_id: eid, patient_id: h.patient_id ?? null, titre: "Sortie depassee", message: `${nom} — Sortie prevue le ${new Date(h.date_sortie_prevue).toLocaleDateString("fr-FR")} non effectuee (${h.service ?? ""} Lit ${h.lit ?? "—"})`, type: "sortie_hospitalisation", severite: "alerte", resolu: false });
         }
       }
 

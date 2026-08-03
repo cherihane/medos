@@ -62,14 +62,17 @@ function ModalArrivee({ patients, etabId, auth, onClose, onSaved }) {
       });
       if (form.triage === "urgent" && etabId) {
         const pat = patients.find((p) => p.id === form.patient_id);
-        await supabase.from("alertes").insert({
-          etablissement_id: etabId,
-          patient_id: form.patient_id,
-          titre: "Arrivee urgente aux urgences",
-          message: `${pat ? pat.prenom + " " + pat.nom : "Patient"} — ${form.motif || "Motif non precise"}`,
-          type: "urgence",
-          statut: "non_lu",
-        }).catch(() => {});
+        // Best-effort : le builder Supabase n'est pas un vrai Promise (pas de .catch()).
+        try {
+          await supabase.from("alertes").insert({
+            etablissement_id: etabId,
+            patient_id: form.patient_id,
+            titre: "Arrivee urgente aux urgences",
+            message: `${pat ? pat.prenom + " " + pat.nom : "Patient"} — ${form.motif || "Motif non precise"}`,
+            type: "urgence",
+            lu: false,
+          });
+        } catch { /* best-effort */ }
       }
       onSaved();
       onClose();

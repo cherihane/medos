@@ -7095,3 +7095,62 @@ ci-dessus (corps de fonction confirmé + passerelle confirmée accepter exacteme
 cette URL) est jugée suffisante : seul le jeton envoyé a changé, rien d'autre dans la logique du
 trigger.
 
+### Point 5 — complétude des alertes cliniques : 4 bugs compounds jamais corrigés, aucune alerte patient n'a jamais été créée
+
+En vérifiant la complétude des journaux/notifications sensibles, découverte d'un bug déjà
+partiellement documenté (`.catch is not a function`, signalé mais non corrigé lors de la mission
+précédente sur `ModalNouvelleOrdonnance`) qui touchait en réalité **7 écrans différents**, plus
+**3 bugs additionnels indépendants** qui, ensemble, ont empêché TOUTE alerte clinique liée à un
+patient d'être créée depuis l'écriture de ce code — jamais un seul cas, vérifié par requête directe
+en base.
+
+**Bug 1 — `.catch()` sur un builder Supabase qui n'est pas un vrai Promise** (confirmé dans
+`node_modules/@supabase/postgrest-js/src/PostgrestBuilder.ts` : seul `.then()` est implémenté,
+jamais `.catch()`/`.finally()`) : appeler `.catch(() => {})` directement sur
+`supabase.from(...).insert(...)` sans `await`/`.then()` préalable lève une `TypeError` **avant
+même que la requête ne parte**. Touchait 6 sites : `Consultations.jsx` (consultation terminée),
+`Urgences.jsx` (arrivée urgente — **bloquait aussi `onSaved()/onClose()` de la modale**),
+`Stock.jsx` (médicament servi — **bloquait aussi le toast de succès et le rechargement de la
+liste**), `Examens.jsx` (résultat disponible), `Patients.jsx` ×3 (nouvelle ordonnance — **le bug
+déjà signalé précédemment** ; constante critique — **bloquait aussi tout le bloc de recommandation
+IA qui suit, jamais exécuté depuis l'écriture de ce code** ; recommandation IA elle-même). Corrigé
+en isolant chaque insert dans son propre `try/catch`, suivant le pattern déjà correctement établi
+dans `MonService.jsx` (son propre commentaire documentait déjà la cause exacte).
+
+**Bug 2 — colonne `patient_id` inexistante sur `alertes`** : tous ces inserts supposaient une
+colonne `patient_id` jamais créée. Ajoutée par migration (`20260804000000_...sql`), purement
+additive.
+
+**Bug 3 — champ `statut: "non_lu"` au lieu de `lu: false`** : la table n'a jamais eu de colonne
+`statut` (seulement `lu` boolean). Touchait les 6 sites ci-dessus **plus `MonService.jsx`** (qui
+avait pourtant déjà le bon pattern try/catch pour le Bug 1, mais restait cassé par celui-ci).
+Corrigé dans les 6 fichiers.
+
+**Bug 4 — contrainte `alertes_type_check` jamais mise à jour** : n'autorisait que le vocabulaire
+historique pharmacie/distributeur (`rupture`, `expiration`, `credit`, `commande`, `ordonnance`,
+`temperature`, `livraison`, `pharmacovigilance`, `contrefacon`, `acces_elargi`) — aucun des 7
+types utilisés par le code hôpital (`urgence`, `consultation`, `examen`, `soins`,
+`constante_critique`, `recommandation_ia`, `dispensation`) n'était accepté. Élargie par migration
+(`20260804010000_...sql`). Au passage, découverte que `Alertes.jsx` (`genererAlertesCliniques`,
+lui-même déjà annoté "Trouvé lors de l'audit exhaustif hôpital" pour un autre correctif) créait 3
+types d'alertes cliniques auto-générées (constantes non enregistrées, fin de perfusion dépassée,
+sortie dépassée) **sans jamais renseigner `type` du tout** — violation `NOT NULL`, même symptôme.
+Corrigé en ajoutant `patient_id` et un `type` dédié à chacune (`constante_manquante`,
+`perfusion`, `sortie_hospitalisation`), ajoutés à la même contrainte élargie.
+
+**Preuve réelle avant/après** : reproduction en direct sur `/hopital/urgences` (compte Hôpital
+Audit Test 2), arrivée "Urgent" pour un patient réel. Avant tout correctif : aucune ligne dans
+`alertes`, la modale ne se fermait pas correctement (bug 1). Après les 4 correctifs appliqués un
+par un et retestés à chaque étape (chaque étape isolée a été vérifiée séparément par requête
+directe en base, confirmant précisément QUEL bug bloquait encore l'insert) : ligne réellement
+créée en base —
+`titre="Arrivee urgente aux urgences", type="urgence", patient_id=<uuid réel>, lu=false,
+resolu=false`. Les 5 autres sites (`consultation`, `examen`, `soins`, `constante_critique`,
+`recommandation_ia`, `dispensation`) partagent exactement le même schéma d'insert et la même
+contrainte corrigée ; non re-testés individuellement en direct faute de temps, mais le mécanisme
+est identique et déjà prouvé.
+
+Nettoyage : les 4 arrivées de test créées pendant cette vérification (consultations `service =
+Urgences`) et l'alerte de test associée ont été supprimées ; le tableau de bord Urgences confirmé
+revenu à 0 patient.
+

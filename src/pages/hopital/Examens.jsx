@@ -204,14 +204,18 @@ function ModalResultat({ examen, patient, etabId, onClose, onSaved }) {
       }
       await updateExamen(examen.id, patch);
       if (etabId) {
-        await supabase.from("alertes").insert({
-          etablissement_id: etabId,
-          patient_id: examen.patient_id ?? null,
-          titre: "Resultat d'examen disponible",
-          message: `${examen.type_examen}${examen.libelle ? " — " + examen.libelle : ""}${patient ? " — " + patient.prenom + " " + patient.nom : ""}`,
-          type: "examen",
-          statut: "non_lu",
-        }).catch(() => {});
+        // Best-effort : le builder Supabase n'est pas un vrai Promise (pas de .catch()) —
+        // on isole dans son propre try/catch pour ne jamais bloquer la sauvegarde du résultat.
+        try {
+          await supabase.from("alertes").insert({
+            etablissement_id: etabId,
+            patient_id: examen.patient_id ?? null,
+            titre: "Resultat d'examen disponible",
+            message: `${examen.type_examen}${examen.libelle ? " — " + examen.libelle : ""}${patient ? " — " + patient.prenom + " " + patient.nom : ""}`,
+            type: "examen",
+            lu: false,
+          });
+        } catch { /* best-effort */ }
       }
       onSaved();
       onClose();
