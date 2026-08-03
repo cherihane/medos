@@ -6239,3 +6239,78 @@ comparaison statique). Tous les écrans du module hôpital ont maintenant été 
 soit vérifiés par comparaison champ-par-champ contre le schéma réel — aucun écran hôpital ne reste
 non vérifié sur ce point précis.
 
+---
+
+## Migration des 7 Edge Functions vers les nouvelles clés API (2026-08-02/03)
+
+Suite à l'incident de sécurité (clé `service_role` exposée dans l'historique git, purgé plus haut),
+vérification demandée par l'utilisateur : `src/supabaseClient.js` utilisait déjà la nouvelle clé
+`sb_publishable_...`, mais **les 7 Edge Functions référençaient encore les variables legacy**
+(`SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`) — confirmé par grep exhaustif sur
+`supabase/functions/*/index.ts`. Conséquence directe : désactiver la clé `service_role` legacy
+aurait cassé ces 7 fonctions sans préavis.
+
+**Migration effectuée, une fonction à la fois, chacune redéployée et testée avec une vraie action
+réelle avant de passer à la suivante** :
+
+1. `send-app-email` → email réel reçu (12:42:55).
+2. `check-stock-alert` → alerte réelle créée en base + email reçu (12:49:38). Un premier essai a
+   échoué (`WORKER_ERROR`, 500) — diagnostiqué avec une fonction jetable temporaire créée puis
+   supprimée juste pour ça : le dictionnaire `SUPABASE_SECRET_KEYS` est indexé par le **nom donné à
+   la clé dans le Dashboard** (`my_new_secret_key_medos` dans ce cas), pas par un nom générique
+   `"default"` comme la documentation Supabase le suggère par défaut. Corrigé en prenant
+   `Object.values(...)[0]` plutôt qu'un nom en dur — reste valide même si la clé est renommée.
+3. `check-banque-sang-alert` → alerte réelle créée + email reçu (12:51:06).
+4. `send-activation-email` → email réel reçu (13:11:58), **mais via invocation directe, pas via le
+   trigger réel** (voir découverte ci-dessous).
+5. `invite-membre` → compte `auth.users` réel créé + email d'invitation reçu (10:46:50), compte de
+   test supprimé après vérification via l'API Admin (qui a au passage confirmé que la nouvelle clé
+   secrète fonctionne aussi directement contre l'API Auth, pas seulement via les Edge Functions).
+6. `generate-fiche-transfert-pdf` → PDF réel généré, décodé, en-tête `%PDF-` vérifié (1920 octets).
+7. `generate-bon-commande-pdf` → PDF réel généré et vérifié (1831 octets).
+
+**Les 7 fonctions sont confirmées fonctionnelles avec les nouvelles clés — la clé `service_role`
+legacy peut être désactivée sans casser ces fonctions.**
+
+### Effet de bord corrigé en cours de route
+
+Le premier déploiement de `check-stock-alert` a utilisé `--no-verify-jwt` par réflexe (copié de
+l'ancien script `deploy-with-token.sh`), ce qui a **changé son réglage `verify_jwt` de `true` à
+`false`** — une régression de sécurité réelle (la fonction serait devenue appelable sans aucune
+authentification). Détecté en comparant l'état avant/après via `supabase functions list -o json`,
+corrigé en redéployant sans le flag. Pour les 6 fonctions suivantes, le réglage `verify_jwt` d'origine
+de chacune a été vérifié avant déploiement et préservé explicitement (flag `--no-verify-jwt` passé
+seulement pour celles qui l'avaient déjà à `false` : `send-app-email`, `check-banque-sang-alert`,
+`invite-membre`).
+
+### Découverte séparée, non résolue — le trigger d'activation de compte n'a probablement jamais fonctionné
+
+En testant `send-activation-email`, déclenchement du vrai trigger DB (`trg_inscription_email` sur
+`etablissements`, migration `20240112000000_inscription_email_trigger.sql`) via un vrai `UPDATE
+actif = true` sur un établissement de test → **aucun appel HTTP émis** (`net._http_response` vide).
+Cause trouvée : la fonction trigger lit trois GUC (`app.activation_email_url`,
+`app.webhook_secret`, `app.service_role_key`) censées être configurées via `ALTER DATABASE postgres
+SET ...` — **vérifié qu'aucune des trois n'est configurée nulle part** (`pg_db_role_setting` vide,
+`current_setting(..., true)` retourne `NULL` pour les trois). Le commentaire de la migration
+elle-même indique une étape de configuration manuelle après déploiement ("4. Configuration requise
+après déploiement de l'Edge Function") qui n'a apparemment jamais été exécutée.
+
+**Conséquence probable, jamais vérifiée avant cette session** : les emails "compte validé" et
+"compte refusé" (Email 3 et Email 4 du parcours d'inscription) n'ont peut-être **jamais été envoyés
+automatiquement** depuis la création de cette fonctionnalité, quelle que soit la clé API utilisée —
+ce n'est pas un problème lié à la migration des clés, c'est antérieur et indépendant.
+
+**Non corrigé** : `ALTER DATABASE postgres SET ...` a été tenté depuis cet environnement et refusé
+(`permission denied to set parameter`) — le rôle utilisé par `supabase db query --linked` n'a pas
+les privilèges nécessaires. Cette configuration ne peut être faite que depuis le Dashboard Supabase
+(SQL Editor, qui s'exécute avec des privilèges plus élevés) ou par un accès `postgres` direct.
+Testé à la place par invocation HTTP directe de la fonction (avec un nouveau `WEBHOOK_SECRET`
+généré et déployé pour l'occasion, remplaçant l'ancien qui n'était de toute façon jamais
+effectivement utilisé par le trigger faute de GUC configurée) — preuve que le **code** fonctionne
+avec les nouvelles clés, indépendamment du fait que le **trigger réel** reste cassé.
+
+**Décision produit nécessaire** : configurer les 3 GUC manquantes (valeurs prêtes : URL de la
+fonction, nouveau `WEBHOOK_SECRET` déjà déployé côté fonction, nouvelle clé secrète) pour que les
+emails d'activation/refus partent enfin automatiquement — nécessite un accès SQL Editor Dashboard
+ou équivalent, hors de portée de cet environnement.
+
