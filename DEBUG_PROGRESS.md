@@ -6371,3 +6371,78 @@ UTC ce jour**, silencieusement, plus aucune nouvelle inscription n'était trait�
 4. ✅ Test de bout en bout réel effectué avec preuve (executions n8n + réception Gmail), incluant
    une validation authentique par l'utilisateur lui-même en temps réel.
 
+---
+
+## Balayage large — dépendances cachées restantes aux clés legacy (2026-08-03)
+
+Demandé pour confirmer, avant de considérer la rotation de clés terminée, qu'aucun autre endroit
+du système (autres workflows n8n, scripts du repo, autres webhooks/automations) ne dépend encore
+d'une clé Supabase legacy ou d'une clé Resend en dur.
+
+**1. Les 7 autres workflows n8n de l'instance (tous inactifs/archivés)** — inspectés un par un
+(`n8n_get_workflow`, mode full) :
+- `Kela 01 — Stock Intelligent`, `Kela 04 — Agent IA Comptoir`, `Kela 05 — Kela Loyalty` :
+  utilisent uniquement une credential Twilio (`httpBasicAuth`, id `TmlFswYSHQbRTlz9`) — aucune
+  référence Supabase ni Resend.
+- `Résumé quotidien IA & SaaS`, `Résumé matinal Tech` : RSS + envoi SMTP (`contact@kelagroup.org`)
+  — aucune clé Supabase/Resend.
+- `Email entrant -> Rappel Google Calendar` : IMAP + Google Calendar OAuth — aucune clé
+  Supabase/Resend.
+- **`MedOS — Onboarding Etablissements` (v1, archivé, id `bb2omzp8LWZbpyN1`, prédécesseur du
+  workflow v2 déjà corrigé)** : le nœud `Recuperer demandes en attente` contient encore la clé JWT
+  legacy **`service_role`** codée en clair dans ses en-têtes `apikey`/`Authorization` (exactement
+  la clé exposée dans l'incident git initial). **Vérifié en direct par un appel réel à l'API REST
+  avec cette clé : `401 — "Legacy API keys are disabled... disabled on
+  2026-08-03T10:53:37"`** — donc cette clé est bien morte, aucun risque d'usage actif puisque le
+  workflow est archivé et inactif. Reste néanmoins une clé secrète en clair au repos dans la base
+  n8n — nettoyage recommandé (soit suppression du workflow archivé puisqu'il est un doublon obsolu
+  du v2 déjà migré, soit reconfiguration vers les mêmes credentials `Supabase MedOS`/`Resend API`
+  que le v2, par cohérence).
+
+**2. Grep exhaustif du repo** (`service_role`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
+motif JWT legacy `eyJ...c3VwYWJhc2U`, motif clé Resend `re_[A-Za-z0-9_-]{15,}`), hors les 7
+Edge Functions déjà migrées :
+- `README.md`, `.env.example` : uniquement des noms de variables vides (placeholders attendus).
+- `scripts/create-test-users.js`, `create-staff-users.js`, `setup-db.js`, `seed.js`,
+  `deploy-edge-function.sh` : uniquement des commentaires/messages d'erreur qui *indiquent où
+  trouver* la clé (Dashboard) et qui l'attendent via variable d'environnement au runtime — aucune
+  valeur en dur.
+- `scripts/deploy-with-token.sh` : confirmé déjà corrigé (variables d'environnement uniquement,
+  cf. remédiation initiale de l'incident).
+- Migrations SQL (`20240102000000_stock_alert_trigger.sql`,
+  `20260719_fix_stock_alert_trigger_signature.sql`, `20240112000000_inscription_email_trigger.sql`)
+  : utilisent `current_setting('app.service_role_key', true)` — un GUC Postgres jamais configuré
+  (confirmé plus haut dans ce document), pas une valeur en dur.
+
+**3. Trouvaille substantielle — clé JWT `anon` legacy codée en clair, active en production**,
+dans **2 migrations qui définissent les triggers réellement utilisés aujourd'hui** :
+- `supabase/migrations/20260719_fix_stock_alert_webhook_auth.sql` (fonction
+  `notify_stock_alert()`) — remplace, par ordre alphabétique de nom de fichier au sein du même
+  jour (`...trigger_signature.sql` s'applique avant `...webhook_auth.sql`), la version basée sur
+  `current_setting()` par une version qui **embarque directement le JWT `anon` legacy en clair**
+  dans le corps de la fonction `SECURITY DEFINER`. C'est donc **cette version qui est active
+  aujourd'hui** pour le trigger de `medicaments`, pas celle basée sur le GUC.
+- `supabase/migrations/20260801000001_banque_sang_alert_trigger.sql` (fonction
+  `notify_banque_sang_alert()`, datée d'hier) : même clé JWT `anon` legacy codée en clair,
+  copiée du même modèle.
+- **Vérifié en direct** : un appel réel à `check-stock-alert` avec ce JWT legacy `anon` retourne
+  **`200 OK`** — la clé fonctionne encore aujourd'hui malgré la désactivation des clés legacy côté
+  Dashboard. Explication : la désactivation du 2026-08-03 10:53:37 bloque l'API REST/PostgREST
+  (`apikey`/`Authorization` contre le registre de clés — confirmé 401 sur `/rest/v1/...`), mais
+  ne bloque pas la vérification `verify_jwt` de la passerelle Edge Functions, qui valide juste la
+  signature JWT avec l'ancien secret — toujours actif. **Donc aucune panne actuelle**, mais ce
+  mécanisme reste fragile : si/quand Supabase retire complètement la vérification par l'ancien
+  secret JWT (l'objectif final de leur migration de clés), ces deux triggers cesseront de
+  fonctionner silencieusement (le trigger avale l'erreur via `EXCEPTION WHEN OTHERS`), exactement
+  comme cela s'est produit pour le workflow n8n d'onboarding.
+- Nuance importante : contrairement à une clé `service_role`, une clé `anon` est **publique par
+  conception** (déjà visible en clair dans le bundle JS frontend) — ce n'est donc pas une fuite de
+  secret au sens strict, mais c'est bien une **dépendance restante à une clé legacy**, codée en
+  dur, qui contredit l'objectif de rotation complète.
+
+**Aucune autre dépendance cachée trouvée.** Les 2 points restants (workflow n8n v1 archivé à
+nettoyer, 2 migrations à faire évoluer vers la nouvelle clé publishable) sont documentés ci-dessus
+avec preuve réelle ; correction proposée à l'utilisateur, en attente de sa décision (touche des
+triggers de production et/ou une base n8n externe — hors du périmètre de la demande initiale de
+vérification).
+
