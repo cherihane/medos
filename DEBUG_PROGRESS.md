@@ -6853,3 +6853,18 @@ critiques (78/48, 138) saisis par ce raccourci laissaient le triage inchangé su
 Données de test nettoyées après vérification (consultation et constante vitale de test
 supprimées).
 
+### Bilan des 3 correctifs
+
+Les 3 failles cliniques critiques sont corrigées, chacune vérifiée par un test réel avant/après
+(pas seulement une relecture de code), et committées séparément :
+1. `d230815` — Allergies jamais vérifiées à la prescription.
+2. `2e09c9d` — Perte silencieuse en cas de modification concurrente.
+3. `b1604d5` — Raccourci "Constantes rapides" contournant le triage.
+
+Toutes les données de test (patient Moussa Kaba TestAllergie, médicament Amoxicilline 500mg,
+intervention/feuille de réveil de test, consultation/constante de test) ont été supprimées après
+vérification — retour confirmé à l'état exact d'avant cette mission (3 patients, 0 alerte
+allergie). Aucune fonction protégée d'`AuthContext.jsx` n'a été touchée. Un bug préexistant sans
+rapport (`.catch is not a function` sur l'insert `alertes` de `ModalNouvelleOrdonnance`) a été
+découvert en testant le point 1 et documenté sans être corrigé, hors périmètre de cette mission.
+
