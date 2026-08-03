@@ -124,6 +124,16 @@ function ModalArrivee({ patients, etabId, auth, onClose, onSaved }) {
   );
 }
 
+// Signes vitaux de choc/detresse circulatoire (portion "C" du triage ABCDE) —
+// systolique < 90 ou pouls < 40 / > 130. Extrait en fonction partagee pour que
+// ModalConstantesRapides applique exactement la meme regle que ModalTriage
+// (trouve lors de l'audit : le raccourci de saisie rapide ne redeclenchait
+// jamais cette escalade, contrairement au formulaire de triage complet).
+function signesCirculatoiresCritiques(systolique, pouls) {
+  return (systolique != null && !isNaN(systolique) && systolique < 90)
+    || (pouls != null && !isNaN(pouls) && (pouls < 40 || pouls > 130));
+}
+
 // ── Modal triage ABCDE ─────────────────────────────────────────────────────────
 function ModalTriage({ consultation, patients, onClose, onSaved }) {
   const { error: showError } = useToast();
@@ -144,7 +154,7 @@ function ModalTriage({ consultation, patients, onClose, onSaved }) {
     if (abcde.d === "Douleur" || abcde.d === "Inconscient") { setTriageFinal("urgent"); return; }
     const systolique = parseInt((abcde.c_tension || "").split("/")[0], 10);
     const pouls = parseInt(abcde.c_pouls, 10);
-    if ((!isNaN(systolique) && systolique < 90) || (!isNaN(pouls) && (pouls < 40 || pouls > 130))) {
+    if (signesCirculatoiresCritiques(systolique, pouls)) {
       setTriageFinal("urgent");
       return;
     }
@@ -332,7 +342,20 @@ function ModalConstantesRapides({ consultation, etabId, auth, onClose, onSaved }
       const payload = { patient_id: consultation.patient_id, etablissement_id: etabId, saisi_par: auth?.user?.email ?? null };
       Object.entries(form).forEach(([k, v]) => { if (v !== "") payload[k] = Number(v); });
       await insertConstante(payload);
-      success("Constantes enregistrees");
+      // Meme regle d'escalade que ModalTriage (portion C — circulation) : un
+      // raccourci de saisie rapide ne doit jamais contourner silencieusement le
+      // garde-fou deja en place dans le formulaire de triage complet. On
+      // n'escalade que vers "urgent" — jamais de retrogradation depuis ce
+      // formulaire, qui ne recueille pas A/B/D et ne peut donc pas evaluer
+      // l'ensemble du triage ABCDE.
+      const systolique = payload.tension_systolique ?? null;
+      const pouls = payload.pouls ?? null;
+      if (signesCirculatoiresCritiques(systolique, pouls) && consultation.triage !== "urgent") {
+        await updateConsultation(consultation.id, { triage: "urgent" });
+        success("Constantes enregistrees — triage reevalue automatiquement en URGENT (signes de choc)");
+      } else {
+        success("Constantes enregistrees");
+      }
       onSaved(); onClose();
     } catch (e) { showError(e.message); }
     finally { setSaving(false); }

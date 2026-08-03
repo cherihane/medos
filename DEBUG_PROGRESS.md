@@ -6822,3 +6822,34 @@ et feuille de réveil de test créées, 2 onglets du navigateur simulant 2 infir
 Données de test nettoyées après vérification (intervention et feuille de réveil créées
 spécifiquement pour ce test, supprimées de la base).
 
+### 3. Raccourci "Constantes rapides" qui contourne le triage — CORRIGÉ
+
+**Avant** : `ModalTriage` (Urgences.jsx) recalcule le triage ABCDE à partir de A/B/C/D — la
+portion C (circulation) force "urgent" si systolique < 90 ou pouls < 40/> 130. `ModalConstantesRapides`,
+le raccourci de saisie rapide de constantes depuis la carte patient, appelait uniquement
+`insertConstante()` et ne déclenchait jamais ce recalcul — une tension et un pouls objectivement
+critiques (78/48, 138) saisis par ce raccourci laissaient le triage inchangé sur "Non urgent".
+
+**Corrigé** :
+- Extrait la règle de la portion C en fonction partagée `signesCirculatoiresCritiques(systolique,
+  pouls)` (`Urgences.jsx`), utilisée à l'identique par `ModalTriage` (refactor sans changement de
+  comportement) **et** par `ModalConstantesRapides`.
+- `ModalConstantesRapides.handleSave` applique désormais cette règle après l'enregistrement des
+  constantes : si systolique < 90 ou pouls < 40/> 130 **et** que le triage n'est pas déjà "urgent",
+  appelle `updateConsultation(consultation.id, { triage: "urgent" })` et informe explicitement
+  l'utilisateur ("triage reevalue automatiquement en URGENT (signes de choc)").
+- Volontairement **jamais de rétrogradation** depuis ce raccourci : comme il ne recueille pas
+  A/B/D, il ne peut escalader que vers "urgent", jamais redescendre un triage déjà plus sévère.
+
+**Preuve réelle avant/après** — patient Moussa Kaba, arrivée enregistrée en "Non urgent" :
+1. Constantes saisies via le raccourci "Constantes rapides" : TA 78/48, pouls 138 (mêmes valeurs
+   que le test de triage complet déjà validé).
+2. **Avant le correctif** (audit précédent) : constantes enregistrées avec succès, mais badge
+   "Non urgent" resté inchangé — aucune escalade.
+3. **Après le correctif** : badge passé de "Non urgent" à **"Urgent"** (bordure rouge), compteur
+   "Critiques" du tableau de bord urgences passé de 0 à 1 — **vérifié en base :
+   `consultations.triage = 'urgent'`**.
+
+Données de test nettoyées après vérification (consultation et constante vitale de test
+supprimées).
+
