@@ -17,7 +17,7 @@ import {
   insertOrdonnance,
   insertExamen,
 } from "../../hooks/useMutations";
-import { INTERACTIONS_MEDICAMENTEUSES, CONTRE_INDICATIONS_ANTECEDENTS } from "../../data/interactions";
+import { INTERACTIONS_MEDICAMENTEUSES, CONTRE_INDICATIONS_ANTECEDENTS, ALLERGIES_MEDICAMENTS, normaliserTexte } from "../../data/interactions";
 
 const ACCENT = "#10B981";
 
@@ -101,6 +101,7 @@ function ModalOrdonnance({ patient, etablissementId, medecinNom, medicaments, on
   const LIGNE = () => ({ id: Date.now() + Math.random(), medicament_id: "", nom: "", posologie: "", duree: "" });
   const [lignes, setLignes] = useState([LIGNE()]);
   const [saving, setSaving] = useState(false);
+  const [confirmAllergie, setConfirmAllergie] = useState(false);
 
   const setLigne = (id, k, v) => setLignes((ls) => ls.map((l) => l.id === id ? { ...l, [k]: v } : l));
   const handleMedSelect = (id, medId) => {
@@ -110,22 +111,35 @@ function ModalOrdonnance({ patient, etablissementId, medecinNom, medicaments, on
 
   // Check interactions
   const warnings = useMemo(() => {
-    const noms = lignes.map((l) => (l.nom || "").toLowerCase());
+    const noms = lignes.map((l) => normaliserTexte(l.nom));
     const ws = [];
     INTERACTIONS_MEDICAMENTEUSES.forEach(({ meds, niveau, message }) => {
       if (noms.some((n) => n.includes(meds[0])) && noms.some((n) => n.includes(meds[1]))) ws.push({ niveau, message });
     });
     (patient?.antecedents ?? []).forEach((ant) => {
       CONTRE_INDICATIONS_ANTECEDENTS.forEach(({ antecedent, medicaments: meds2, message }) => {
-        if (ant.toLowerCase().includes(antecedent) && meds2.some((m) => noms.some((n) => n.includes(m)))) ws.push({ niveau: "contre-indication", message });
+        if (normaliserTexte(ant).includes(antecedent) && meds2.some((m) => noms.some((n) => n.includes(m)))) ws.push({ niveau: "contre-indication", message });
+      });
+    });
+    // Allergies connues du patient — niveau le plus grave, bloquant (voir handleSave).
+    // Texte normalise (accents retires) car saisi librement par l'utilisateur.
+    (patient?.allergies ?? []).forEach((allergie) => {
+      ALLERGIES_MEDICAMENTS.forEach(({ allergie: allergieRef, medicaments: meds3, message }) => {
+        if (normaliserTexte(allergie).includes(allergieRef) && meds3.some((m) => noms.some((n) => n.includes(m)))) ws.push({ niveau: "allergie", message });
       });
     });
     return ws;
   }, [lignes, patient]);
+  const hasAllergieBloquante = warnings.some((w) => w.niveau === "allergie");
 
   const handleSave = async () => {
     const valides = lignes.filter((l) => l.medicament_id && l.posologie.trim());
     if (!valides.length) return showError("Ajoutez au moins un medicament avec posologie.");
+    // Allergie connue : jamais un simple avertissement ignorable en un clic —
+    // bloqué tant que la case de confirmation explicite n'est pas cochée.
+    if (hasAllergieBloquante && !confirmAllergie) {
+      return showError("Allergie connue du patient incompatible avec cette prescription — cochez la confirmation explicite pour continuer.");
+    }
     if (warnings.some((w) => w.niveau === "contre-indication")) {
       if (!window.confirm("Des contre-indications ont ete detectees. Confirmer quand meme ?")) return;
     }
@@ -163,13 +177,23 @@ function ModalOrdonnance({ patient, etablissementId, medecinNom, medicaments, on
         ))}
         <button onClick={() => setLignes((ls) => [...ls, LIGNE()])} style={{ fontSize: 12, color: ACCENT, background: "none", border: "none", cursor: "pointer", marginBottom: 12 }}>+ Ajouter un medicament</button>
         {warnings.map((w, i) => (
-          <div key={i} style={{ padding: "8px 12px", marginBottom: 6, borderRadius: 8, borderLeft: `4px solid ${w.niveau === "contre-indication" ? "#EF4444" : "#F59E0B"}`, backgroundColor: w.niveau === "contre-indication" ? "#FEF2F2" : "#FFFBEB", fontSize: 12, color: w.niveau === "contre-indication" ? "#DC2626" : "#92400E" }}>
-            <strong>{w.niveau === "contre-indication" ? "Contre-indication" : "Precaution"} :</strong> {w.message}
+          <div key={i} style={{ padding: "8px 12px", marginBottom: 6, borderRadius: 8,
+            borderLeft: `4px solid ${w.niveau === "allergie" ? "#991B1B" : w.niveau === "contre-indication" ? "#EF4444" : "#F59E0B"}`,
+            backgroundColor: w.niveau === "allergie" ? "#FEE2E2" : w.niveau === "contre-indication" ? "#FEF2F2" : "#FFFBEB",
+            fontSize: 12, color: w.niveau === "allergie" ? "#7F1D1D" : w.niveau === "contre-indication" ? "#DC2626" : "#92400E",
+            fontWeight: w.niveau === "allergie" ? 700 : 400 }}>
+            <strong>{w.niveau === "allergie" ? "⚠ ALLERGIE CONNUE" : w.niveau === "contre-indication" ? "Contre-indication" : "Precaution"} :</strong> {w.message}
           </div>
         ))}
+        {hasAllergieBloquante && (
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 4, marginBottom: 4, padding: "10px 14px", background: "#FEF2F2", border: "1.5px solid #EF4444", borderRadius: 8, fontSize: 12, color: "#7F1D1D", cursor: "pointer" }}>
+            <input type="checkbox" checked={confirmAllergie} onChange={(e) => setConfirmAllergie(e.target.checked)} style={{ marginTop: 2 }} />
+            <span>Je confirme avoir vérifié cette prescription malgré l'allergie connue du patient et j'assume la responsabilité clinique de cette décision.</span>
+          </label>
+        )}
         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
           <button onClick={onClose} style={{ flex: 1, padding: 10, background: "#F3F4F6", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer" }}>Annuler</button>
-          <button onClick={handleSave} disabled={saving} style={{ flex: 2, padding: 10, background: saving ? "#D1D5DB" : ACCENT, color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer" }}>
+          <button onClick={handleSave} disabled={saving || (hasAllergieBloquante && !confirmAllergie)} style={{ flex: 2, padding: 10, background: saving || (hasAllergieBloquante && !confirmAllergie) ? "#D1D5DB" : ACCENT, color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: saving || (hasAllergieBloquante && !confirmAllergie) ? "not-allowed" : "pointer" }}>
             {saving ? "Enregistrement..." : "Creer l'ordonnance"}
           </button>
         </div>

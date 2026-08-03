@@ -17,7 +17,7 @@ import { supabase } from "../../supabaseClient";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { openDocument, tableHTML, infoGridHTML, alertBannerHTML, signatureRowHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
-import { INTERACTIONS_MEDICAMENTEUSES, CONTRE_INDICATIONS_ANTECEDENTS } from "../../data/interactions";
+import { INTERACTIONS_MEDICAMENTEUSES, CONTRE_INDICATIONS_ANTECEDENTS, ALLERGIES_MEDICAMENTS, normaliserTexte } from "../../data/interactions";
 import { SERVICES_HOPITAL, SERVICE_COLORS } from "../../constants/hopital";
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -434,6 +434,7 @@ function ModalNouvelleOrdonnance({ patient, etablissement_id, medecinNom, medica
   const [instructions, setInstr]     = useState("");
   const [saving, setSaving]          = useState(false);
   const [err, setErr]                = useState(null);
+  const [confirmAllergie, setConfirmAllergie] = useState(false);
 
   const setLigne = (id, k, v) => setLignes((ls) => ls.map((l) => l.id === id ? { ...l, [k]: v } : l));
 
@@ -443,12 +444,20 @@ function ModalNouvelleOrdonnance({ patient, etablissement_id, medecinNom, medica
     return { ...l, nom: med?.nom ?? "" };
   }), [lignes, medicaments]);
 
-  const warnings = useMemo(() => checkInteractions(lignesAvecNom, patient?.antecedents), [lignesAvecNom, patient]);
+  const warnings = useMemo(() => checkInteractions(lignesAvecNom, patient?.antecedents, patient?.allergies), [lignesAvecNom, patient]);
+  const alertesAllergie = warnings.filter((w) => w.niveau === "allergie");
+  const hasAllergieBloquante = alertesAllergie.length > 0;
 
   const handleSave = async () => {
     setErr(null);
     const valides = lignes.filter((l) => l.medicament_id && l.posologie.trim());
     if (!valides.length) { setErr("Ajoutez au moins un médicament avec posologie."); return; }
+    // Allergie connue : jamais un simple avertissement ignorable en un clic —
+    // bloqué tant que la case de confirmation explicite n'est pas cochée.
+    if (hasAllergieBloquante && !confirmAllergie) {
+      setErr("Allergie connue du patient incompatible avec cette prescription — cochez la confirmation explicite ci-dessous pour continuer, ou retirez le médicament concerné.");
+      return;
+    }
     if (warnings.some((w) => w.niveau === "contre-indication")) {
       const ok = window.confirm("Des contre-indications ont ete detectees. Confirmer quand meme ?");
       if (!ok) return;
@@ -527,19 +536,26 @@ function ModalNouvelleOrdonnance({ patient, etablissement_id, medecinNom, medica
             <div style={{ marginTop: 12 }}>
               {warnings.map((w, i) => (
                 <div key={i} style={{ padding: "10px 14px", marginBottom: 6, borderRadius: 8,
-                  borderLeft: `4px solid ${w.niveau === "contre-indication" ? "#EF4444" : "#F59E0B"}`,
-                  backgroundColor: w.niveau === "contre-indication" ? "#FEF2F2" : "#FFFBEB",
-                  fontSize: 12, color: w.niveau === "contre-indication" ? "#DC2626" : "#92400E" }}>
-                  <strong>{w.niveau === "contre-indication" ? "Contre-indication" : "Precaution"} :</strong> {w.message}
+                  borderLeft: `4px solid ${w.niveau === "allergie" ? "#991B1B" : w.niveau === "contre-indication" ? "#EF4444" : "#F59E0B"}`,
+                  backgroundColor: w.niveau === "allergie" ? "#FEE2E2" : w.niveau === "contre-indication" ? "#FEF2F2" : "#FFFBEB",
+                  fontSize: 12, color: w.niveau === "allergie" ? "#7F1D1D" : w.niveau === "contre-indication" ? "#DC2626" : "#92400E",
+                  fontWeight: w.niveau === "allergie" ? 700 : 400 }}>
+                  <strong>{w.niveau === "allergie" ? "⚠ ALLERGIE CONNUE" : w.niveau === "contre-indication" ? "Contre-indication" : "Precaution"} :</strong> {w.message}
                 </div>
               ))}
             </div>
+          )}
+          {hasAllergieBloquante && (
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 8, padding: "10px 14px", background: "#FEF2F2", border: "1.5px solid #EF4444", borderRadius: 8, fontSize: 12, color: "#7F1D1D", cursor: "pointer" }}>
+              <input type="checkbox" checked={confirmAllergie} onChange={(e) => setConfirmAllergie(e.target.checked)} style={{ marginTop: 2 }} />
+              <span>Je confirme avoir vérifié cette prescription malgré l'allergie connue du patient et j'assume la responsabilité clinique de cette décision.</span>
+            </label>
           )}
           {err && <div style={{ marginTop: 10, padding: "8px 12px", background: "#FEF2F2", borderRadius: 8, fontSize: 12, color: "#DC2626" }}>{err}</div>}
         </div>
         <div style={{ display: "flex", gap: 10, padding: "14px 26px", borderTop: "1px solid var(--border-light)", flexShrink: 0 }}>
           <button onClick={onClose} style={{ flex: 1, padding: 11, background: "#F8FAFC", color: colors.text, border: "1px solid var(--border)", borderRadius: 10, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>Annuler</button>
-          <button onClick={handleSave} disabled={saving} style={{ flex: 2, padding: 11, background: saving ? "#E5E7EB" : ACCENT, color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          <button onClick={handleSave} disabled={saving || (hasAllergieBloquante && !confirmAllergie)} style={{ flex: 2, padding: 11, background: saving || (hasAllergieBloquante && !confirmAllergie) ? "#E5E7EB" : ACCENT, color: saving || (hasAllergieBloquante && !confirmAllergie) ? "#9CA3AF" : "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: saving || (hasAllergieBloquante && !confirmAllergie) ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
             {saving ? <><Spin />Enregistrement…</> : "Créer l'ordonnance"}
           </button>
         </div>
@@ -1068,19 +1084,29 @@ function EventCard({ evt, onRenouveler }) {
 }
 
 // ── Alertes interactions medicamenteuses ──────────────────────────────────────
-function checkInteractions(lignes, antecedents) {
+function checkInteractions(lignes, antecedents, allergies) {
   const warnings = [];
-  const noms = lignes.map((l) => (l.nom || "").toLowerCase());
+  const noms = lignes.map((l) => normaliserTexte(l.nom));
   INTERACTIONS_MEDICAMENTEUSES.forEach(({ meds, niveau, message }) => {
     const match0 = noms.some((n) => n.includes(meds[0]));
     const match1 = noms.some((n) => n.includes(meds[1]));
     if (match0 && match1) warnings.push({ niveau, message });
   });
-  const ants = (antecedents ?? []).map((a) => a.toLowerCase());
+  const ants = (antecedents ?? []).map(normaliserTexte);
   CONTRE_INDICATIONS_ANTECEDENTS.forEach(({ antecedent, medicaments, message }) => {
     const hasAnt = ants.some((a) => a.includes(antecedent));
     const hasMed = medicaments.some((m) => noms.some((n) => n.includes(m)));
     if (hasAnt && hasMed) warnings.push({ niveau: "contre-indication", message });
+  });
+  // Allergies connues du patient — niveau le plus grave, bloquant (voir handleSave),
+  // jamais un simple avertissement ignorable en un clic comme pour les autres niveaux.
+  // Texte normalise (accents retires) car saisi librement par l'utilisateur
+  // (ex. "Pénicilline"), alors que les regles ci-dessus sont ecrites sans accent.
+  const allergiesPatient = (allergies ?? []).map(normaliserTexte);
+  ALLERGIES_MEDICAMENTS.forEach(({ allergie, medicaments, message }) => {
+    const hasAllergie = allergiesPatient.some((a) => a.includes(allergie));
+    const hasMed = medicaments.some((m) => noms.some((n) => n.includes(m)));
+    if (hasAllergie && hasMed) warnings.push({ niveau: "allergie", message });
   });
   return warnings;
 }

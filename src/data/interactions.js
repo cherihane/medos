@@ -1,3 +1,10 @@
+// Retire les accents avant comparaison — les regles ci-dessous sont ecrites
+// sans accent, mais les allergies/antecedents sont saisis en texte libre par
+// l'utilisateur (ex. "Pénicilline") et doivent quand meme matcher.
+export function normaliserTexte(s) {
+  return (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
 // Paires de medicaments incompatibles
 // niveau: 'contre-indication' | 'precaution'
 export const INTERACTIONS_MEDICAMENTEUSES = [
@@ -29,4 +36,17 @@ export const CONTRE_INDICATIONS_ANTECEDENTS = [
   { antecedent: "asthme",     medicaments: ["aspirine", "ibuprofene", "propranolol"], message: "Risque de bronchospasme severe." },
   { antecedent: "cirrhose",   medicaments: ["paracetamol", "metronidazole"], message: "Reduire les doses — metabolisme hepatique altere." },
   { antecedent: "hemophilie", medicaments: ["aspirine", "ibuprofene"], message: "AINS contre-indiques — risque hemorragique majeur." },
+];
+
+// Contre-indications selon allergies connues du patient — niveau le plus grave
+// (risque de reaction allergique directe, potentiellement fatale), toujours
+// remonte comme niveau 'allergie' quel que soit le medicament associe.
+export const ALLERGIES_MEDICAMENTS = [
+  { allergie: "penicilline", medicaments: ["penicilline", "amoxicilline", "ampicilline", "cloxacilline", "oxacilline"], message: "Allergie connue a la penicilline — risque de choc anaphylactique." },
+  { allergie: "aspirine",    medicaments: ["aspirine"], message: "Allergie connue a l aspirine." },
+  { allergie: "ains",        medicaments: ["ibuprofene", "diclofenac", "naproxene", "aspirine"], message: "Allergie connue aux anti-inflammatoires non steroidiens (AINS)." },
+  { allergie: "sulfamide",   medicaments: ["cotrimoxazole", "sulfamethoxazole"], message: "Allergie connue aux sulfamides." },
+  { allergie: "codeine",     medicaments: ["codeine"], message: "Allergie connue a la codeine." },
+  { allergie: "quinine",     medicaments: ["quinine", "mefloquine"], message: "Allergie connue a la quinine et antipaludeens apparentes." },
+  { allergie: "iode",        medicaments: ["amiodarone"], message: "Allergie connue a l iode — l amiodarone en contient." },
 ];

@@ -6725,3 +6725,61 @@ concurrentes reproduites, données manquantes en cascade) ; tableau de bord fina
 consolidé ; liste des décisions produit complétée avec 5 nouvelles trouvailles ; données de test
 nettoyées et confirmées. Aucune fonction protégée d'`AuthContext.jsx` n'a été touchée.
 
+---
+
+## Correction des 3 failles cliniques critiques (2026-08-03)
+
+Mission de suivi immédiat : corriger les 3 failles trouvées lors de l'audit ci-dessus. Aucune ne
+touche `AuthContext.jsx`. Un commit séparé par point.
+
+### 1. Allergies jamais vérifiées à la prescription — CORRIGÉ
+
+**Avant** : `src/data/interactions.js` ne contenait que des règles médicament↔médicament et
+médicament↔antécédent — une allergie connue du patient (ex. Pénicilline) n'était jamais croisée
+avec les médicaments prescrits, dans `Patients.jsx` (`ModalNouvelleOrdonnance`) comme dans
+`MesConsultations.jsx` (`ModalOrdonnance`, logique dupliquée).
+
+**Corrigé** :
+- Nouvelle table `ALLERGIES_MEDICAMENTS` dans `interactions.js` (7 familles : pénicilline, aspirine,
+  AINS, sulfamides, codéine, quinine/antipaludéens, iode/amiodarone).
+- `checkInteractions()` (Patients.jsx) et la logique équivalente de `MesConsultations.jsx` croisent
+  désormais `patient.allergies` avec chaque ligne de prescription, niveau `"allergie"` — le plus
+  grave, distinct du niveau `"contre-indication"` existant.
+- **Blocage réel, pas un simple `window.confirm`** : le bouton "Créer l'ordonnance" est désactivé
+  tant qu'une case de confirmation explicite dédiée ("Je confirme avoir vérifié cette prescription
+  malgré l'allergie connue du patient et j'assume la responsabilité clinique de cette décision")
+  n'est pas cochée manuellement. Les contre-indications antécédent↔médicament, moins graves,
+  gardent le `window.confirm` existant (non modifié).
+
+**Bug trouvé et corrigé en cours de route** : la première version ne se déclenchait pas car les
+règles sont écrites sans accent ("penicilline") alors que les allergies sont saisies en texte libre
+par l'utilisateur avec accent ("Pénicilline") — `"pénicilline".includes("penicilline")` est faux en
+JavaScript (comparaison de caractères stricte, pas de normalisation automatique des diacritiques).
+Ajout d'une fonction `normaliserTexte()` (accents retirés via `normalize("NFD")`) appliquée aux deux
+côtés de toutes les comparaisons de `checkInteractions()` (médicaments, antécédents, allergies) —
+corrige ce bug pour l'allergie ET, en prime, le même risque latent déjà présent sur les antécédents
+accentués (ex. "Diabète" vs la règle "diabete").
+
+**Preuve réelle avant/après** — patient de test recréé (Moussa Kaba, allergie Pénicilline, "Hopital
+Audit Test 2" ; Moussa Kaba original nettoyé en fin de session précédente), médicament de test
+"Amoxicilline 500mg" ajouté au stock de l'établissement (aucun médicament n'y existait avant) :
+1. **Avant le correctif** : ordonnance Amoxicilline créée sans aucune alerte ni blocage (bug
+   confirmé par simple lecture de code, cf. section précédente).
+2. **Après le correctif, tentative sans confirmation** : bandeau rouge "⚠ ALLERGIE CONNUE : Allergie
+   connue a la penicilline — risque de choc anaphylactique." affiché, bouton "Créer l'ordonnance"
+   désactivé, clic sans effet — **vérifié en base : 0 ligne dans `ordonnances` pour ce patient**.
+3. **Après confirmation explicite** (case cochée) : bouton réactivé, ordonnance créée avec succès —
+   **vérifié en base : 1 ligne créée**. Confirme que le garde-fou bloque bien le cas dangereux par
+   défaut, sans pour autant rendre la fonctionnalité inutilisable pour un cas cliniquement justifié
+   et assumé.
+
+**Bug préexistant, sans rapport, découvert en testant** : lors de la confirmation avec case cochée,
+une erreur JS est apparue après la création réussie de l'ordonnance :
+`_supabaseClient__WEBPACK_IMPORTED_MODULE_16__.supabase.from(...).insert(...).catch is not a
+function`. Cause : `ModalNouvelleOrdonnance.handleSave` chaîne `.catch(() => {})` directement sur
+`supabase.from("alertes").insert({...})`, mais le query builder de supabase-js v2 n'expose pas
+`.catch` comme méthode directe (il faut `await` puis vérifier `{ error }`, ou envelopper dans une
+vraie Promise). Conséquence réelle : l'alerte "Nouvelle ordonnance a dispenser" n'est jamais créée
+quand ce chemin de code s'exécute — la pharmacie ne serait jamais notifiée. **Non corrigé** (hors
+périmètre strict des 3 failles demandées) — signalé pour une session dédiée.
+
