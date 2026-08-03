@@ -6314,3 +6314,60 @@ fonction, nouveau `WEBHOOK_SECRET` déjà déployé côté fonction, nouvelle cl
 emails d'activation/refus partent enfin automatiquement — nécessite un accès SQL Editor Dashboard
 ou équivalent, hors de portée de cet environnement.
 
+---
+
+## Migration du workflow n8n d'onboarding vers les credentials centralisées (2026-08-03)
+
+Demandé après avoir découvert que `send-activation-email` est du code mort : vérification que le
+vrai flux d'onboarding (workflow n8n **"MedOS — Onboarding Etablissements v2"**, actif) ne dépend
+pas lui aussi de la clé `service_role` legacy exposée dans l'historique git.
+
+**Confirmé** : ce workflow gère la totalité du cycle d'inscription (notification admin toutes les
+2 min, validation/refus via webhooks n8n dédiés, emails via Resend) **directement**, sans jamais
+passer par une Edge Function Supabase — mais 4 de ses nœuds HTTP Request avaient la clé JWT
+`service_role` legacy **codée en clair** dans leurs en-têtes (même anti-pattern que celui à
+l'origine de l'incident), et 3 nœuds avaient une clé Resend codée en clair, différente de celle
+tout juste régénérée.
+
+**Découverte critique en cours de vérification** : la clé legacy avait déjà été désactivée côté
+Supabase (message d'erreur explicite dans les executions n8n : *"Legacy API keys are disabled...
+disabled on 2026-08-03T10:53:37"*) — **ce workflow était donc déjà en panne réelle depuis ~10:54
+UTC ce jour**, silencieusement, plus aucune nouvelle inscription n'était traitée. Confirmé via
+`n8n_executions` : exécutions en échec à 10:56, 10:58, 11:02, 11:04, 11:06, 11:08 (toutes
+`"Authorization failed"`), avant correction.
+
+**Migration effectuée** :
+1. Deux credentials n8n de type "Custom Auth" existaient déjà mais n'étaient utilisées par aucun
+   nœud (`Supabase MedOS`, `Resend API`, créées le 2026-07-16) — mises à jour avec les nouvelles
+   valeurs (`sb_secret_...` et `re_5N8KmCtP...`) plutôt que d'en créer de nouvelles.
+2. Les 4 nœuds Supabase (`Recuperer demandes en attente`, `Marquer notification envoyee`,
+   `Mettre a jour statut valide`, `Mettre a jour statut refuse`) et les 3 nœuds Resend
+   (`M'envoyer la demande`, `Envoyer email de bienvenue`, `Envoyer email de refus`) reconfigurés en
+   `authentication: genericCredentialType` pointant vers ces credentials — **plus aucune valeur de
+   clé en clair dans le JSON du workflow**, vérifié en relisant le workflow après modification.
+3. **Republication confirmée sans ambiguïté** : `n8n_get_workflow` en `mode: "active"` (le graphe
+   réellement exécuté, distinct du brouillon) a été relu juste après la modification — il reflète
+   déjà les 7 nœuds corrigés, avec un nouvel `activeVersionId` horodaté au moment exact de la
+   modification. Aucune étape de republication séparée n'a été nécessaire : l'appel API modifie
+   directement la version active, contrairement à l'UI où sauvegarder un nœud ne suffit pas.
+
+**Test de bout en bout réel, pas simulé** :
+- Établissement de test réel créé (`en_attente`) à 11:10:35.
+- Cycle suivant du trigger (11:12:35) : récupéré via la nouvelle credential (0 erreur
+  d'autorisation), email de notification envoyé (Resend id confirmé), statut passé à
+  `notification_envoyee` — tout via les nouvelles clés.
+- **12 secondes plus tard (11:12:47), l'utilisateur a lui-même cliqué sur "Valider ce compte"
+  depuis son iPhone** (user-agent confirmé dans les logs d'exécution du webhook) — preuve
+  encore plus forte qu'un test simulé : l'email de notification a bien été réellement reçu et lu.
+  Statut passé à `validee`/`actif: true`, email de bienvenue envoyé et **confirmé reçu dans Gmail**
+  à 11:12:48 (sujet "Votre acces MedOS est active — Test Migration N8N E2E").
+- Établissement de test supprimé après vérification.
+
+**Les 4 exigences de l'utilisateur sont confirmées** :
+1. ✅ Aucune clé recodée en dur — credentials n8n natives utilisées exclusivement.
+2. ✅ Clé Resend vérifiée obsolète (différente de la nouvelle) et corrigée via la même credential.
+3. ✅ Republication confirmée par relecture du graphe actif (`mode: "active"`), pas seulement une
+   sauvegarde de brouillon.
+4. ✅ Test de bout en bout réel effectué avec preuve (executions n8n + réception Gmail), incluant
+   une validation authentique par l'utilisateur lui-même en temps réel.
+
