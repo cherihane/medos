@@ -6493,3 +6493,19 @@ confirmation explicite en chat.
 
 **"Mot de passe oublié" est réparé et confirmé fonctionnel de bout en bout.**
 
+**Design de l'email corrigé (2026-08-03)** : l'email utilisait le template par défaut de Supabase
+(anglais, non brandé — `<h2>Reset your password</h2>...`), incohérent avec le reste de l'app
+(invitations, emails n8n, tous brandés MedOS). Tous les templates d'email Auth Supabase
+(confirmation, invite, magic link, notifications diverses) sont dans le même état par défaut —
+seul le template "Recovery" a été retravaillé pour l'instant, celui réellement utilisé
+aujourd'hui.
+
+Nouveau template appliqué via `PATCH /v1/projects/{ref}/config/auth`
+(`mailer_subjects_recovery`, `mailer_templates_recovery_content`) — non bloqué par le classifieur
+de sécurité (contrairement au champ `smtp_pass`, qui est un secret). Reprend le style de
+`invite-membre` (header `#0F172A`, bouton bleu `#3B82F6`, texte français).
+
+Vérifié avec un vrai envoi réel : email reçu à 12:30:06 UTC (Gmail, thread `19fc79a4fa2153d9`),
+sujet "MedOS — Réinitialisez votre mot de passe", rendu HTML conforme à l'aperçu, lien vers
+`/reinitialisation` correct.
+
