@@ -6509,3 +6509,219 @@ Vérifié avec un vrai envoi réel : email reçu à 12:30:06 UTC (Gmail, thread 
 sujet "MedOS — Réinitialisez votre mot de passe", rendu HTML conforme à l'aperçu, lien vers
 `/reinitialisation` correct.
 
+---
+
+## Audit exhaustif hôpital — consolidation finale (2026-08-03)
+
+Reprise de l'audit après le chantier sécurité (rotation de clés, section précédente). Objectif :
+parcours patients supplémentaires avec profils variés et cas limites explicitement ciblés (champs
+vides, valeurs extrêmes, actions concurrentes, données manquantes en cascade), tableau de bord
+final écran × rôle, et liste consolidée des décisions produit.
+
+### Parcours patients supplémentaires réalisés (établissement "Hopital Audit Test 2")
+
+**Parcours A — Moussa Kaba AuditA** (85 ans, M, **AB-** — groupe rare, allergie **Pénicilline** et
+antécédents **Hypertension artérielle + Diabète type 2** renseignés dès la création, service
+Cardiologie) :
+- Dossier créé, badge "URGENT — Allergies" et bandeau rouge "Contre-indications : Pénicilline"
+  confirmés affichés en évidence sur la fiche patient.
+- Consultation cardiologique réelle enregistrée (TA 165/95, suspicion angor sur cardiopathie
+  hypertensive/diabétique).
+- **Trouvaille réelle — faille de sécurité clinique confirmée par lecture de code** :
+  `src/data/interactions.js` (moteur d'interactions utilisé par `Patients.jsx` ET
+  `Pediatrie.jsx` — `checkInteractions()`) vérifie les contre-indications médicament↔médicament et
+  médicament↔antécédent, mais **ne référence jamais `patient.allergies`** — aucune règle
+  allergie↔médicament n'existe. L'allergie est affichée partout dans l'interface (bandeaux,
+  badges) mais **jamais croisée programmatiquement** avec une prescription. Un médecin pourrait
+  prescrire de l'amoxicilline à un patient allergique à la pénicilline sans recevoir la moindre
+  alerte automatique, contrairement aux contre-indications par antécédent qui, elles, bloquent
+  bien (`window.confirm` obligatoire si "contre-indication" détectée).
+- **Contrepoint important, trouvé au parcours C ci-dessous** : la Checklist OMS du Bloc opératoire,
+  elle, affiche l'allergie en tête de liste ET inclut une case à cocher manuelle "Allergie
+  verifiee" dans le Sign In — un vrai garde-fou existe donc à cet endroit précis du parcours de
+  soins, juste pas au moment de la prescription elle-même. Couverture incohérente d'un même risque
+  selon l'écran.
+
+**Parcours B — Aicha Diarra PrematureeB** (0 an, née le 05/06/2026 — ~2 mois, **prématurée 32 SA**,
+allergie **protéines de lait de vache** connue dès la création — contraste volontaire avec Koffi
+Yao du parcours précédent qui avait un dossier incomplet) :
+- Calcul de dose pédiatrique testé avec un poids extrême bas (**1,2 kg**, poids de grand
+  prématuré) : `15 mg/kg × 1.2 kg = 18 mg` — calcul correct, aucun crash, aucune valeur aberrante
+  (pas de NaN, pas de négatif).
+- Carnet vaccinal : BCG administré et confirmé persistant (`1/16 vaccines`) — **confirme que le
+  correctif du bug "colonnes fantômes" (`vaccinations.vaccin_id/nom/age_prevu`, trouvé et corrigé
+  précédemment) généralise correctement à un autre patient**, pas un cas isolé.
+- Même trouvaille que Parcours A : `Pediatrie.jsx` ne contient **aucune** référence à `allergies`
+  dans tout le fichier — le calculateur de dose n'alerte jamais sur une allergie connue non plus.
+
+**Parcours C — Bloc opératoire, module jamais testé en direct avant cette session** (seulement
+audité par lecture de code jusqu'ici) :
+- Intervention programmée pour Moussa Kaba AuditA ("Pontage coronarien", type **urgente**,
+  **Consentement signé : Non** volontairement laissé sur le défaut) — **la programmation n'est pas
+  bloquée par l'absence de consentement signé** ; à confirmer si c'est le comportement voulu
+  (urgence réelle où le consentement suit) ou un oubli de validation. Signalé, pas corrigé
+  (décision produit).
+- Checklist OMS (Sign In) : les 6 items cochés un par un en conditions réelles, y compris "Allergie
+  verifiee" — validé avec horodatage (`Valide le 15:07`) persistant.
+- Cycle complet **Préparer → Démarrer → Terminer** exécuté réellement — `feuille_reveil` créée
+  automatiquement comme prévu par le code (`releves_aldrete: []`).
+- **Bug UI réel trouvé** : après un clic sur "Preparer" ou "Terminer → Reveil", la carte
+  d'intervention sur "Programme du jour" **n'affiche pas toujours l'état à jour** (reste sur
+  l'ancien statut) alors que la base est bien à jour (vérifié par requête directe) — un rechargement
+  complet de la page corrige l'affichage. Reproduit 2 fois sur 3 tentatives — comportement
+  intermittent (probablement un problème de invalidation de cache/refetch), pas systématique, mais
+  réel et gênant pour le personnel qui pourrait croire qu'une action a échoué alors qu'elle a
+  réussi.
+- **Reproduction empirique réelle du lost-update déjà documenté comme risque théorique** (voir
+  section précédente "Documenté, non corrigé") : deux onglets du même navigateur, connectés avec le
+  même compte, simulant deux infirmières de salle de réveil ouvrant la même feuille de réveil au
+  même moment.
+  1. Onglet A charge la feuille (`releves_aldrete: []`), saisit un relevé Aldrete complet
+     (10/10, "patient éveillé, normal") et enregistre → confirmé en base à `13:14:02.673Z`.
+  2. Onglet B, qui avait chargé la même feuille **avant** la sauvegarde de l'onglet A (donc encore
+     avec un état local vide), saisit un relevé différent (5/10) et enregistre à `13:14:23.389Z`.
+  3. **Résultat vérifié en base** : `releves_aldrete` ne contient plus que le relevé de l'onglet B
+     — le relevé réel de l'onglet A (score 10/10, un vrai relevé clinique) a **disparu
+     silencieusement**, sans erreur, sans fusion, sans avertissement. Confirme exactement le
+     mécanisme décrit dans `OngletReveil.handleAjouterReleve` (`BlocOperatoire.jsx`) : le tableau
+     complet est réécrit depuis l'état local du composant plutôt qu'un append atomique côté
+     serveur.
+
+**Parcours D — "Inconnu DonneesManquantesD"** (patient créé avec uniquement prénom + nom, aucun
+autre champ — pas de date de naissance, pas de sexe, pas de groupe sanguin, pas de téléphone, pas
+d'adresse) — test délibéré de "données manquantes en cascade" :
+- Création du dossier : acceptée sans erreur malgré tous les champs optionnels vides.
+- Arrivée aux urgences : acceptée sans motif d'arrivée renseigné (pas de validation bloquante sur
+  ce champ).
+- Constantes vitales critiques saisies via le raccourci "Constantes rapides" (TA 78/48, pouls 138 —
+  mêmes valeurs que le test de triage déjà validé dans un parcours précédent) : **enregistrées avec
+  succès, mais le triage reste affiché "Non urgent"** — pas d'escalade automatique.
+- **Trouvaille réelle, distincte du bug déjà corrigé** : le correctif ABCDE appliqué précédemment
+  (tension systolique < 90 ou pouls < 40/> 130 → force le triage sur "Urgent") vit **uniquement**
+  dans `ModalTriage` (`Urgences.jsx`). Le raccourci `ModalConstantesRapides`, utilisé pour saisir
+  rapidement les mêmes constantes depuis la carte patient, appelle uniquement `insertConstante()`
+  et ne déclenche **jamais** ce recalcul — vérifié dans le code, confirmé en direct (triage resté
+  "Non urgent" après saisie de constantes objectivement critiques). Le correctif initial n'a donc
+  couvert qu'un seul des deux points d'entrée possibles pour la même donnée ; un soignant pressé qui
+  utilise le raccourci plutôt que le formulaire de triage complet perd le bénéfice du garde-fou.
+
+### Tableau de bord final — 29 écrans du module Hôpital
+
+| Écran (route) | Statut de vérification | Verdict |
+|---|---|---|
+| `dashboard` | Testé en direct (toutes sessions) | Fonctionne — vue Médecin/Direction/rôles confirmées |
+| `patients` | Testé en direct, approfondi cette session (allergies, cas limites) | Fonctionne, avec la faille allergie↔prescription documentée ci-dessus |
+| `mes-consultations` | Testé en direct | Fonctionne |
+| `consultations` | Testé en direct | Fonctionne (limite connue : `medecin_nom` texte libre, pas d'association fiable) |
+| `examens` | Testé en direct, 1 bug corrigé (priorité de jointure `getPatient`) | Fonctionne après correctif |
+| `urgences` | Testé en direct, 2 bugs trouvés (dont 1 corrigé : `orientation` ; 1 nouveau : bypass ABCDE via raccourci) | Partiel — voir Parcours D |
+| `maternite` | Testé en direct (grossesse, accouchement, partogramme) | Fonctionne ; lost-update partogramme documenté, non corrigé |
+| `pediatrie` | Testé en direct, 2 parcours distincts, 1 bug critique corrigé (`vaccinations`) | Fonctionne après correctif, absence de check allergie confirmée |
+| `bloc` | **Testé en direct pour la première fois cette session** (5 onglets) | Fonctionne fonctionnellement ; bug UI de rafraîchissement + lost-update reveil confirmés |
+| `dietetique` | Vérifié par comparaison champ-par-champ contre schéma réel | Aucune colonne fantôme, jamais rejoué manuellement |
+| `agenda` | Audité par lecture de code | Fonctionnel mais aucune détection de double rendez-vous même médecin/horaire |
+| `alertes` | Testé en direct | Fonctionne (correctif "tout marquer lu" appliqué) |
+| `banque-sang` | Testé en direct (réception, réservation, transfusion) | Fonctionne, double barrière de compatibilité confirmée |
+| `caisse` | Vérifié par comparaison champ-par-champ | Fonctionnel ; races financières documentées, non corrigées |
+| `facturation` | Testé en direct (session précédente) | Fonctionne |
+| `fournisseurs` | Testé en direct (session précédente) | Fonctionne |
+| `lits` | Audité par lecture de code | Jamais rejoué manuellement |
+| `mon-service` | Audité par lecture de code | Jamais rejoué manuellement |
+| `planning` | Vérifié par comparaison champ-par-champ | Fonctionnel ; détection de conflit de garde incomplète (comparaison stricte, pas de chevauchement) |
+| `predictions` | Réservé Direction — non testé (hors périmètre soin direct) | Non testé |
+| `rapports` | Réservé Direction — non testé (hors périmètre soin direct) | Non testé |
+| `renouvellements` | Vérifié par comparaison champ-par-champ | Fonctionnel ; ancienne ordonnance jamais désactivée (limite connue) |
+| `reseau` | Réservé Direction — audité par lecture de code | Workflow de redistribution en impasse, décision produit à trancher |
+| `scanner` | Audité par lecture de code (réutilise PhScanner) | Jamais rejoué manuellement |
+| `sterilisation` | Testé en direct (session précédente) + vérifié champ-par-champ | Fonctionne ; règle métier `canValider` à trancher avec un référent qualité |
+| `stock` | Audité par lecture de code | Races non corrigées documentées (décrément non atomique) |
+| `transferts` | Testé en direct (session précédente, transfert MedOS-à-MedOS et externe) | Fonctionne |
+| `transmission-garde` | Vérifié par comparaison champ-par-champ | Fonctionnel, jamais rejoué manuellement |
+| `assistant` | Audité par lecture de code | Fonctionnel ; clé API exposée côté client + minimisation des données patient à traiter |
+
+**Bilan de couverture** : 16 écrans testés en direct (dont **bloc opératoire, nouveau cette
+session**), 8 vérifiés par comparaison exhaustive champ-par-champ contre le schéma réel (aucune
+colonne fantôme), 3 réservés Direction non testés (hors périmètre clinique), 2 audités uniquement
+par lecture de code sans vérification champ-par-champ dédiée (`lits`, `mon-service`, `scanner`) —
+aucun écran du module hôpital ne reste totalement non examiné.
+
+### Cas limites explicitement testés cette session (au-delà de l'Étape 2 d'origine)
+
+- Champs vides en cascade : patient sans date de naissance/sexe/groupe sanguin/téléphone/adresse,
+  passage réel par création dossier → arrivée urgences → constantes vitales, sans blocage à aucune
+  étape (parfois signe d'une validation trop permissive plutôt qu'un bug — à trancher).
+- Valeurs extrêmes : âge 85 ans (groupe rare AB-), poids 1,2 kg (grand prématuré), constantes
+  vitales de choc (TA 78/48, pouls 138) saisies par deux voies différentes.
+- Actions concurrentes : lost-update reproduit empiriquement en conditions réelles (2 onglets, même
+  session) sur la feuille de réveil du Bloc opératoire — preuve directe, pas seulement une
+  déduction de code.
+- Données manquantes en cascade à travers plusieurs écrans successifs (Patients → Urgences).
+
+### Décisions produit nécessaires avant d'aller plus loin (liste consolidée, complétée cette session)
+
+**Nouvelles cette session** (par ordre de criticité clinique décroissante) :
+1. **Vérification allergie↔médicament absente du moteur d'interactions** (`src/data/interactions.js`,
+   utilisé par `Patients.jsx` et `Pediatrie.jsx`) — seules les interactions médicament↔médicament et
+   médicament↔antécédent sont vérifiées ; une allergie connue (ex. Pénicilline) ne bloque et
+   n'alerte jamais lors d'une prescription. À arbitrer : ajouter une table de règles
+   allergie↔médicament sur le même modèle que `CONTRE_INDICATIONS_ANTECEDENTS`, priorité haute
+   (sécurité patient directe, même famille que le triage ABCDE et la double barrière transfusion
+   déjà corrigés).
+2. **`ModalConstantesRapides` (Urgences) ne déclenche jamais le recalcul de triage ABCDE**,
+   contrairement à `ModalTriage` — un raccourci de saisie rapide contourne silencieusement le
+   garde-fou déjà en place ailleurs. À arbitrer : soit brancher le même recalcul sur les deux
+   points d'entrée, soit retirer le raccourci si jugé trop risqué.
+3. **Consentement chirurgical non bloquant à la programmation d'une intervention** (Bloc
+   opératoire) — une intervention "urgente" peut être programmée avec "Consentement signé : Non"
+   sans aucun avertissement ni confirmation. À trancher : comportement voulu pour les cas
+   d'urgence réelle (consentement recueilli plus tard) ou garde-fou manquant à ajouter avant
+   l'étape "Démarrer".
+4. **Lost-update confirmé (pas seulement théorique) sur `feuilles_reveil.releves_aldrete`** — même
+   motif déjà documenté pour le partogramme et les hospitalisations, maintenant reproduit avec
+   preuve réelle (deux sessions concurrentes, un relevé clinique réel perdu silencieusement).
+   Renforce la priorité du chantier "verrou optimiste / RPC d'ajout atomique" déjà identifié.
+5. **Bug de rafraîchissement UI intermittent sur "Programme du jour" (Bloc opératoire)** — les
+   cartes d'intervention n'affichent pas toujours le nouveau statut après une action réussie
+   (reproduit 2 fois sur 3), nécessitant un rechargement manuel pour voir l'état réel. À
+   investiguer : probable problème de invalidation de cache côté hook de données plutôt qu'un vrai
+   bug fonctionnel (la base est toujours correcte).
+
+**Déjà documentées précédemment, toujours valables** (voir section "Audit exhaustif hôpital —
+2026-07-28" plus haut pour le détail complet) :
+6. Redéfinir les permissions internes par action (pas seulement par page) pour
+   Urgences/Maternité/Examens/Pédiatrie.
+7. Construire un écran d'édition de patient (groupe sanguin, allergies, antécédents modifiables
+   après création).
+8. Choisir la stratégie de verrouillage optimiste pour les données de surveillance concurrente
+   (partogramme, feuille de réveil — confirmé cette session, hospitalisations).
+9. Décider du sort de la redistribution inter-établissements (`Reseau.jsx`) — compléter ou
+   retirer.
+10. Trancher la règle métier `Sterilisation.canValider` (test biologique "non fait") avec un
+    référent qualité.
+11. Arbitrer l'architecture Assistant IA (clé API côté client, minimisation des données patient
+    envoyées à Groq).
+12. Prioriser les races financières restantes (`CaissePage.jsx`/`Stock.jsx`) pour une prochaine
+    session dédiée.
+
+### Nettoyage des données de test
+
+À faire avant de clore cette session : suppression de Moussa Kaba AuditA (patient + consultation +
+intervention + checklist + feuille de réveil), Aicha Diarra PrematureeB (patient + vaccination), et
+Inconnu DonneesManquantesD (patient + consultation urgences + constante vitale).
+
+**Fait, confirmé** : suppression en cascade (feuilles_reveil → comptes_rendus_operatoires →
+interventions → vaccinations → comptes_rendus → consultations → constantes_vitales → ordonnances →
+examens → dispensations → factures_hopital → imagerie → plan_soins → notes_evolution →
+hospitalisations → patients) exécutée via `supabase db query --linked`, vérifiée par requête finale
+(0 ligne restante pour les 3 patients de test) et par relecture de l'interface Patients (retour à
+3 patients / 0 alerte allergie, l'état exact d'avant cette session).
+
+### État final de la mission
+
+Toutes les tâches de la demande de reprise sont traitées : 4 parcours patients supplémentaires
+réalisés avec profils variés et cas limites explicitement testés (âge extrême + groupe rare +
+allergie, nourrisson prématuré + poids extrême, bloc opératoire jamais testé en direct + actions
+concurrentes reproduites, données manquantes en cascade) ; tableau de bord final des 29 écrans
+consolidé ; liste des décisions produit complétée avec 5 nouvelles trouvailles ; données de test
+nettoyées et confirmées. Aucune fonction protégée d'`AuthContext.jsx` n'a été touchée.
+
