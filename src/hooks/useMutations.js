@@ -983,6 +983,18 @@ export async function insertFeuilleReveil(fields) {
 export async function updateFeuilleReveil(id, fields) {
   return run(supabase.from("feuilles_reveil").update(fields).eq("id", id).select().single());
 }
+// Ecriture protegee contre les modifications concurrentes silencieuses : n'ecrit
+// que si updated_at n'a pas change depuis le chargement (verifie par un audit
+// reel — deux sessions concurrentes sur la meme feuille de reveil pouvaient
+// s'ecraser un releve clinique sans aucun avertissement). Retourne un tableau
+// vide (pas d'erreur) si la ligne a change entre-temps — a l'appelant de
+// detecter ce cas et d'avertir l'utilisateur au lieu d'ecraser.
+export async function updateFeuilleReveilSiInchangee(id, fields, updatedAtAttendu) {
+  const { data, error } = await supabase.from("feuilles_reveil").update(fields)
+    .eq("id", id).eq("updated_at", updatedAtAttendu).select();
+  if (error) throw error;
+  return data ?? [];
+}
 export async function fetchFeuilleReveilIntervention(intervention_id) {
   const { data } = await supabase.from("feuilles_reveil").select("*")
     .eq("intervention_id", intervention_id).maybeSingle();
@@ -1039,6 +1051,18 @@ export async function insertPartogramme(fields) {
 }
 export async function updatePartogramme(id, fields) {
   return run(supabase.from("partogrammes").update(fields).eq("id", id).select().single());
+}
+// Ecriture protegee contre les modifications concurrentes silencieuses — voir
+// updateFeuilleReveilSiInchangee (meme motif, meme risque de lost-update).
+export async function updatePartogrammeSiInchangee(id, fields, updatedAtAttendu) {
+  const { data, error } = await supabase.from("partogrammes").update(fields)
+    .eq("id", id).eq("updated_at", updatedAtAttendu).select();
+  if (error) throw error;
+  return data ?? [];
+}
+export async function fetchPartogrammeParId(id) {
+  const { data } = await supabase.from("partogrammes").select("*").eq("id", id).maybeSingle();
+  return data ?? null;
 }
 export async function fetchPartogrammesActifs(etablissement_id) {
   const { data } = await supabase

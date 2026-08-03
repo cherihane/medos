@@ -9,7 +9,7 @@ import { usePatients } from "../../hooks/useSupabaseData";
 import {
   insertGrossesse, updateGrossesse, fetchGrossessesActives, fetchGrossessesEtablissement,
   fetchCPNGrossesse, insertCPN,
-  insertPartogramme, updatePartogramme, fetchPartogrammesActifs,
+  insertPartogramme, updatePartogramme, updatePartogrammeSiInchangee, fetchPartogrammeParId, fetchPartogrammesActifs,
   insertAccouchement, fetchAccouchementsEtablissement,
   insertNouveauNe, fetchNouveauNesEtablissement,
   genererNumeroMaternite, fetchMembresPersonnel,
@@ -419,6 +419,7 @@ function VuePartogramme({ partogramme, patients, grossessesActives, etabId, auth
   const [releve, setReleve] = useState({ heure: new Date().toISOString().slice(0, 16), dilatation_cm: "", descente_station: "", contractions_nb: "", contractions_duree: "", bcf: "", tension_sys: "", tension_dia: "", pouls_mere: "", liquide_amniotique: "clair", notes: "" });
   const [showAccouchement, setShowAccouchement] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [conflit, setConflit] = useState(null); // { latest, nouveauReleve } si modification concurrente detectee
 
   const patient = patients.find((p) => p.id === partogramme.patient_id);
   const grossesse = grossessesActives.find((g) => g.id === partogramme.grossesse_id);
@@ -435,10 +436,50 @@ function VuePartogramme({ partogramme, patients, grossessesActives, etabId, auth
     if (!releve.dilatation_cm) return showError("La dilatation est obligatoire.");
     setSaving(true);
     try {
-      const nvReleves = [...releves, { ...releve, heure: new Date(releve.heure).toISOString(), dilatation_cm: Number(releve.dilatation_cm), bcf: releve.bcf ? Number(releve.bcf) : null, tension_sys: releve.tension_sys ? Number(releve.tension_sys) : null, tension_dia: releve.tension_dia ? Number(releve.tension_dia) : null, pouls_mere: releve.pouls_mere ? Number(releve.pouls_mere) : null, contractions_nb: releve.contractions_nb ? Number(releve.contractions_nb) : null }];
-      await updatePartogramme(partogramme.id, { releves: nvReleves });
+      const nouveauReleve = { ...releve, heure: new Date(releve.heure).toISOString(), dilatation_cm: Number(releve.dilatation_cm), bcf: releve.bcf ? Number(releve.bcf) : null, tension_sys: releve.tension_sys ? Number(releve.tension_sys) : null, tension_dia: releve.tension_dia ? Number(releve.tension_dia) : null, pouls_mere: releve.pouls_mere ? Number(releve.pouls_mere) : null, contractions_nb: releve.contractions_nb ? Number(releve.contractions_nb) : null };
+      const nvReleves = [...releves, nouveauReleve];
+      // Ecriture conditionnelle sur updated_at : detecte une modification concurrente
+      // au lieu d'ecraser silencieusement (meme motif que la feuille de reveil du
+      // Bloc operatoire — deux postes ouvrant le meme partogramme).
+      const updated = await updatePartogrammeSiInchangee(partogramme.id, { releves: nvReleves }, partogramme.updated_at);
+      if (updated.length === 0) {
+        const latest = await fetchPartogrammeParId(partogramme.id);
+        setConflit({ latest, nouveauReleve });
+        setSaving(false);
+        return;
+      }
       success("Releve ajoute");
       setReleve((prev) => ({ ...prev, heure: new Date().toISOString().slice(0, 16) }));
+      onRefresh();
+    } catch (e) { showError(e.message); }
+    finally { setSaving(false); }
+  };
+
+  const resoudreConflitFusion = async () => {
+    if (!conflit) return;
+    setSaving(true);
+    try {
+      const relevesAJour = conflit.latest?.releves ?? [];
+      const nvReleves = [...relevesAJour, conflit.nouveauReleve];
+      const updated = await updatePartogrammeSiInchangee(partogramme.id, { releves: nvReleves }, conflit.latest.updated_at);
+      if (updated.length === 0) { showError("Le partogramme a encore ete modifie entre-temps — reessayez."); setSaving(false); return; }
+      setConflit(null);
+      setReleve((prev) => ({ ...prev, heure: new Date().toISOString().slice(0, 16) }));
+      success("Releve fusionne avec les modifications recentes et enregistre");
+      onRefresh();
+    } catch (e) { showError(e.message); }
+    finally { setSaving(false); }
+  };
+
+  const resoudreConflitEcraser = async () => {
+    if (!conflit) return;
+    setSaving(true);
+    try {
+      const nvReleves = [...releves, conflit.nouveauReleve];
+      await updatePartogramme(partogramme.id, { releves: nvReleves });
+      setConflit(null);
+      setReleve((prev) => ({ ...prev, heure: new Date().toISOString().slice(0, 16) }));
+      success("Releve enregistre (modifications concurrentes ecrasees)");
       onRefresh();
     } catch (e) { showError(e.message); }
     finally { setSaving(false); }
@@ -448,6 +489,28 @@ function VuePartogramme({ partogramme, patients, grossessesActives, etabId, auth
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 1100, display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
       <div style={{ background: colors.bgCard, borderRadius: 16, width: "100%", maxWidth: 800, maxHeight: "95vh", overflowY: "auto", padding: "20px 24px", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
         {showAccouchement && <ModalAccouchement partogramme={partogramme} grossesse={grossesse} patients={patients} etabId={etabId} auth={auth} onClose={() => setShowAccouchement(false)} onSaved={() => { setShowAccouchement(false); onRefresh(); onClose(); }} />}
+
+        {conflit && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1400, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+            <div style={{ background: "white", borderRadius: 14, maxWidth: 460, width: "100%", padding: 24, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: "#DC2626", marginBottom: 10 }}>Modification concurrente detectee</div>
+              <p style={{ fontSize: 13, color: colors.text, marginBottom: 16, lineHeight: 1.5 }}>
+                Ce relevé a été modifié entre-temps par quelqu'un d'autre — voulez-vous écraser ou fusionner ?
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <button onClick={resoudreConflitFusion} disabled={saving} style={{ padding: 11, background: ACCENT, color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer" }}>
+                  Fusionner (recommande) — garder les deux relevés
+                </button>
+                <button onClick={resoudreConflitEcraser} disabled={saving} style={{ padding: 11, background: "#FEF2F2", color: "#DC2626", border: "1.5px solid #EF4444", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer" }}>
+                  Écraser quand même
+                </button>
+                <button onClick={() => setConflit(null)} disabled={saving} style={{ padding: 11, background: "#F8FAFC", color: colors.text, border: `1px solid ${colors.border}`, borderRadius: 8, fontSize: 13, cursor: saving ? "wait" : "pointer" }}>
+                  Annuler
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14 }}>
           <div>

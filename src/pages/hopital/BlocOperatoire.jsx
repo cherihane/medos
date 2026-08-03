@@ -12,7 +12,7 @@ import {
   genererNumeroIntervention,
   insertChecklist, updateChecklist, fetchChecklistIntervention,
   insertCRO, updateCRO, fetchCROIntervention,
-  insertFeuilleReveil, updateFeuilleReveil, fetchFeuilleReveilIntervention,
+  insertFeuilleReveil, updateFeuilleReveil, updateFeuilleReveilSiInchangee, fetchFeuilleReveilIntervention,
 } from "../../hooks/useMutations";
 import { openDocument, tableHTML, infoGridHTML, signatureRowHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
 
@@ -824,6 +824,7 @@ function OngletReveil({ etabId, interventionsJour, patients, auth }) {
   const [saving, setSaving]       = useState(false);
   const [destination, setDestination] = useState("Service chirurgie");
   const [nvReleve, setNvReleve]   = useState({ activite: 0, respiration: 0, circulation: 0, conscience: 0, spo2: 0 });
+  const [conflit, setConflit]     = useState(null); // { latest, nouveauReleve } si modification concurrente detectee
 
   useEffect(() => {
     if (!interSel) { setFeuille(null); return; }
@@ -848,11 +849,51 @@ function OngletReveil({ etabId, interventionsJour, patients, auth }) {
     if (!feuille) return;
     setSaving(true);
     try {
-      const nvs = [...releves, { heure: new Date().toISOString(), ...nvReleve, total: score_nv }];
+      const nouveauReleve = { heure: new Date().toISOString(), ...nvReleve, total: score_nv };
+      const nvs = [...releves, nouveauReleve];
+      // Ecriture conditionnelle sur updated_at : detecte une modification concurrente
+      // au lieu d'ecraser silencieusement (reproduit et confirme lors de l'audit —
+      // deux sessions sur la meme feuille perdaient un releve reel sans avertissement).
+      const updated = await updateFeuilleReveilSiInchangee(feuille.id, { releves_aldrete: nvs }, feuille.updated_at);
+      if (updated.length === 0) {
+        const latest = await fetchFeuilleReveilIntervention(inter.id);
+        setConflit({ latest, nouveauReleve });
+        setSaving(false);
+        return;
+      }
+      setFeuille(updated[0]);
+      setNvReleve({ activite: 0, respiration: 0, circulation: 0, conscience: 0, spo2: 0 });
+      success("Releve Aldrete enregistre");
+    } catch (e) { showError(e.message); }
+    finally { setSaving(false); }
+  };
+
+  const resoudreConflitFusion = async () => {
+    if (!conflit) return;
+    setSaving(true);
+    try {
+      const relevesAJour = conflit.latest?.releves_aldrete ?? [];
+      const nvs = [...relevesAJour, conflit.nouveauReleve];
+      const updated = await updateFeuilleReveilSiInchangee(feuille.id, { releves_aldrete: nvs }, conflit.latest.updated_at);
+      if (updated.length === 0) { showError("La feuille a encore ete modifiee entre-temps — reessayez."); setSaving(false); return; }
+      setFeuille(updated[0]);
+      setNvReleve({ activite: 0, respiration: 0, circulation: 0, conscience: 0, spo2: 0 });
+      setConflit(null);
+      success("Releve fusionne avec les modifications recentes et enregistre");
+    } catch (e) { showError(e.message); }
+    finally { setSaving(false); }
+  };
+
+  const resoudreConflitEcraser = async () => {
+    if (!conflit) return;
+    setSaving(true);
+    try {
+      const nvs = [...(feuille.releves_aldrete ?? []), conflit.nouveauReleve];
       const updated = await updateFeuilleReveil(feuille.id, { releves_aldrete: nvs });
       setFeuille(updated);
       setNvReleve({ activite: 0, respiration: 0, circulation: 0, conscience: 0, spo2: 0 });
-      success("Releve Aldrete enregistre");
+      setConflit(null);
+      success("Releve enregistre (modifications concurrentes ecrasees)");
     } catch (e) { showError(e.message); }
     finally { setSaving(false); }
   };
@@ -897,6 +938,28 @@ function OngletReveil({ etabId, interventionsJour, patients, auth }) {
       </div>
 
       {!interSel && <div style={{ textAlign: "center", color: colors.textMuted, padding: 40, fontSize: 13 }}>Aucun patient en salle de reveil pour le moment.</div>}
+
+      {conflit && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1400, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: "white", borderRadius: 14, maxWidth: 460, width: "100%", padding: 24, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "#DC2626", marginBottom: 10 }}>Modification concurrente detectee</div>
+            <p style={{ fontSize: 13, color: colors.text, marginBottom: 16, lineHeight: 1.5 }}>
+              Ce relevé a été modifié entre-temps par quelqu'un d'autre — voulez-vous écraser ou fusionner ?
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <button onClick={resoudreConflitFusion} disabled={saving} style={{ padding: 11, background: ACCENT, color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer" }}>
+                Fusionner (recommande) — garder les deux relevés
+              </button>
+              <button onClick={resoudreConflitEcraser} disabled={saving} style={{ padding: 11, background: "#FEF2F2", color: "#DC2626", border: "1.5px solid #EF4444", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer" }}>
+                Écraser quand même
+              </button>
+              <button onClick={() => setConflit(null)} disabled={saving} style={{ padding: 11, background: "#F8FAFC", color: colors.text, border: `1px solid ${colors.border}`, borderRadius: 8, fontSize: 13, cursor: saving ? "wait" : "pointer" }}>
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {feuille && inter && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>

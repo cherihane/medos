@@ -6783,3 +6783,42 @@ vraie Promise). Conséquence réelle : l'alerte "Nouvelle ordonnance a dispenser
 quand ce chemin de code s'exécute — la pharmacie ne serait jamais notifiée. **Non corrigé** (hors
 périmètre strict des 3 failles demandées) — signalé pour une session dédiée.
 
+### 2. Perte silencieuse en cas de modification concurrente — CORRIGÉ
+
+**Avant** : `feuilles_reveil.releves_aldrete` et `partogrammes.releves` sont réécrits en entier
+depuis l'état local du composant (`[...ancienEtatLocal, nouveauReleve]`) plutôt que par un ajout
+atomique côté serveur — deux postes ouvrant le même dossier en même temps pouvaient s'écraser
+mutuellement un relevé clinique réel, sans aucune erreur ni avertissement (reproduit empiriquement
+lors de l'audit précédent).
+
+**Corrigé** :
+- Migration [20260803000000](supabase/migrations/20260803000000_detection_conflit_ecriture_concurrente.sql) :
+  colonne `updated_at` (+ trigger d'auto-maj à chaque `UPDATE`) ajoutée à `feuilles_reveil` **et**
+  `partogrammes` (même risque, même motif — explicitement demandé "tout autre écran de surveillance
+  clinique similaire").
+- Nouvelles fonctions `updateFeuilleReveilSiInchangee()` / `updatePartogrammeSiInchangee()`
+  (`useMutations.js`) : `UPDATE ... WHERE id = ? AND updated_at = ?` — écriture conditionnelle qui
+  ne modifie la ligne que si elle n'a pas changé depuis le chargement ; retourne un tableau vide
+  (pas une erreur) si la ligne a été modifiée entre-temps par quelqu'un d'autre.
+- `OngletReveil` (BlocOperatoire.jsx) et `VuePartogramme` (Maternite.jsx) : en cas de conflit
+  détecté, un modal explicite apparaît — **"Ce relevé a été modifié entre-temps par quelqu'un
+  d'autre — voulez-vous écraser ou fusionner ?"** — avec 3 choix : *Fusionner (recommandé)* (relit
+  l'état le plus récent et y ajoute le nouveau relevé, conservant les deux), *Écraser quand même*,
+  ou *Annuler*. Plus jamais un écrasement silencieux.
+
+**Preuve réelle avant/après** — reproduction exacte du scénario de l'audit précédent (intervention
+et feuille de réveil de test créées, 2 onglets du navigateur simulant 2 infirmières) :
+1. Onglet A charge la feuille (vide), saisit un relevé Aldrete (score 10/10) et enregistre —
+   confirmé en base à `14:06:36`.
+2. Onglet B, qui avait chargé la même feuille **avant** la sauvegarde de l'onglet A, saisit un
+   relevé différent (score 5/10) et tente d'enregistrer.
+3. **Avant le correctif** (session précédente) : le relevé de l'onglet A disparaissait
+   silencieusement, écrasé par celui de l'onglet B, sans aucune erreur.
+4. **Après le correctif** : modal "Modification concurrente detectee" affiché immédiatement dans
+   l'onglet B, avec les 3 choix. Clic sur "Fusionner" → **vérifié en base : les deux relevés sont
+   présents** (`total: 10` à `14:06:36` ET `total: 5` à `14:06:59`, `updated_at` mis à jour à
+   `14:07:17`). Plus aucune perte de donnée clinique.
+
+Données de test nettoyées après vérification (intervention et feuille de réveil créées
+spécifiquement pour ce test, supprimées de la base).
+
