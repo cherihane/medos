@@ -26,8 +26,12 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL         = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_ANON_KEY    = Deno.env.get("SUPABASE_ANON_KEY")!;
-const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+// Migration hors des clés legacy (audit sécurité 2026-08) : SUPABASE_ANON_KEY
+// et SUPABASE_SERVICE_ROLE_KEY remplacées par les clés du nouveau système.
+// Chaque dictionnaire est indexé par le nom donné à la clé dans le
+// Dashboard — on prend la première valeur plutôt qu'un nom en dur.
+const SUPABASE_ANON_KEY    = Object.values(JSON.parse(Deno.env.get("SUPABASE_PUBLISHABLE_KEYS")!))[0] as string;
+const SUPABASE_SERVICE_KEY = Object.values(JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS")!))[0] as string;
 const SITE_URL             = "https://medos.kelagroup.org";
 
 const CORS_HEADERS = {

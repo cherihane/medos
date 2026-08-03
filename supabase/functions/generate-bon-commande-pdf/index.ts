@@ -19,7 +19,11 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { PDFDocument, StandardFonts, rgb } from "https://esm.sh/pdf-lib@1.17.1";
 
 const SUPABASE_URL      = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+// Migration hors des clés legacy (audit sécurité 2026-08) : SUPABASE_ANON_KEY
+// est remplacée par la clé "publishable" du nouveau système de clés API. Le
+// dictionnaire est indexé par le nom donné à la clé dans le Dashboard — on
+// prend la première valeur plutôt qu'un nom en dur.
+const SUPABASE_ANON_KEY = Object.values(JSON.parse(Deno.env.get("SUPABASE_PUBLISHABLE_KEYS")!))[0] as string;
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin":  "*",

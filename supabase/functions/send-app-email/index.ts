@@ -15,7 +15,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const RESEND_API_KEY    = Deno.env.get("RESEND_API_KEY")!;
 const SUPABASE_URL      = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+// Migration hors des clés legacy (audit sécurité 2026-08) : SUPABASE_ANON_KEY
+// est remplacée par la clé "publishable" du nouveau système de clés API. Le
+// dictionnaire est indexé par le NOM donné à la clé dans le Dashboard (pas
+// forcément "default") — on prend la première valeur plutôt qu'un nom en
+// dur, pour rester valide même si la clé est renommée plus tard.
+const SUPABASE_PUBLISHABLE_KEY = Object.values(JSON.parse(Deno.env.get("SUPABASE_PUBLISHABLE_KEYS")!))[0] as string;
 const ADMIN_ALERT_EMAIL = Deno.env.get("ADMIN_ALERT_EMAIL") ?? "cherihaneadam123@gmail.com";
 const FROM_EMAIL        = "MedOS <noreply@mail.kelagroup.org>";
 
@@ -53,7 +58,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const jwt = authHeader.slice(7);
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     global: { headers: { Authorization: `Bearer ${jwt}` } },
   });
 

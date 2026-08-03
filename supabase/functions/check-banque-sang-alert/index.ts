@@ -17,7 +17,11 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL     = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+// Migration hors des clés legacy (audit sécurité 2026-08) : SUPABASE_SERVICE_ROLE_KEY
+// est remplacée par la clé "secret" du nouveau système de clés API. Le
+// dictionnaire est indexé par le nom donné à la clé dans le Dashboard — on
+// prend la première valeur plutôt qu'un nom en dur.
+const SUPABASE_SERVICE = Object.values(JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS")!))[0] as string;
 const RESEND_API_KEY   = Deno.env.get("RESEND_API_KEY")!;
 const APP_URL          = Deno.env.get("APP_URL") ?? "https://medos.kelagroup.org";
 const ADMIN_EMAIL      = Deno.env.get("ADMIN_EMAIL") ?? "admin@medos.app";
