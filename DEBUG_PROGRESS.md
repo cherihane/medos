@@ -6459,3 +6459,37 @@ vérification).
 secret legacy en clair (Supabase `service_role` ou clé Resend) nulle part dans le système, hormis
 le point 2 ci-dessus, explicitement accepté comme risque résiduel connu.
 
+---
+
+## Trouvaille supplémentaire — SMTP Auth Supabase avec l'ancienne clé Resend (2026-08-03)
+
+Découvert en répondant à une question de l'utilisateur ("le lien mot de passe oublié ne marche
+pas"), donc **manqué par le balayage précédent** : ce balayage avait vérifié les Edge Functions, les
+workflows n8n et le repo, mais pas les **paramètres SMTP de la configuration Auth Supabase**
+(Dashboard → Project Settings → Auth → SMTP Settings), un 4ème endroit distinct où une clé Resend
+peut être configurée — utilisé par les emails natifs de Supabase Auth (`resetPasswordForEmail`,
+changement d'email, etc.), indépendamment de `send-app-email`.
+
+**Confirmé par les logs Supabase** (`auth_logs`, requête analytics) : chaque appel à `/recover`
+échouait avec `"error":"535 \"Authentication credentials invalid\""`, HTTP 500 — l'ancienne clé
+Resend révoquée était toujours le mot de passe SMTP configuré.
+
+**Correction** : l'utilisateur a mis à jour le champ Password dans Dashboard → Auth → SMTP
+Settings avec la nouvelle clé Resend (`re_5N8KmCtP...`) — tentative de le faire via l'API
+Management (`PATCH /v1/projects/{ref}/config/auth`) bloquée par le classifieur de sécurité de
+l'environnement (modification de configuration de compte), déléguée à l'utilisateur après
+confirmation explicite en chat.
+
+**Vérifié de bout en bout avec preuve réelle** : 3 appels réels à `/auth/v1/recover` pour
+`cherihaneadam123@gmail.com` après correction :
+- 12:17:36 UTC — email reçu (Gmail, thread `19fc78edfa56029e`), 1s après l'appel, HTTP 200
+  (contre HTTP 500 avant correction).
+- 12:18:56 UTC — email reçu (`19fc79019ec500e8`), 0s après l'appel.
+- 12:20:26 UTC — email reçu (`19fc791773f016b3`) avec `redirect_to` correctement passé en
+  paramètre de requête (comme le fait réellement `supabase.auth.resetPasswordForEmail(email,
+  { redirectTo })` côté client JS) : lien final `.../auth/v1/verify?token=...&type=recovery&
+  redirect_to=https://medos.kelagroup.org/reinitialisation` — pointe bien vers la page de
+  réinitialisation de l'app, pas vers la page de connexion.
+
+**"Mot de passe oublié" est réparé et confirmé fonctionnel de bout en bout.**
+
