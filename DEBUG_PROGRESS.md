@@ -7028,3 +7028,49 @@ session partagée entre onglets après fermeture complète du navigateur (`sessi
 Commit et push séparés pour ce correctif (voir historique git). Les 2 onglets de test ont été
 déconnectés proprement après vérification ; aucune donnée métier créée pendant cette vérification.
 
+## Mission sécurité plateforme — Phase 2 : audit RLS complet (2026-08-03)
+
+### Méthode
+
+Extraction de `pg_tables` (68 tables `public`, RLS activée sur les 68 sans exception) et de
+`pg_policies` (268 lignes de policies) via `supabase db query --linked`, puis recherche
+systématique des policies ne référençant ni `mes_etablissements()` ni `etablissement_id` (hors
+tables de référence attendues), des policies INSERT sans `with_check`, et du pattern faible
+`auth.uid() IS NOT NULL` employé seul. Confirmé qu'aucune des 68 tables n'a de policy manquante
+(RLS activée + au moins une policy partout).
+
+### 3 failles confirmées et corrigées (migration `20260803010000_...sql`)
+
+1. **`etablissements` — fuite non authentifiée confirmée en direct** : les policies SELECT de
+   l'annuaire public (`etab_select_hopitaux_publics`, `etab_select_distributeurs_publics`,
+   `etab_select_distributeur_clients`) étaient accordées au rôle Postgres `{public}`, qui couvre
+   aussi le rôle `anon` (aucune connexion requise). Vérifié avec une requête `curl` n'utilisant
+   que la clé publique du frontend (celle visible par n'importe quel visiteur du site, sans
+   compte) : renvoyait email, téléphone, date de dernière connexion et paramètres internes de
+   **chaque hôpital et distributeur validé**, sans aucune authentification. Aucun usage anon
+   légitime trouvé dans le code (`Inscription.jsx` ne fait qu'un INSERT). Corrigé en restreignant
+   les 3 policies au rôle `{authenticated}`. **Preuve avant/après** : `curl` avec la clé publique
+   seule → avant : liste complète des hôpitaux avec email ; après : `[]`. Revérifié ensuite que le
+   même annuaire reste correctement visible pour un compte Hôpital connecté (`/hopital/reseau` :
+   toujours 3 hôpitaux + 4 distributeurs, aucune régression).
+2. **`fond_caisse`** : policies SELECT/INSERT vérifiaient uniquement `auth.uid() IS NOT NULL`,
+   jamais `etablissement_id` (colonne pourtant présente) contre `mes_etablissements()` — n'importe
+   quel compte authentifié, de n'importe quel établissement, pouvait lire le fond de caisse de
+   tous les établissements et en insérer pour n'importe quel `etablissement_id`. Vérifié avec
+   `curl` : accès anon également bloqué après correctif (`[]`).
+3. **`lots`** : policies INSERT/UPDATE/DELETE basées uniquement sur `is_membre_actif()` (membre
+   actif de n'importe quel établissement), sans jamais vérifier que le `medicament_id` référencé
+   appartient à un établissement de l'appelant — n'importe quel compte pouvait modifier ou
+   supprimer les lots d'un autre établissement, ou insérer un lot pointant vers le `medicament_id`
+   d'un tiers. Corrigé en scopant les 3 policies via une jointure sur
+   `medicaments.etablissement_id`. La policy SELECT reste volontairement large (vérification
+   d'authenticité inter-établissements via le Scanner — fonctionnalité voulue, confirmée dans le
+   code de `Tracabilite.jsx`/`Entrepot.jsx`/`Fournisseurs.jsx` où hôpitaux ET distributeurs créent
+   tous deux des lots légitimement).
+
+Migration appliquée directement sur le projet lié via `supabase db query --linked -f` (le ledger
+de migrations du CLI étant désynchronisé d'un historique appliqué hors `db push` lors de sessions
+précédentes — `supabase db push` a été abandonné après avoir buté sur une policy déjà existante
+d'une migration historique non liée à ce correctif, aucune donnée n'a été affectée par cette
+tentative avortée).
+
