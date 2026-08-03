@@ -6994,3 +6994,37 @@ métier créée pendant ce diagnostic (aucune écriture volontaire n'a été eff
 "confus", uniquement une lecture de `/hopital/patients`). Les mots de passe des 2 comptes de test
 Hôpital/Pharmacie restent réinitialisés à la valeur de test utilisée pour cette reproduction.
 
+### Correctif appliqué et vérifié (confirmation explicite de l'utilisateur obtenue)
+
+Implémenté dans `src/supabaseClient.js` : un identifiant aléatoire (`crypto.randomUUID()`) est
+généré au premier chargement de chaque onglet et persisté dans `sessionStorage.medos_tab_id` ;
+il sert de suffixe à `auth.storageKey` passé à `createClient(...)`. Chaque onglet obtient ainsi
+sa propre clé `localStorage` (`sb-yehqmvwmosskumbegzty-auth-token-<uuid>`) et son propre
+`BroadcastChannel` (nommé d'après la même clé dans `auth-js`), totalement indépendants des
+autres onglets. `AuthContext.jsx` n'a pas été touché.
+
+**Preuve réelle avant/après**, même scénario exact que le diagnostic ci-dessus (comptes Hôpital
+Audit Test 2 / Pharmacie Audit Test) :
+1. Onglet A connecté Hôpital. Onglet B tout neuf, jamais connecté, ouvert sur `localhost:3000` :
+   **avant** → héritait automatiquement du dashboard Hôpital de l'onglet A (faille point 2).
+   **Après le correctif** → affiche systématiquement l'écran de connexion. Confirmé.
+2. Onglet B connecté explicitement en Pharmacie, sans jamais toucher l'onglet A (toujours
+   Hôpital) : **avant** → l'onglet A basculait silencieusement d'identité réelle vers le compte
+   Pharmacie tout en gardant le badge et la navigation "Hôpital", et `/hopital/patients` y
+   affichait 0 patient au lieu des 3 réels. **Après le correctif** → l'onglet A reste
+   intégralement Hôpital (badge, nav, et surtout `/hopital/patients` affiche de nouveau
+   **3 total patients**, exactement la valeur réelle) sans aucune perturbation, pendant que
+   l'onglet B est indépendamment et correctement Pharmacie. Vérifié en direct via
+   `sessionStorage`/`localStorage` (2 clés distinctes coexistant sans jamais se lire l'une
+   l'autre) en plus de l'UI.
+
+Les 2 failles de session (Phase 0, points 1 et 2) sont donc corrigées et vérifiées par un test
+réel avant/après, pas seulement une relecture de code. Conséquence acceptée et documentée pour
+l'utilisateur : après déploiement, toute session déjà ouverte sous l'ancienne clé fixe sera
+orpheline (les utilisateurs actifs devront se reconnecter une fois) ; il n'y a plus non plus de
+session partagée entre onglets après fermeture complète du navigateur (`sessionStorage` est vidé
+à la fermeture), cohérent avec le fonctionnement déjà choisi pour `medos_role_actif`.
+
+Commit et push séparés pour ce correctif (voir historique git). Les 2 onglets de test ont été
+déconnectés proprement après vérification ; aucune donnée métier créée pendant cette vérification.
+
