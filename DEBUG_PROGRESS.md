@@ -6446,3 +6446,16 @@ avec preuve réelle ; correction proposée à l'utilisateur, en attente de sa d�
 triggers de production et/ou une base n8n externe — hors du périmètre de la demande initiale de
 vérification).
 
+**Décision de l'utilisateur** :
+1. Workflow n8n v1 archivé (`bb2omzp8LWZbpyN1`, clé `service_role` legacy en clair, déjà confirmée
+   morte) → **supprimé** (`n8n_delete_workflow`). Confirmé via `n8n_list_workflows` : n'apparaît
+   plus dans la liste des workflows de l'instance (7 restants, dont le v2 toujours actif et sain).
+2. Les 2 triggers SQL (`notify_stock_alert()`, `notify_banque_sang_alert()`) avec JWT `anon`
+   legacy en dur → **laissés tels quels pour l'instant**. Fonctionnels aujourd'hui (vérifié 200
+   réel), clé publique par conception (pas un secret au sens strict) — à traiter dans une session
+   future si Supabase retire la vérification par l'ancien secret JWT.
+
+**Rotation de clés considérée close** sur le périmètre vérifié : plus aucune dépendance active à un
+secret legacy en clair (Supabase `service_role` ou clé Resend) nulle part dans le système, hormis
+le point 2 ci-dessus, explicitement accepté comme risque résiduel connu.
+
