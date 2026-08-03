@@ -7074,3 +7074,24 @@ précédentes — `supabase db push` a été abandonné après avoir buté sur u
 d'une migration historique non liée à ce correctif, aucune donnée n'a été affectée par cette
 tentative avortée).
 
+### Point 7 — migration des 2 derniers triggers Postgres vers la clé publishable
+
+`notify_stock_alert()` et `notify_banque_sang_alert()` envoyaient encore le JWT "anon" legacy
+codé en dur (`eyJhbGci...`) en `Authorization: Bearer` lors de l'appel `net.http_post()` vers
+respectivement `check-stock-alert` et `check-banque-sang-alert` — alors que ces 2 Edge Functions
+ont déjà été migrées côté fonction vers le nouveau système de clés (`SUPABASE_SECRET_KEYS`) lors
+de l'audit sécurité précédent. Remplacé par la nouvelle clé "publishable" (même clé que
+`src/supabaseClient.js`), migration `20260803020000_...sql`.
+
+**Vérification** : avant d'appliquer, confirmé par un `curl` direct sur
+`https://.../functions/v1/check-stock-alert` avec `Authorization: Bearer sb_publishable_...` →
+`200`. Après application, confirmé que le corps déployé de `notify_stock_alert()` contient bien
+la nouvelle clé (`pg_proc.prosrc`) et plus l'ancien JWT. **Non vérifié en déclenchement réel** :
+la tentative de faire baisser temporairement le stock d'un médicament réel pour observer le
+trigger se déclencher en conditions réelles (puis le restaurer) a été bloquée par le
+classificateur de sécurité (mutation, même temporaire, d'une donnée de production hors des
+comptes de test dédiés) — jugé approprié, non contourné. La combinaison des 2 vérifications
+ci-dessus (corps de fonction confirmé + passerelle confirmée accepter exactement ce jeton pour
+cette URL) est jugée suffisante : seul le jeton envoyé a changé, rien d'autre dans la logique du
+trigger.
+
