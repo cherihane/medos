@@ -7154,3 +7154,49 @@ Nettoyage : les 4 arrivées de test créées pendant cette vérification (consul
 Urgences`) et l'alerte de test associée ont été supprimées ; le tableau de bord Urgences confirmé
 revenu à 0 patient.
 
+### Points 2 et 3 — isolation de session et cohérence établissement/interface (autres modules)
+
+Le correctif de la Phase 0 (`storageKey` Supabase scopé par onglet) est architectural : il
+s'applique identiquement à `AuthContext.jsx` et `supabaseClient.js` quel que soit le rôle
+(hôpital, pharmacie, distributeur, autorité), puisque les 4 modules partagent le même client
+Supabase et le même contexte d'authentification. Revérifié explicitement avec un 2ème couple de
+comptes réels de modules différents (Hôpital Audit Test 2 + Pharmacie Audit Test, en plus du
+couple déjà testé en Phase 0) : connexion Pharmacie dans un onglet pendant que l'onglet Hôpital
+reste actif, aucune bascule d'identité, aucun héritage de session — comportement identique à la
+Phase 0. Le mécanisme étant le même code pour tous les rôles, non re-testé onglet par onglet pour
+chaque paire de modules restante (pharmacie×distributeur, distributeur×autorité, etc.) — le risque
+résiduel est jugé nul, la cause étant entièrement générique.
+
+### Point 6 — contournement par URL directe, pharmacie et distributeur
+
+Testé à 2 niveaux avec le compte réel Pharmacie Audit Test :
+1. **Routage frontend** : navigation directe vers `/distributeur/dashboard` alors que connecté en
+   Pharmacie → redirection automatique vers `/pharmacie/dashboard` (jamais d'accès à l'écran
+   Distributeur). Confirme que `ProtectedRoute` (`src/App.js`) bloque correctement tout accès
+   direct par URL à un module non autorisé, cohérent avec la revue de code déjà faite lors du
+   diagnostic Phase 0.
+2. **Couche données (au cas où le frontend serait contourné entièrement, requêtes API directes)** :
+   avec le vrai jeton JWT du compte Pharmacie (extrait de `localStorage`, requêtes `curl` directes
+   vers l'API REST Supabase, sans passer par le frontend) :
+   - Lecture `patients` de l'établissement Hôpital → `[]` (RLS bloque).
+   - Lecture `fond_caisse` de l'établissement Hôpital → `[]` (confirme que le correctif RLS du
+     point 1 tient aussi face à un vrai compte authentifié, pas seulement face à `anon`).
+   - Tentative d'`INSERT` dans `alertes` pour l'établissement Hôpital → explicitement **rejetée**
+     par Postgres (`42501 : new row violates row-level security policy`).
+
+Aucun contournement possible trouvé, ni côté routage ni côté API directe.
+
+### Points 4 et 7 — déjà couverts ci-dessus
+
+Point 4 (fichiers uploadés) : vérifié plus haut — bucket `examens-resultats` privé, chemin
+`{etablissement_id}/{examen_id}/...` cohérent avec la policy RLS de `storage.objects`, URLs
+signées à 1h (`createSignedUrl`), aucun lien permanent devinable. Aucune faille trouvée.
+Point 7 (migration des 2 triggers) : voir section dédiée plus haut.
+
+## Bilan de la Phase 2
+
+7 points audités, 4 failles réelles confirmées et corrigées (commits `aafcd1c`, `5c0f571`,
+`8047c18`), 1 migration de triggers effectuée (`5c0f571`), aucune faille supplémentaire trouvée sur
+les fichiers uploadés ni sur le contournement d'URL/API. Toutes les données de test créées pendant
+cette phase ont été nettoyées après vérification.
+
