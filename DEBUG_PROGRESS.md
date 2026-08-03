@@ -6868,3 +6868,129 @@ allergie). Aucune fonction protégée d'`AuthContext.jsx` n'a été touchée. Un
 rapport (`.catch is not a function` sur l'insert `alertes` de `ModalNouvelleOrdonnance`) a été
 découvert en testant le point 1 et documenté sans être corrigé, hors périmètre de cette mission.
 
+## Mission sécurité plateforme — Phase 0 : diagnostic des 2 failles de session (2026-08-03)
+
+Mission multi-phases (sécurité et sûreté clinique de toute la plateforme MedOS). Phase 0 =
+diagnostic uniquement des 2 failles de session découvertes en session précédente, jamais encore
+traitées. Règle absolue : **aucune modification appliquée à `AuthContext.jsx`** — diagnostic et
+correctif proposé seulement, en attente de confirmation explicite de l'utilisateur.
+
+### Reproduction en direct — 2 vrais comptes, 2 établissements réels distincts
+
+Comptes utilisés (mot de passe réinitialisé pour ce test après confirmation explicite de
+l'utilisateur, comme lors des sessions précédentes) :
+- **Hôpital Audit Test 2** (`cherihaneadam123+hopitalaudit2@gmail.com`), établissement
+  `28060337-8a99-4540-8e0d-5eb63b4fa97e`, type `hopital`.
+- **Pharmacie Audit Test** (`cherihaneadam123+pharmaaudit@gmail.com`), établissement
+  `2f0d35ec-fe25-4883-93a4-d8974739cb9a`, type `pharmacie`.
+
+**Étape 1** — Onglet 1 : connexion normale au compte Hôpital. Interface Hôpital correcte, badge
+"Hôpital", `sessionStorage.medos_role_actif = "hopital"`, jeton Supabase (`localStorage`,
+clé `sb-yehqmvwmosskumbegzty-auth-token`) = email hôpital. Conforme.
+
+**Étape 2 — reproduction de la faille "nouvel onglet" (point 2)** : un onglet 2 tout neuf,
+**jamais connecté explicitement**, est ouvert sur `localhost:3000` sans aucune action de
+connexion. Résultat : l'onglet 2 affiche immédiatement le dashboard complet **Direction —
+Hopital Audit Test 2**, exactement le compte actif de l'onglet 1. Confirmé : ouvrir un nouvel
+onglet ne mène jamais à un écran de connexion tant qu'une session existe ailleurs dans le même
+navigateur — il n'existe aucune façon d'avoir deux sessions réellement indépendantes dans 2
+onglets du même navigateur.
+
+**Étape 3 — propagation silencieuse (aggravant du point 2)** : déconnexion explicite dans
+l'onglet 2 → l'onglet 1, sans aucune interaction, repasse instantanément à l'écran de connexion.
+Une action de déconnexion dans un onglet déconnecte donc tous les autres onglets ouverts du même
+navigateur, sans avertissement.
+
+**Étape 4 — reproduction de la faille "interface incohérente" (point 1)** : dans l'onglet 2
+(désormais déconnecté), connexion explicite au compte **Pharmacie Audit Test** (établissement
+réellement différent, type différent). Résultat vérifié en JS (`sessionStorage`/`localStorage`) :
+onglet 2 correctement Pharmacie. **Sans rafraîchir ni toucher l'onglet 1** : celui-ci continue
+d'afficher l'intégralité de la navigation et du badge **"Hôpital"** (label, sidebar, toutes les
+routes `/hopital/*` toujours actives) — mais son jeton Supabase réel a changé silencieusement
+pour l'email **Pharmacie**. Navigation vers `/hopital/patients` dans cet onglet 1 "confus" :
+la page Hôpital s'affiche normalement (interface Hôpital intacte) mais retourne **"Aucun patient
+enregistré" (0)** alors que 3 patients existent réellement pour l'établissement Hôpital — parce
+que les requêtes RLS sont désormais scopées sur l'`etablissement_id` de la Pharmacie, pas de
+l'Hôpital. Toute écriture (ex. "Ajouter un patient") depuis cet onglet aurait été attribuée à
+l'établissement Pharmacie et non à l'Hôpital réellement affiché à l'écran.
+
+### Cause exacte — un seul mécanisme racine explique les 2 points
+
+1. Le client Supabase (`src/supabaseClient.js`) est créé sans option `auth.storage` /
+   `auth.storageKey` custom : la session persiste par défaut dans **`localStorage`**, partagé
+   par tous les onglets de la même origine — il n'y a donc jamais qu'une seule identité "réelle"
+   active par navigateur, jamais une par onglet.
+2. `AuthContext.jsx` superpose un rôle "gelé" par onglet via `sessionStorage.medos_role_actif`
+   (mécanisme déjà ajouté lors d'un correctif antérieur, voir commentaire en tête de fichier,
+   pour éviter qu'un changement de rôle dans un autre onglet n'écrase le libellé affiché) — mais
+   ce gel ne protège que le **libellé et la navigation** (`auth.role`, `auth.label`, `auth.nav`),
+   jamais l'**identité réelle** utilisée pour résoudre `etablissement_id`
+   (`enrichWithEtablissement`, basé sur `session.user.email` du jeton Supabase actif).
+3. La librairie `@supabase/auth-js` (v2.106.2, confirmé dans `node_modules`) crée en plus, dès
+   qu'une session est persistée, un `BroadcastChannel` nommé d'après la clé de stockage
+   (`GoTrueClient.js:206-219`) — **indépendant du backend de stockage choisi**. Toute connexion
+   ou déconnexion dans un onglet est donc rediffusée en direct, avec la session complète en
+   payload, à tous les autres onglets ouverts, qui répercutent immédiatement l'événement dans
+   `onAuthStateChange` — c'est ce mécanisme, et non un rechargement de page, qui a fait basculer
+   l'identité réelle de l'onglet 1 pendant l'étape 4 sans qu'il soit jamais rafraîchi ni touché.
+
+En clair : **le libellé/la navigation et l'identité réelle (établissement) sont deux sources de
+vérité découplées** dans un même onglet. Le gel par `sessionStorage` protège la première mais
+jamais la seconde, ce qui permet exactement le scénario rapporté : badge et navigation "Hôpital"
+figés, alors que toutes les données lues/écrites appartiennent en réalité à un autre compte —
+potentiellement un autre type d'établissement, comme reproduit ici avec Pharmacie.
+
+### Pourquoi ce n'est pas une simple anomalie d'affichage
+
+- Lecture : RLS limite les dégâts (aucune fuite de données Pharmacie visible dans l'écran
+  Hôpital — la requête scopée sur le mauvais `etablissement_id` renvoie simplement un
+  résultat vide), mais un soignant peut légitimement croire "aucun patient/antécédent" alors que
+  les données existent bel et bien, juste inaccessibles sous la mauvaise identité.
+- Écriture : toute création (patient, prescription, constante...) depuis un onglet "confus"
+  serait silencieusement rattachée au **mauvais établissement**, un vrai risque de corruption de
+  données inter-locataires (cross-tenant), invisible tant que personne ne recoupe les deux
+  établissements.
+- Un poste partagé (accueil, infirmerie) où plusieurs personnes ouvrent des onglets au fil de la
+  journée est le terrain le plus probable pour ce scénario en conditions réelles.
+
+### Correctif proposé — PAS appliqué, en attente de confirmation explicite
+
+Fix ciblé, minimal, isolant chaque onglet en une session Supabase réellement indépendante :
+
+1. Dans `src/supabaseClient.js`, générer au premier chargement de chaque onglet un identifiant
+   aléatoire persistant dans **`sessionStorage`** (donc stable pour cet onglet à travers ses
+   propres rafraîchissements, mais unique et jamais partagé entre onglets), et l'utiliser comme
+   suffixe de `auth.storageKey` passé à `createClient(...)`.
+2. Effet : chaque onglet obtient sa propre clé de stockage ET son propre nom de
+   `BroadcastChannel` (dérivé de la même clé dans `auth-js`) → plus aucun onglet ne peut hériter
+   ni recevoir la session d'un autre. Un nouvel onglet affiche systématiquement l'écran de
+   connexion (fixe le point 2) ; une connexion/déconnexion dans un onglet ne peut plus jamais
+   modifier l'identité active d'un autre onglet déjà ouvert (fixe le point 1).
+3. Conséquence acceptée : plus de session partagée entre onglets après un redémarrage complet du
+   navigateur (`sessionStorage` est vidé à la fermeture de l'onglet) — cohérent avec le
+   fonctionnement déjà choisi pour `medos_role_actif`, et un compromis raisonnable pour une
+   plateforme clinique multi-locataires.
+4. Une fois ce correctif en place, le gel de rôle par `sessionStorage.medos_role_actif` dans
+   `AuthContext.jsx` devient redondant (chaque onglet a déjà sa propre identité complète) et
+   pourrait être simplifié — **changement distinct, à `AuthContext.jsx`, qui ne sera proposé et
+   appliqué qu'après confirmation explicite séparée**, conformément à la règle absolue de cette
+   mission.
+
+Ce correctif touche uniquement `src/supabaseClient.js` (hors périmètre de la règle absolue, qui
+ne vise que `AuthContext.jsx`) mais n'a **pas été appliqué** : il est soumis à validation avant
+toute implémentation, la Phase 0 étant explicitement un diagnostic à valider avant la Phase 2.
+
+### Découverte annexe, hors des 2 points listés
+
+Le champ "Se souvenir de moi" sur `Login.jsx` est un `<input type="checkbox">` sans `onChange`
+ni usage dans `handleSubmit` — décoratif, sans aucun effet réel. Sans lien avec les 2 failles de
+session ci-dessus, mais relevé en marge car découvert pendant l'inspection du même écran ;
+signalé pour une décision produit, pas corrigé (hors périmètre de cette mission).
+
+### Nettoyage
+
+Les 2 onglets de test ont été déconnectés proprement à la fin de la reproduction. Aucune donnée
+métier créée pendant ce diagnostic (aucune écriture volontaire n'a été effectuée dans l'onglet
+"confus", uniquement une lecture de `/hopital/patients`). Les mots de passe des 2 comptes de test
+Hôpital/Pharmacie restent réinitialisés à la valeur de test utilisée pour cette reproduction.
+
