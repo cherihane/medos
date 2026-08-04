@@ -4,6 +4,7 @@ import { supabase } from "../supabaseClient";
 import PublicFooter from "../components/PublicFooter";
 import Tooltip from "../components/Tooltip";
 import { colors, radius, shadow, font } from "../theme";
+import { motDePasseValide, MOT_DE_PASSE_MESSAGE_ERREUR } from "../utils/passwordPolicy";
 
 // ─── constantes ──────────────────────────────────────────────────────────────
 const ROLES = [
@@ -273,8 +274,8 @@ function EtapeFormulaire({ form, onChange }) {
       </Field>
 
       <Row>
-        <Field label="Mot de passe" required hint="Minimum 8 caractères.">
-          <input style={inputStyle} type="password" value={form.password} onChange={set("password")} placeholder="Min. 8 caractères" />
+        <Field label="Mot de passe" required hint="Minimum 10 caractères, avec au moins une lettre et un chiffre.">
+          <input style={inputStyle} type="password" value={form.password} onChange={set("password")} placeholder="Min. 10 caractères" />
         </Field>
         <Field label="Confirmer le mot de passe" required>
           <input style={inputStyle} type="password" value={form.passwordConfirm} onChange={set("passwordConfirm")} placeholder="Identique au mot de passe" />
@@ -364,7 +365,7 @@ export default function Inscription() {
     if (!form.responsable_prenom?.trim() || !form.responsable_nom?.trim()) { setErreur("Le nom et prénom du responsable sont obligatoires."); return false; }
     if (!form.telephone?.trim()) { setErreur("Le téléphone est obligatoire."); return false; }
     if (!form.email.trim()) { setErreur("L'email est obligatoire."); return false; }
-    if (form.password.length < 8) { setErreur("Le mot de passe doit contenir au moins 8 caractères."); return false; }
+    if (!motDePasseValide(form.password)) { setErreur(MOT_DE_PASSE_MESSAGE_ERREUR); return false; }
     if (form.password !== form.passwordConfirm) { setErreur("Les mots de passe ne correspondent pas."); return false; }
     // Champs spécifiques obligatoires
     if (form.role === "pharmacie" && !form.type_etablissement) { setErreur("Veuillez préciser le type de pharmacie."); return false; }

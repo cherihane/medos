@@ -2,6 +2,7 @@ import { colors } from "../theme";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
+import { motDePasseValide, MOT_DE_PASSE_MESSAGE_ERREUR } from "../utils/passwordPolicy";
 
 const inputStyle = {
   width: "100%",
@@ -50,8 +51,8 @@ export default function ReinitialisationMotDePasse() {
     e.preventDefault();
     setError(null);
 
-    if (password.length < 8) {
-      setError("Le mot de passe doit contenir au moins 8 caractères.");
+    if (!motDePasseValide(password)) {
+      setError(MOT_DE_PASSE_MESSAGE_ERREUR);
       return;
     }
     if (password !== confirm) {
@@ -71,7 +72,7 @@ export default function ReinitialisationMotDePasse() {
       if (err.message?.toLowerCase().includes("same password")) {
         setError("Le nouveau mot de passe doit être différent de l'ancien.");
       } else if (err.message?.toLowerCase().includes("weak password")) {
-        setError("Mot de passe trop faible. Utilisez au moins 8 caractères avec des lettres et des chiffres.");
+        setError(MOT_DE_PASSE_MESSAGE_ERREUR);
       } else {
         setError("Une erreur s'est produite. Le lien a peut-être expiré. Faites une nouvelle demande.");
       }
