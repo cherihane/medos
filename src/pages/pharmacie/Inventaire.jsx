@@ -1,5 +1,5 @@
 import { colors } from "../../theme";
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
 import Toast from "../../components/Toast";
@@ -8,7 +8,6 @@ import { useMedicamentsPaginated, useMedicamentStats, useFournisseurs } from "..
 import { updateMedicament, insertMedicament, insertCommande, upsertMedicaments } from "../../hooks/useMutations";
 import Pagination from "../../components/Pagination";
 import Papa from "papaparse";
-import * as XLSX from "xlsx";
 import { useAuth } from "../../context/AuthContext";
 import QrScanner from "../../components/QrScanner";
 import { rechercherLotPourPrefill } from "../../hooks/useVerificationLot";
@@ -358,11 +357,17 @@ function parseRows(rawRows) {
     }));
 }
 
+const IMPORT_XLSX_TIMEOUT_MS = 10000;
+
 function ImportModal({ auth, onClose, onImported }) {
   const [preview, setPreview] = useState(null);
   const [rows, setRows]       = useState([]);
   const [saving, setSaving]   = useState(false);
   const [err, setErr]         = useState(null);
+  const workerRef = useRef(null);
+
+  // Termine tout Worker XLSX encore actif si la modale se ferme avant la fin du parsing.
+  useEffect(() => () => workerRef.current?.terminate(), []);
 
   const handleFile = (e) => {
     const file = e.target.files?.[0];
@@ -379,14 +384,37 @@ function ImportModal({ auth, onClose, onImported }) {
     } else if (ext === "xlsx" || ext === "xls") {
       const reader = new FileReader();
       reader.onload = (ev) => {
-        try {
-          const wb = XLSX.read(ev.target.result, { type: "array" });
-          const ws = wb.Sheets[wb.SheetNames[0]];
-          const data = XLSX.utils.sheet_to_json(ws, { defval: "" });
+        // Le parsing XLSX (bibliotheque avec CVE ReDoS/prototype pollution non corrigees)
+        // tourne dans un Worker dedie : un fichier piege bloque au pire ce Worker, jamais
+        // l'interface, et ne peut pas polluer Object.prototype du thread principal.
+        workerRef.current?.terminate();
+        const worker = new Worker(new URL("../../workers/xlsxParser.worker.js", import.meta.url));
+        workerRef.current = worker;
+
+        const timeoutId = setTimeout(() => {
+          worker.terminate();
+          if (workerRef.current === worker) workerRef.current = null;
+          setErr("Le fichier Excel a mis trop de temps à être analysé et l'opération a été interrompue. Vérifiez qu'il n'est pas corrompu.");
+        }, IMPORT_XLSX_TIMEOUT_MS);
+
+        worker.onmessage = (msg) => {
+          clearTimeout(timeoutId);
+          worker.terminate();
+          if (workerRef.current === worker) workerRef.current = null;
+          const { ok, data, error } = msg.data;
+          if (!ok) { setErr("Erreur Excel : " + error); return; }
           const parsed = parseRows(data);
           setRows(parsed);
           setPreview(parsed.slice(0, 5));
-        } catch (e) { setErr("Erreur Excel : " + e.message); }
+        };
+        worker.onerror = () => {
+          clearTimeout(timeoutId);
+          worker.terminate();
+          if (workerRef.current === worker) workerRef.current = null;
+          setErr("Erreur Excel : fichier illisible ou corrompu.");
+        };
+
+        worker.postMessage({ buffer: ev.target.result }, [ev.target.result]);
       };
       reader.readAsArrayBuffer(file);
     } else {
