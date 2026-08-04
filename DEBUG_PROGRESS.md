@@ -7487,3 +7487,144 @@ un accès hors de portée de cette session (Dashboard Supabase pour MFA/rate lim
 serveur, SSH VPS pour Nginx), soit une décision produit non triviale (MFA, alerte connexion
 inhabituelle, remplacement de `xlsx`) — toutes listées explicitement en fin de mission.
 
+Correctif complémentaire réalisé ensuite, sur confirmation explicite de l'utilisateur : isolation
+du parsing `xlsx` dans un Web Worker dédié + plafond de taille de fichier (commits `a15ae7e`,
+`5defed7`, `bce9228` — voir section détaillée plus haut, sous le point `xlsx` de l'audit npm).
+
+## Mission sécurité plateforme — Phase 4 : durcissement infrastructure VPS/GitHub/réseau
+(2026-08-04)
+
+### Ce qui a pu être vérifié/appliqué directement depuis cette session (sans accès VPS ni Dashboard)
+
+- **Point 3 — Dependabot** : vérifié désactivé (`GET .../vulnerability-alerts` → `404 disabled`,
+  `GET .../automated-security-fixes` → `{"enabled":false}`, aucun `.github/dependabot.yml`). Sur
+  confirmation explicite de l'utilisateur, **activé** via `gh api -X PUT
+  repos/cherihane/medos/vulnerability-alerts` (confirmé `204` après coup) — alertes de
+  vulnérabilité seules, sans les correctifs automatiques (qui ouvriraient des PR sans supervision).
+  Immédiatement effectif : le push suivant a fait remonter **21 vulnérabilités actives sur le repo
+  (9 hautes, 11 modérées, 1 basse)** directement dans l'interface GitHub Security. Léger écart avec
+  le compte `npm audit` local (31) — attendu, GitHub dédoublonne différemment par avis de sécurité
+  plutôt que par chemin de dépendance ; substance déjà couverte par l'audit npm de la Phase 3.
+- **Point 2 — `/.well-known/security.txt`** : implémenté directement dans le dépôt
+  (`public/.well-known/security.txt`, format RFC 9116, `contact@kelagroup.org`, expiration
+  2027-08-04) plutôt que documenté pour application manuelle — c'est un fichier statique, CRA le
+  copie tel quel dans `build/`, aucune configuration Nginx séparée n'est nécessaire. **Vérifié en
+  direct** : `curl http://localhost:3000/.well-known/security.txt` renvoie le contenu attendu.
+  Commit `cb25300`, se déploiera avec le prochain cycle de déploiement standard déjà en place
+  (`git pull && npm run build && systemctl restart nginx`).
+
+### Points 1 et 4 — nécessitent un accès SSH au VPS, non disponible depuis cette session ; documentés précisément
+
+Aucun accès SSH configuré dans cette session vers `root@81.17.98.80` (même limitation déjà
+rencontrée et documentée lors de sessions précédentes pour les déploiements). Prêt à appliquer
+directement si l'utilisateur accorde un accès (voir question posée en fin de section).
+
+**1a. Fail2ban (protection brute-force SSH)** — Ubuntu :
+```bash
+apt update && apt install -y fail2ban
+cat > /etc/fail2ban/jail.local <<'EOF'
+[sshd]
+enabled  = true
+port     = ssh
+maxretry = 5
+findtime = 600
+bantime  = 3600
+EOF
+systemctl enable --now fail2ban
+systemctl status fail2ban
+```
+
+**1b. SSH par clé uniquement + désactivation de la connexion root directe** — **ordre impératif
+pour éviter un auto-verrouillage total du VPS**, car à ce jour seul `root` semble disposer d'un
+accès configuré (`root@81.17.98.80`, voir historique de déploiement) :
+1. Créer un compte non-root avec sudo : `adduser deploy && usermod -aG sudo deploy`.
+2. Copier une clé publique SSH dans ce nouveau compte (`ssh-copy-id deploy@81.17.98.80` depuis le
+   poste habituel, ou coller la clé publique dans `/home/deploy/.ssh/authorized_keys`).
+3. **Tester la connexion `ssh deploy@81.17.98.80` avec succès, dans un terminal séparé, AVANT de
+   toucher à la configuration SSH** — ne jamais fermer la session root en cours avant cette
+   vérification.
+4. Seulement après confirmation, éditer `/etc/ssh/sshd_config` :
+   ```
+   PasswordAuthentication no
+   PermitRootLogin prohibit-password
+   ```
+   (`prohibit-password` plutôt que `no` : garde root joignable par clé en dernier recours pour la
+   maintenance, tout en bloquant les 2 vecteurs réels — mot de passe root deviné/bruteforcé, et
+   connexion par mot de passe en général. Passer à `PermitRootLogin no` plus tard si un accès sudo
+   non-root est confirmé suffisant au quotidien.)
+5. `systemctl restart sshd`, puis **retester une connexion dans un 3ème terminal avant de fermer
+   les 2 premiers**.
+
+**1c. Mises à jour de sécurité automatiques** — Ubuntu :
+```bash
+apt install -y unattended-upgrades apt-listchanges
+dpkg-reconfigure --priority=low unattended-upgrades
+```
+Vérifier ensuite que `/etc/apt/apt.conf.d/20auto-upgrades` contient :
+```
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+```
+
+**4. Export régulier de sauvegarde de la base, séparé de Supabase, avec test de restauration** :
+
+Testé depuis cette session que `supabase db dump --linked` (qui utiliserait la même connexion déjà
+authentifiée pour tout l'audit RLS) **nécessite Docker en local pour fonctionner, même en mode
+`--linked`** — indisponible dans ce sandbox (Docker Desktop non démarré), donc non exécutable ni
+vérifiable directement ici. Approche alternative recommandée pour le VPS, ne dépendant pas de
+Docker ni de la CLI Supabase — `pg_dump` directement contre la chaîne de connexion Postgres du
+projet (`Dashboard Supabase → Settings → Database → Connection string`, section **Session
+pooler**, recommandée pour la compatibilité IPv4) :
+
+```bash
+apt install -y postgresql-client
+mkdir -p /root/backups-medos && chmod 700 /root/backups-medos
+# Chaine de connexion stockee separement, jamais dans le script ni dans git :
+echo 'SUPABASE_DB_URL="postgresql://...chaine-depuis-le-dashboard..."' > /root/.medos-db-url
+chmod 600 /root/.medos-db-url
+```
+Script `/root/backups-medos/backup.sh` :
+```bash
+#!/bin/bash
+set -euo pipefail
+source /root/.medos-db-url
+DATE=$(date +%Y%m%d_%H%M%S)
+pg_dump "$SUPABASE_DB_URL" --format=custom --file="/root/backups-medos/medos_$DATE.dump"
+# Purge des sauvegardes de plus de 30 jours
+find /root/backups-medos -name "medos_*.dump" -mtime +30 -delete
+# Copie vers un stockage separe de Supabase (a adapter : rclone vers S3/Backblaze/etc.)
+# rclone copy /root/backups-medos/medos_$DATE.dump remote:medos-backups/
+```
+Cron quotidien : `crontab -e` → `0 3 * * * /root/backups-medos/backup.sh >> /var/log/medos-backup.log 2>&1`.
+
+**Test de restauration (obligatoire — une sauvegarde jamais restaurée n'est qu'une hypothèse)** :
+restaurer périodiquement le dump le plus récent vers une base Postgres locale ou un projet Supabase
+de test séparé, jamais vers la production :
+```bash
+createdb medos_test_restore
+pg_restore --dbname=medos_test_restore /root/backups-medos/medos_<date>.dump
+psql medos_test_restore -c "select count(*) from patients;"  # etc. — verifier des totaux connus
+```
+
+Étape critique volontairement non exécutée depuis cette session : nécessite la chaîne de connexion
+Postgres directe (mot de passe distinct des clés API déjà utilisées), un accès disque VPS pour le
+stockage, et une décision sur la destination du stockage séparé (S3, Backblaze B2, autre) — combinaison
+d'accès et de décision hors de portée sans confirmation explicite de l'utilisateur.
+
+### Question posée à l'utilisateur (2026-08-04) — puis-je prendre en charge ces actions directement ?
+
+Pour les 3 catégories d'actions manuelles accumulées (Dashboard Supabase pour MFA/rate
+limiting/politique de mot de passe serveur ; configuration Nginx pour les en-têtes HTTP ;
+durcissement SSH/Fail2ban/mises à jour automatiques du VPS), aucun accès n'est actuellement
+configuré dans cette session :
+- **Dashboard Supabase** : nécessite soit une connexion interactive (identifiants de
+  l'utilisateur, jamais collectés ni saisis par principe), soit un jeton d'accès Management API que
+  l'utilisateur génèrerait lui-même (`Dashboard → Account → Access Tokens`) et partagerait — chaque
+  changement de réglage serait quand même reconfirmé individuellement avant application.
+- **VPS (Nginx, SSH, Fail2ban)** : nécessite un accès SSH. Proposition : générer une paire de clés
+  SSH dédiée à cette session, transmettre uniquement la **clé publique** à ajouter par
+  l'utilisateur à `authorized_keys` sur le VPS (réversible — retirable à tout moment) — jamais de
+  clé privée ni mot de passe à transmettre dans l'autre sens.
+
+Réponse à donner par l'utilisateur avant toute action sur l'un de ces 2 canaux.
+
