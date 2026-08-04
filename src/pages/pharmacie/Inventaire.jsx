@@ -357,6 +357,7 @@ function parseRows(rawRows) {
     }));
 }
 
+const IMPORT_MAX_TAILLE_OCTETS = 5 * 1024 * 1024; // 5 Mo — largement au-dessus de tout inventaire reel
 const IMPORT_XLSX_TIMEOUT_MS = 10000;
 
 function ImportModal({ auth, onClose, onImported }) {
@@ -373,6 +374,12 @@ function ImportModal({ auth, onClose, onImported }) {
     const file = e.target.files?.[0];
     if (!file) return;
     setErr(null);
+
+    if (file.size > IMPORT_MAX_TAILLE_OCTETS) {
+      setErr(`Fichier trop volumineux (${(file.size / (1024 * 1024)).toFixed(1)} Mo, maximum 5 Mo).`);
+      return;
+    }
+
     const ext = file.name.split(".").pop().toLowerCase();
 
     if (ext === "csv") {
