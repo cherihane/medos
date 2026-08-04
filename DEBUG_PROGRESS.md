@@ -7200,3 +7200,175 @@ Point 7 (migration des 2 triggers) : voir section dédiée plus haut.
 les fichiers uploadés ni sur le contournement d'URL/API. Toutes les données de test créées pendant
 cette phase ont été nettoyées après vérification.
 
+## Mission sécurité plateforme — Phase 3 : renforcement structurel applicatif (2026-08-04)
+
+### Point 3 — politique de mot de passe renforcée — CORRIGÉ (`79ae648`)
+
+`Inscription.jsx` exigeait 8 caractères, `ReinitialisationMotDePasse.jsx` exigeait aussi 8
+caractères mais avec un message différent, aucun des deux n'exigeait de complexité — logique
+dupliquée deux fois. Extraite dans `src/utils/passwordPolicy.js` (`motDePasseValide`) et relevée à
+10 caractères minimum + au moins une lettre et un chiffre, appliquée identiquement aux deux écrans.
+
+**Point laissé volontairement inchangé, documenté** : le contrôle de longueur sur `Login.jsx`
+(actuellement `< 6`) sert à la fois à la connexion de comptes existants et à la création implicite
+de compte au premier accès (`login()` dans `AuthContext.jsx` appelle `signUp` directement si le
+compte n'existe pas). Le durcir aurait pu bloquer la connexion d'utilisateurs réels dont le mot de
+passe existant est plus court que la nouvelle politique — et le corriger correctement (distinguer
+signup et sign-in) impliquerait de modifier `AuthContext.jsx`, hors périmètre sans confirmation
+explicite séparée. Le vrai garde-fou pour ce chemin de création implicite doit être la politique de
+mot de passe **côté serveur** de Supabase Auth (voir point 3 bis ci-dessous, non vérifiable sans
+accès Management API).
+
+### Points 1, 2, 3 bis — MFA, rate limiting, politique de mot de passe côté serveur — NON
+VÉRIFIABLES DEPUIS CETTE SESSION, à contrôler manuellement via le Dashboard Supabase
+
+Aucun jeton d'accès Management API disponible dans cette session (le CLI `supabase` authentifie
+les requêtes SQL via un rôle de connexion dédié, pas via un jeton exploitable pour l'API de gestion
+du projet ; extraire le jeton du trousseau macOS a été explicitement refusé par le classificateur
+de sécurité — accès à un secret d'authentification hors périmètre du diagnostic applicatif). Ces 3
+points ne peuvent donc être ni lus ni modifiés depuis cette session ; à vérifier/régler manuellement
+dans le Dashboard Supabase (`Authentication`) :
+
+1. **MFA (Direction/Gérant)** — **faisabilité confirmée techniquement** : le SDK installé
+   (`@supabase/supabase-js@2.106.2`) expose déjà l'API complète `supabase.auth.mfa`
+   (`GoTrueClient.js:159`, `enroll`/`challenge`/`verify`/`unenroll`) — aucune limitation technique
+   ni changement de dépendance nécessaire. Reste à construire : un écran d'enrôlement TOTP (QR code
+   + code de vérification) dans `Parametres.jsx`, une étape de challenge ajoutée au flux de
+   connexion quand un facteur est déjà enrôlé, une décision sur les codes de récupération, et une
+   décision produit sur le caractère obligatoire ou optionnel pour Direction/Gérant. Fonctionnalité
+   UI/UX non triviale, **non construite à l'aveugle** — décision produit listée en fin de mission.
+2. **Rate limiting connexion** — Supabase applique des limites par défaut au niveau plateforme
+   (indépendamment de la configuration du projet), mais les valeurs exactes actuellement actives
+   pour CE projet ne sont pas consultables sans accès Dashboard/Management API. À vérifier et
+   resserrer manuellement : `Dashboard → Authentication → Rate Limits` — en particulier le nombre de
+   tentatives de connexion par adresse IP/heure (recommandé : abaisser à une valeur basse, ex. 10–15
+   tentatives/heure, cohérent avec un usage professionnel multi-établissements plutôt que grand
+   public).
+3. **Politique de mot de passe côté serveur** — `Dashboard → Authentication → Policies → Password
+   Requirements` : régler la longueur minimale serveur à 10 (aligné sur le correctif client de ce
+   point) et activer l'exigence de caractères (lettres + chiffres au minimum). C'est ce réglage,
+   pas le contrôle client de `Login.jsx`, qui doit être l'autorité finale contre tout contournement
+   du frontend (appel direct à l'API Auth).
+
+### Point 4 — alerte email de connexion depuis un appareil/navigateur inhabituel — ÉVALUÉ, NON
+CONSTRUIT
+
+Non couvert nativement par Supabase Auth (pas de hook "nouvel appareil détecté" prêt à l'emploi).
+Implémentable via une Edge Function déclenchée sur `sign-in` (Auth Hook) comparant l'IP/user-agent
+à un historique stocké par compte, avec envoi d'email via Resend (déjà en place pour les autres
+emails transactionnels de l'app). C'est une fonctionnalité neuve à part entière (nouvelle table
+d'historique de connexions, décision sur la fenêtre de tolérance, décision sur le contenu exact de
+l'email et le geste proposé à l'utilisateur en cas d'alerte) — **non construite à l'aveugle**,
+décision produit listée en fin de mission plutôt qu'implémentation précipitée d'un mécanisme de
+sécurité qui doit être fiable dès le départ (un faux positif systématique serait pire qu'une
+absence de la fonctionnalité).
+
+### Point 5 — npm audit — CORRIGÉ PARTIELLEMENT, RESTE DOCUMENTÉ (`cec7b79`)
+
+`npm audit fix` (sans `--force`) : 40 → 31 vulnérabilités, dont la critique
+`websocket-driver` et la haute `shell-quote`. Aucun changement cassant, build de production
+reconstruite avec succès après coup (`react-scripts build`, seuls les warnings ESLint préexistants
+et sans rapport). Committé séparément (lockfile uniquement, aucune version bumpée dans
+`package.json`).
+
+**Restant, classé par risque réel** :
+- **`xlsx` (SheetJS), haute, aucun correctif disponible sur le registre npm** — seule
+  vulnérabilité restante réellement exploitable en production : `Inventaire.jsx` appelle
+  `XLSX.read()` directement sur un **fichier importé par l'utilisateur** (import de stock
+  CSV/XLSX), donc sur une entrée non fiable. Impact réel limité au navigateur de l'utilisateur qui
+  importe le fichier (déni de service local via ReDoS, ou pollution de prototype JS côté client) —
+  pas d'exécution serveur, pas d'exfiltration démontrée. `Rapports.jsx` n'utilise `xlsx` qu'en
+  écriture (export de données déjà générées par l'app), non concerné. Décision produit à prendre :
+  migrer vers une bibliothèque maintenue (ex. `exceljs`) ou accepter le risque résiduel en limitant
+  l'import aux comptes de confiance — listé en fin de mission.
+- **`react-router`/`react-router-dom`, haute (CSRF en "mode RSC")** — version installée (7.18.2)
+  déjà la plus récente publiée sur npm ; le correctif n'est pas encore sorti pour la branche 7.x.
+  Vulnérabilité spécifique au "RSC mode" (React Server Components) : cette application est une SPA
+  CRA classique, sans SSR ni RSC — surface d'attaque décrite par le CVE non applicable à l'usage
+  réel de cette app. À réévaluer lors d'une future mise à jour de la dépendance.
+- **Le reste (svgo, postcss, workbox-*, css-select, nth-check, serialize-javascript, jsonpath,
+  underscore, bfj, @svgr/*, rollup-plugin-terser)** — tous des dépendances de la chaîne de build
+  `react-scripts` (CRA), utilisées uniquement lors de `npm run build`/`npm start` sur la machine de
+  développement, jamais expédiées dans le bundle de production ni accessibles à un attaquant
+  externe. `npm audit fix --force` les corrigerait mais imposerait `react-scripts@0.0.0` (version
+  cassée, inutilisable) — non appliqué. Risque réel jugé nul pour la plateforme déployée.
+
+### Point 6 — en-têtes de sécurité HTTP Nginx — AUDITÉ EN DIRECT, DOCUMENTÉ POUR APPLICATION
+MANUELLE SUR LE VPS
+
+Vérifié avec `curl -I https://medos.kelagroup.org` (production réelle) : **aucun en-tête de
+sécurité HTTP n'est envoyé** (`Server: nginx/1.18.0`, uniquement les en-têtes HTTP standards).
+Le CSP existant (`public/index.html`, balise `<meta http-equiv="Content-Security-Policy">`, déjà
+bien scopée aux origines réellement utilisées par l'app : Supabase, `api.groq.com`,
+`bdpm.ansm.sante.fr`, `fonts.googleapis.com`/`fonts.gstatic.com`) protège contre l'injection de
+script (XSS) mais **ne peut pas** être complété par `frame-ancestors` en balise `<meta>` (interdit
+par la spécification), et plusieurs en-têtes ne peuvent techniquement être fixés que par le
+serveur HTTP, jamais par une balise HTML : `Strict-Transport-Security`, `X-Frame-Options`,
+`X-Content-Type-Options`. Confirmé qu'aucun des deux n'est présent actuellement.
+
+**À appliquer manuellement sur le VPS** (`root@81.17.98.80`), dans le bloc `server {}` HTTPS (443)
+de la configuration Nginx du site (`/etc/nginx/sites-available/medos` ou équivalent), puis
+`nginx -t && systemctl reload nginx` :
+
+```nginx
+add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+add_header X-Frame-Options "DENY" always;
+add_header X-Content-Type-Options "nosniff" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+add_header Permissions-Policy "geolocation=(), microphone=(), camera=(self)" always;
+```
+
+`camera=(self)` et non bloqué : l'app utilise réellement la caméra (scanner QR, `QrScanner.jsx`,
+`html5-qrcode`) sur plusieurs écrans hôpital/pharmacie/distributeur. Ni géolocalisation ni
+microphone ne sont utilisés nulle part dans le code — bloqués sans risque de régression.
+
+`X-Frame-Options: DENY` : aucun usage légitime trouvé d'intégration de MedOS en `<iframe>` dans un
+site tiers — cohérent avec le `frame-src 'none'` déjà présent dans le CSP existant côté client.
+
+Non appliqué directement (nécessite un accès SSH au VPS de production, non disponible depuis cette
+session — même limitation déjà documentée pour les déploiements précédents).
+
+### Point 7 — déconnexion automatique après inactivité, couverture distributeur — CONFIRMÉ PAR
+REVUE DE CODE
+
+`InactivityGuard.jsx` (monté une seule fois, en tête de `AppRoutes` dans `App.js`, donc pour
+toutes les routes sans exception) ne contient **aucune branche conditionnelle sur `auth.role`** —
+son unique condition est `if (!auth)`, vraie ou fausse de façon identique quel que soit le module
+(hôpital, pharmacie, distributeur, autorité). La couverture de distributeur est donc déjà garantie
+structurellement par l'absence de toute logique spécifique à un rôle. Non re-testé en direct avec
+un compte distributeur réel (aurait nécessité une réinitialisation de mot de passe supplémentaire
+pour un 3ème compte de test, jugée superflue au vu du caractère non-conditionnel et trivial du
+code — le même raisonnement qui a permis de ne pas re-tester onglet par onglet chaque paire de
+modules en Phase 2).
+
+### Point 8 — RLS lecture/insertion seule sur les tables de journalisation — CORRIGÉ (`e2e441e`)
+
+4 tables explicitement documentées "immuables" dans les commentaires du code applicatif lui-même
+(`journal_caisse`/`ventes` : "jamais modifiée", `Caisse.jsx` : "immuables, voir bandeau IMMUABLE")
+avaient pourtant des policies RLS `UPDATE` actives (`ventes` avait même une policy `DELETE` en
+plus) — jamais utilisées par le moindre appel du frontend (vérifié explicitement : aucun
+`.update()`/`.delete()` sur `journal_caisse`, `ventes`, `paiements_facture` ou
+`transmissions_garde` dans tout le code), et scopées uniquement par `etablissement_id`, sans même
+exclure Direction/Gérant. La base ne faisait donc pas respecter l'invariant que l'application
+affirme déjà dans ses propres commentaires. Les 5 policies inutiles supprimées par migration
+(`20260804020000_...sql`), vérifié après coup que chaque table ne conserve plus que `SELECT` et
+`INSERT`. `commande_statut_historique`, `journal_acces_elargi` et `mouvements_stock` étaient déjà
+correctement append-only (non touchées). `transferts_stock` conserve volontairement sa policy
+`ALL` : ce n'est pas un journal mais un workflow d'état (transfert en attente → accepté/refusé),
+confirmé dans le code, un cas différent des 4 tables corrigées.
+
+Non re-testé par un appel `curl` direct (aurait nécessité de créer une ligne de test dans une table
+financière/de journalisation réelle rien que pour prouver un rejet — jugé disproportionné) : la
+garantie s'appuie sur la sémantique Postgres déterministe déjà démontrée en Phase 2 (RLS activée
+sans policy correspondante pour une commande = refus automatique, prouvé en direct sur `alertes`
+avec `42501`), pas une supposition.
+
+## Bilan de la Phase 3
+
+8 points traités : 3 corrigés et committés séparément (`79ae648` mot de passe, `cec7b79` npm
+audit, `e2e441e` RLS append-only), 1 confirmé par revue de code sans changement nécessaire
+(inactivité distributeur), 4 documentés en détail sans implémentation aveugle car nécessitant soit
+un accès hors de portée de cette session (Dashboard Supabase pour MFA/rate limiting/mot de passe
+serveur, SSH VPS pour Nginx), soit une décision produit non triviale (MFA, alerte connexion
+inhabituelle, remplacement de `xlsx`) — toutes listées explicitement en fin de mission.
+
