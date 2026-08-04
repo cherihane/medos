@@ -7628,3 +7628,59 @@ configuré dans cette session :
 
 Réponse à donner par l'utilisateur avant toute action sur l'un de ces 2 canaux.
 
+**Décisions de l'utilisateur (2026-08-04)** : accès SSH VPS accordé via clé dédiée générée par
+cette session (clé publique transmise, clé privée jamais partagée) ; Dashboard Supabase géré
+directement par l'utilisateur (valeurs exactes fournies plutôt qu'un jeton Management API, pour 3
+réglages ponctuels). Paire de clés générée (`ssh-keygen -t ed25519`, commentaire
+`claude-session-medos-securite-2026-08-04`), clé privée conservée uniquement dans le répertoire
+scratchpad de session, jamais dans le dépôt ni dans ce fichier. En attente que l'utilisateur ajoute
+la clé publique à `authorized_keys` sur le VPS avant de pouvoir poursuivre les points 1a/1b/1c/4 de
+cette phase directement.
+
+## Bilan de la mission sécurité plateforme (Phases 0 à 4)
+
+**Phase 0** (diagnostic + correctif fuite de session inter-onglets) : 2 failles réelles
+diagnostiquées et corrigées (`720e7c8` diagnostic, `fc0defc` correctif storageKey par onglet),
+vérifiées par reproduction en direct avant/après avec 2 comptes réels d'établissements différents.
+
+**Phase 2** (audit RLS complet, 7 points) : 4 failles réelles confirmées et corrigées
+(`aafcd1c` RLS annuaire/fond_caisse/lots, `8047c18` pipeline d'alertes cliniques, `5c0f571`
+migration des 2 derniers triggers vers la clé publishable), aucune faille supplémentaire sur les
+fichiers uploadés ni le contournement d'URL/API.
+
+**Phase 3** (renforcement structurel, 8 points) : 3 corrigés (`79ae648` mot de passe, `cec7b79`
+npm audit, `e2e441e` RLS append-only journalisation), 1 confirmé sans changement nécessaire
+(inactivité distributeur), 1 approfondi et corrigé sur demande explicite après la Phase 3
+elle-même (`a15ae7e`/`5defed7` isolation Worker + plafond xlsx), 4 documentés en attente d'accès
+ou de décision produit.
+
+**Phase 4** (infrastructure, 4 points) : 2 gérés directement (`cb25300` security.txt, Dependabot
+activé par API), 2 documentés précisément en attente d'accès VPS désormais accordé (clé en cours
+de transmission).
+
+Aucune fonction protégée d'`AuthContext.jsx` n'a été modifiée à aucun moment de cette mission —
+règle absolue respectée du début à la fin. Toutes les données de test créées à chaque étape ont été
+supprimées après vérification. Chaque correctif a été committé séparément avec preuve réelle
+avant/après quand la nature du correctif le permettait.
+
+### Hors de portée du code — ne peut pas être résolu par un correctif, quel que soit l'accès accordé
+
+- **Audit de sécurité tiers professionnel** : cette mission (moi-même) a couvert un audit
+  applicatif et infrastructurel large, mais reste le travail d'un seul agent sur une session
+  donnée — un pentest externe indépendant (boîte noire + boîte blanche) reste recommandé avant
+  d'élargir significativement la base d'établissements clients, en particulier pour la couche
+  réseau/VPS qui n'a pu être vérifiée qu'en documentation faute d'accès pendant la majeure partie
+  de cette mission.
+- **Plan de sauvegarde testé de façon continue** : le script et la procédure de restauration sont
+  documentés (voir Phase 4, point 4) mais une sauvegarde n'a de valeur que si sa restauration est
+  **réellement exercée régulièrement**, pas seulement écrite une fois — c'est un engagement
+  opérationnel récurrent, pas une tâche de code ponctuelle.
+- **Plan de réponse à incident** : qui contacter, dans quel ordre, quels délais de notification aux
+  établissements clients et aux autorités compétentes en cas de compromission avérée de données de
+  santé — aucun document de ce type n'existe actuellement dans le dépôt ; à écrire avec les
+  parties prenantes métier, pas un correctif technique.
+- **Conformité légale locale** : cette plateforme traite des données de santé pour des
+  établissements dans plusieurs pays d'Afrique centrale/de l'Ouest — la conformité aux régimes de
+  protection des données locaux (et, selon la clientèle visée, à des cadres internationaux)
+  nécessite un avis juridique, pas une revue de code. Hors de portée de cette mission par nature.
+
