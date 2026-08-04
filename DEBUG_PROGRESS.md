@@ -7356,8 +7356,45 @@ et sans rapport). Committé séparément (lockfile uniquement, aucune version bu
      donc pas de protection réelle et supplémentaire pour le chemin XLSX spécifiquement.
 
   **Recommandation** : isolation Worker (mitigation 1) en priorité, taille de fichier plafonnée
-  (mitigation 2) en complément immédiat et peu coûteux. Non implémenté à ce stade — nécessite de
-  confirmer avec l'utilisateur avant de modifier un écran d'import de stock actif en production.
+  (mitigation 2) en complément immédiat et peu coûteux.
+
+  **Implémenté et testé en direct, sur confirmation explicite de l'utilisateur (2026-08-04),
+  commits `a15ae7e` (Worker) et `5defed7` (plafond de taille).**
+
+  `XLSX.read()`/`sheet_to_json()` déplacés dans `src/workers/xlsxParser.worker.js`, invoqué depuis
+  `Inventaire.jsx` via `new Worker(new URL(...), import.meta.url)` (support natif webpack 5/CRA
+  5.0.1, aucune dépendance ajoutée) — timeout de 10s avec `terminate()` de récupération propre côté
+  thread principal si le Worker ne répond pas, et `useEffect` de nettoyage qui termine tout Worker
+  encore actif si la modale se ferme avant la fin du parsing. Fichier plafonné à 5 Mo avant même la
+  lecture.
+
+  **Preuve réelle avant/après, testée avec le compte réel Pharmacie Audit Test :**
+  1. **Fichier XLSX valide réel** (3 lignes générées via la bibliothèque `xlsx` elle-même,
+     Paracetamol/Amoxicilline/Ibuprofène) : aperçu correctement affiché ("3 lignes détectées"),
+     import complet réussi ("3 produits importés"), les 3 médicaments apparaissent bien dans le
+     tableau d'inventaire avec les bonnes valeurs — **aucune régression** du chemin nominal après le
+     passage par le Worker.
+  2. **Fichier XLSX délibérément corrompu** (fichier valide tronqué au tiers de sa taille,
+     structure ZIP incomplète) : le Worker capture l'exception (`Unsupported ZIP file`) et la
+     renvoie proprement via `postMessage({ok:false, error:...})` — testé isolément d'abord (Worker
+     instancié directement en JS, confirmé `ok:false`), puis via le vrai flux UI (sélection de
+     fichier réelle sur l'input) : message **"Erreur Excel : Unsupported ZIP file"** affiché dans la
+     modale, reste de la page (barre latérale, tableau des 3 produits déjà importés, boutons
+     Éditer/Commander) restée pleinement interactive pendant et après — vérifié en cliquant
+     plusieurs éléments de l'interface immédiatement après le déclenchement, sans aucun délai ni
+     blocage, et sans erreur non capturée dans la console.
+  3. Note méthodologique : un premier essai avec un fichier de 200 octets aléatoires n'a **pas**
+     déclenché d'erreur — SheetJS retombe sur un mode d'interprétation "texte brut" très permissif
+     plutôt que de lever une exception face à des octets non structurés. Le test a été refait avec
+     un fichier XLSX valide tronqué (structure ZIP reconnaissable mais incomplète), qui déclenche
+     bien l'exception attendue — cas plus représentatif d'un fichier réellement corrompu.
+  4. **Vérifié en build de production** (`react-scripts build`, pas seulement le serveur de dev) :
+     le Worker est bien scindé dans son propre chunk (`5720.04756f64.chunk.js`, 1,5 Ko, contient
+     `self.onmessage`/`importScripts`), séparé du bundle principal — confirme que l'isolation tient
+     aussi en production, pas seulement en environnement de développement.
+
+  Données de test nettoyées après vérification (3 médicaments de test supprimés de l'établissement
+  Pharmacie Audit Test ; fichiers de test temporaires supprimés de `public/`, jamais commités).
 
 - **`react-router`/`react-router-dom`, haute (CSRF en "mode RSC")** — version installée (7.18.2)
   déjà la plus récente publiée sur npm ; le correctif n'est pas encore sorti pour la branche 7.x.
