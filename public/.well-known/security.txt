@@ -1,0 +1,4 @@
+Contact: mailto:contact@kelagroup.org
+Expires: 2027-08-04T00:00:00.000Z
+Preferred-Languages: fr, en
+Canonical: https://medos.kelagroup.org/.well-known/security.txt
