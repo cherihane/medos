@@ -7281,6 +7281,84 @@ et sans rapport). Committé séparément (lockfile uniquement, aucune version bu
   écriture (export de données déjà générées par l'app), non concerné. Décision produit à prendre :
   migrer vers une bibliothèque maintenue (ex. `exceljs`) ou accepter le risque résiduel en limitant
   l'import aux comptes de confiance — listé en fin de mission.
+
+  **Analyse approfondie demandée par l'utilisateur (2026-08-04) — scénario d'exploitation précis et
+  mitigations sans dépendre d'un correctif npm.**
+
+  Code exact concerné (`Inventaire.jsx`, `ImportModal.handleFile`) : sélection d'un fichier via
+  `<input type="file" accept=".csv,.xlsx,.xls">` (aucune limite de taille, extension vérifiée
+  uniquement par le nom du fichier, jamais son contenu réel) → lu entièrement en mémoire par
+  `FileReader.readAsArrayBuffer` → passé directement à `XLSX.read()` puis
+  `XLSX.utils.sheet_to_json()`, **le tout de façon synchrone sur le thread principal** (dans le
+  callback `reader.onload`, pas dans un Worker) — donc bloquant pour toute l'interface pendant le
+  parsing.
+
+  *Ce qu'un fichier piégé peut faire concrètement, une fois importé :*
+  - **ReDoS (GHSA-5pgg-2g8v-p4x9)** : une valeur de cellule ou une structure interne du fichier
+    déclenche une expression régulière à complexité exponentielle dans le code de parsing de
+    SheetJS. Le calcul de `XLSX.read()` peut alors prendre de plusieurs secondes à un temps
+    indéfini pour un fichier de quelques kilo-octets seulement — la taille du fichier n'est pas le
+    facteur déterminant, c'est le contenu précis d'une cellule qui déclenche le pire cas de
+    l'algorithme. Comme ce calcul tourne sur le thread principal, **toute l'interface de l'onglet
+    se fige** (pas seulement la modale d'import) — y compris une session de caisse en cours dans le
+    même onglet — jusqu'à ce que le navigateur affiche son propre avertissement "page ne répond
+    pas" ou que l'utilisateur force la fermeture.
+  - **Prototype Pollution (GHSA-4r6h-8v6p-xvw6)** : une structure interne piégée peut faire écrire
+    SheetJS des propriétés directement sur `Object.prototype` du contexte JS où tourne le parsing.
+    Comme ce parsing tourne actuellement sur le thread principal, c'est le `Object.prototype`
+    **de toute l'application React**, pour le reste de la session de cet onglet, qui serait pollué
+    — un risque dont l'étendue exacte (quels autres écrans/comportements en seraient affectés) n'est
+    pas entièrement énumérable sans revue exhaustive de tout le code, précisément parce que la
+    pollution de prototype est par nature globale et imprévisible. `parseRows()` limite un peu le
+    risque immédiat sur les données elles-mêmes (elle ne lit que 6 champs nommés explicitement, ne
+    fait jamais `...spread` de la ligne brute parsée), mais ne protège pas contre la pollution de
+    `Object.prototype` elle-même, qui a lieu pendant le parsing, avant même que `parseRows()` ne
+    s'exécute.
+
+  *Qui peut réellement déclencher ça, et sur qui* : le vecteur CVSS de ces failles inclut `UI:R`
+  (interaction utilisateur requise) — il n'y a pas d'exploitation à distance possible sans qu'un
+  utilisateur légitime choisisse activement d'importer le fichier piégé via ce sélecteur. Le
+  scénario réaliste est **l'ingénierie sociale** : un fichier "liste de prix fournisseur" ou
+  "inventaire à jour" envoyé par email/WhatsApp à un pharmacien ou un membre du personnel hôpital
+  ayant accès à cet écran, qui l'importe en pensant faire une mise à jour de routine. La victime est
+  la même personne qui clique sur "Importer" — pas un tiers distant. Risque réel donc limité à un
+  utilisateur à la fois, mais réel et non négligeable dans un contexte où des fichiers Excel
+  circulent couramment entre pharmacies/fournisseurs.
+
+  *Mitigations proposées, aucune ne dépendant d'un correctif npm (documentées, non appliquées à ce
+  stade — en attente de décision) :*
+  1. **Isolation dans un Web Worker dédié — mitigation principale recommandée.** Déplacer
+     `XLSX.read()` + `XLSX.utils.sheet_to_json()` dans un Worker (`new Worker(new
+     URL("./xlsxParser.worker.js", import.meta.url))`, supporté nativement par webpack 5/CRA 5.0.1
+     déjà en place, aucune dépendance supplémentaire). Effet sur les 2 CVE :
+     - ReDoS : un blocage se produit dans le thread du Worker, jamais dans le thread principal —
+       l'interface (y compris une caisse ouverte dans le même onglet) reste totalement réactive ;
+       un timeout côté thread principal (`worker.terminate()` après, par exemple, 10 secondes sans
+       réponse) permet une récupération propre sans avoir à recharger l'onglet.
+     - Prototype Pollution : un Worker s'exécute dans un contexte global (realm) entièrement séparé
+       de la page. Même si `Object.prototype` est pollué **à l'intérieur du Worker** pendant le
+       parsing, cette pollution reste confinée à ce contexte et ne traverse jamais vers le
+       `Object.prototype` du thread principal — le `postMessage` de retour clone structurellement
+       les données (nouveaux objets propres dans le realm principal), sans jamais transférer de
+       chaîne de prototype. Cette mitigation neutralise donc le risque des 2 CVE, pas seulement le
+       ReDoS.
+  2. **Limite de taille de fichier — mitigation complémentaire, pas suffisante seule.** Rejeter tout
+     fichier dépassant une taille raisonnable (ex. 5 Mo, largement au-dessus de tout inventaire
+     pharmacie réel) avant même de le lire. Utile en défense en profondeur contre des fichiers
+     manifestement anormaux, mais **insuffisante seule contre le ReDoS** : le déclencheur est un
+     contenu précis dans une cellule, pas la taille globale du fichier — un fichier de quelques Ko
+     peut suffire à déclencher le pire cas.
+  3. **Validation de structure avant traitement — non applicable ici, contrairement au cas CSV.**
+     Contrairement à un CSV (texte brut, lisible et validable avant parsing complet — c'est
+     `Papa.parse`, non concerné par ces 2 CVE), un fichier XLSX est un format binaire compressé
+     (ZIP) : la structure qu'il faudrait valider pour détecter un contenu piégé ne peut être lue
+     qu'en invoquant le même parseur vulnérable qu'on cherche à protéger. Cette mitigation n'apporte
+     donc pas de protection réelle et supplémentaire pour le chemin XLSX spécifiquement.
+
+  **Recommandation** : isolation Worker (mitigation 1) en priorité, taille de fichier plafonnée
+  (mitigation 2) en complément immédiat et peu coûteux. Non implémenté à ce stade — nécessite de
+  confirmer avec l'utilisateur avant de modifier un écran d'import de stock actif en production.
+
 - **`react-router`/`react-router-dom`, haute (CSRF en "mode RSC")** — version installée (7.18.2)
   déjà la plus récente publiée sur npm ; le correctif n'est pas encore sorti pour la branche 7.x.
   Vulnérabilité spécifique au "RSC mode" (React Server Components) : cette application est une SPA
