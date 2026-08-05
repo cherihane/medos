@@ -7633,9 +7633,65 @@ cette session (clé publique transmise, clé privée jamais partagée) ; Dashboa
 directement par l'utilisateur (valeurs exactes fournies plutôt qu'un jeton Management API, pour 3
 réglages ponctuels). Paire de clés générée (`ssh-keygen -t ed25519`, commentaire
 `claude-session-medos-securite-2026-08-04`), clé privée conservée uniquement dans le répertoire
-scratchpad de session, jamais dans le dépôt ni dans ce fichier. En attente que l'utilisateur ajoute
-la clé publique à `authorized_keys` sur le VPS avant de pouvoir poursuivre les points 1a/1b/1c/4 de
-cette phase directement.
+scratchpad de session, jamais dans le dépôt ni dans ce fichier.
+
+**Changement de méthode ensuite** : l'utilisateur a préféré exécuter chaque commande lui-même sur
+le VPS, guidé pas à pas (commandes fournies une par une avec explication, jamais exécutées
+directement par cette session — la clé SSH générée ci-dessus n'a finalement pas servi). Cohérent
+avec le mode de collaboration déjà utilisé pour les migrations de clés API lors de sessions
+précédentes.
+
+### Point 1a — Fail2ban : FAIT ET CONFIRMÉ
+
+Installé et activé par l'utilisateur (`apt install fail2ban`, jail SSH avec `maxretry=5`,
+`bantime=3600`), `systemctl status fail2ban` confirmé actif par l'utilisateur.
+
+### Point 1b — Connexion SSH par clé uniquement, root restreint : FAIT ET CONFIRMÉ, avec une
+vraie faille de config découverte et corrigée en cours de route
+
+Séquence suivie, dans l'ordre, chaque étape confirmée avant la suivante (aucun verrouillage) :
+1. Création d'un utilisateur non-root `deploy` avec sudo, clé SSH copiée depuis `authorized_keys`
+   de root — connexion `ssh deploy@...` testée et confirmée réussie AVANT de toucher à la config SSH.
+2. `PasswordAuthentication no` et `PermitRootLogin prohibit-password` appliqués dans
+   `/etc/ssh/sshd_config` (sauvegarde préalable du fichier).
+
+**Incident réel rencontré, diagnostiqué en direct, sans jamais fermer la session déjà ouverte** :
+après le premier `systemctl restart ssh`, une nouvelle connexion redemandait encore un mot de
+passe — `PasswordAuthentication no` semblait ignoré. Diagnostic mené pas à pas (lecture seule à
+chaque étape, aucune modification tant que la cause n'était pas confirmée) :
+- `sshd -T | grep passwordauthentication` (valeur effective réellement appliquée par sshd, la
+  seule source fiable — plus fiable que relire les fichiers à l'œil) a confirmé que la valeur
+  effective ne correspondait pas à ce qui avait été édité.
+- **Cause trouvée par l'utilisateur** : `/etc/ssh/sshd_config.d/50-cloud-init.conf` (déposé par
+  l'hébergeur Contabo à la création du VPS) contenait `PasswordAuthentication yes` et se charge
+  **avant** `sshd_config` principal et avant `60-cloudimg-settings.conf` (ordre alphabétique des
+  fichiers inclus) — dans la syntaxe de configuration SSH, la **première** valeur rencontrée pour
+  un paramètre l'emporte, pas la dernière. Ce fichier gagnait donc systématiquement contre toute
+  modification faite dans le fichier principal, invisible tant qu'on ne vérifiait pas la valeur
+  effective via `sshd -T` ni le contenu réel de `50-cloud-init.conf` (illisible sans `sudo`).
+- Corrigé en éditant directement `PasswordAuthentication` dans `50-cloud-init.conf` lui-même
+  (sauvegarde préalable), revérifié via `sshd -T` avant tout redémarrage.
+
+**2ème incident, résolu** : après ce correctif et un nouveau `systemctl restart ssh`, une nouvelle
+tentative de connexion a échoué avec `Permission denied (publickey)` — ni mot de passe ni clé
+acceptés pour une connexion neuve, alors que la session déjà ouverte restait pleinement
+fonctionnelle (rien perdu, aucun verrouillage réel). Diagnostiqué en lecture seule
+(`pubkeyauthentication`/`authorizedkeysfile` effectifs, permissions de
+`/home/deploy/.ssh/`, journal `auth.log` filtré sur `deploy`) — cause précise résolue et confirmée
+directement par l'utilisateur, sans que le détail exact ne soit remonté à cette session. **Confirmé
+final par l'utilisateur** : connexion par clé opérationnelle pour `deploy` ET pour `root`, plus
+aucun accès par mot de passe possible, des deux côtés.
+
+**Enseignement à retenir** (utile pour toute future intervention SSH sur ce VPS ou un VPS Contabo
+similaire) : toujours vérifier `sshd -T` (valeur effective) plutôt que de faire confiance à une
+relecture du fichier édité, et toujours vérifier l'existence et le contenu de
+`/etc/ssh/sshd_config.d/*.conf` AVANT de conclure qu'une modification dans `sshd_config` principal
+suffit — les images cloud pré-configurées (ici Contabo, `50-cloud-init.conf`) peuvent déposer des
+fichiers qui gagnent silencieusement à cause de l'ordre de chargement.
+
+Points 1c (mises à jour automatiques) et 4 (sauvegarde/restauration) : pas encore traités, restent
+documentés plus haut en attente d'être exécutés selon le même protocole (commandes une par une,
+confirmées par l'utilisateur).
 
 ## Bilan de la mission sécurité plateforme (Phases 0 à 4)
 
