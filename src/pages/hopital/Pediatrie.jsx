@@ -5,6 +5,7 @@ import Layout from "../../components/Layout";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useAuth } from "../../context/AuthContext";
+import { useAccesEcranComplet } from "../../hooks/useAccesEcranComplet";
 import { usePatients } from "../../hooks/useSupabaseData";
 import { insertVaccination, fetchVaccinationsPatient } from "../../hooks/useMutations";
 import { supabase } from "../../supabaseClient";
@@ -198,7 +199,7 @@ function OngletCourbesCroissance({ patient, etabId }) {
 }
 
 // ─── Onglet 2 — Carnet vaccinal ───────────────────────────────────────────────
-function OngletCarnetVaccinal({ patient, etabId, medecinNom }) {
+function OngletCarnetVaccinal({ patient, etabId, medecinNom, lecture }) {
   const { success, error: toastError } = useToast();
   const [vaccinations, setVaccinations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -290,7 +291,7 @@ function OngletCarnetVaccinal({ patient, etabId, medecinNom }) {
                           {rec && <div style={{ fontSize: 11, color: colors.textMuted }}>Administre le {new Date(rec.date_administration).toLocaleDateString("fr-FR")}{rec.administre_par ? ` par ${rec.administre_par}` : ""}</div>}
                         </div>
                       </div>
-                      {!fait && (
+                      {!fait && !lecture && (
                         <button onClick={() => handleToggle(item)} disabled={saving === item.id} style={{ padding: "5px 12px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: saving === item.id ? "wait" : "pointer", backgroundColor: item.obligatoire ? "#DCFCE7" : "#EFF6FF", color: item.obligatoire ? "#16A34A" : "#2563EB", border: "none" }}>
                           {saving === item.id ? "..." : "Administrer"}
                         </button>
@@ -392,6 +393,10 @@ function OngletCalculDoses({ patient }) {
 // ─── Page principale ───────────────────────────────────────────────────────────
 export default function Pediatrie() {
   const { auth } = useAuth();
+  // Acces complet si cet ecran fait partie de la navigation par defaut du role ;
+  // lecture seule si atteint seulement via un acces elargi ponctuel (voir
+  // DEBUG_PROGRESS.md, "Permissions par action").
+  const lecture = !useAccesEcranComplet("/hopital/pediatrie");
   const { toasts } = useToast();
   const { data: patients } = usePatients(auth?.etablissement_id);
   const etabId = auth?.etablissement_id ?? null;
@@ -458,8 +463,14 @@ export default function Pediatrie() {
         ))}
       </div>
 
+      {lecture && (
+        <div style={{ backgroundColor: "#EFF6FF", border: "1.5px solid #BFDBFE", borderRadius: 10, padding: "10px 16px", marginBottom: 18, fontSize: 13, color: "#1D4ED8", fontWeight: 600 }}>
+          Accès en lecture seule. Cet écran ne fait pas partie de votre navigation habituelle (accès élargi ponctuel) — seul le personnel clinique concerné peut y enregistrer une vaccination.
+        </div>
+      )}
+
       {onglet === "courbes" && <OngletCourbesCroissance patient={patient} etabId={etabId} />}
-      {onglet === "vaccins" && <OngletCarnetVaccinal patient={patient} etabId={etabId} medecinNom={medecinNom} />}
+      {onglet === "vaccins" && <OngletCarnetVaccinal patient={patient} etabId={etabId} medecinNom={medecinNom} lecture={lecture} />}
       {onglet === "doses"   && <OngletCalculDoses patient={patient} />}
     </Layout>
   );

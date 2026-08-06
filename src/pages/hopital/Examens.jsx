@@ -5,6 +5,7 @@ import Layout from "../../components/Layout";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useAuth } from "../../context/AuthContext";
+import { useAccesEcranComplet } from "../../hooks/useAccesEcranComplet";
 import { usePatients } from "../../hooks/useSupabaseData";
 import {
   insertExamen,
@@ -477,6 +478,12 @@ export default function Examens() {
   const isRadiologue = ri === "Radiologue";
   const isTraitant   = isLaborantin || isRadiologue; // traite des examens, ne prescrit pas
   const isMedecin    = ri === "Médecin";
+  // Acces complet si cet ecran fait partie de la navigation par defaut du role ;
+  // lecture seule si atteint seulement via un acces elargi ponctuel (voir
+  // DEBUG_PROGRESS.md, "Permissions par action") — isTraitant/isMedecin ci-dessus
+  // ne distinguent QUE entre roles cliniques deja autorises sur cet ecran, ils ne
+  // protegent pas contre un role non clinique venu via acces elargi.
+  const lecture = !useAccesEcranComplet("/hopital/examens");
 
   // Le radiologue ne voit que les types d'imagerie — les analyses de sang/urine
   // restent exclusives au laborantin (voir DEBUG_PROGRESS.md, role Radiologue).
@@ -643,13 +650,19 @@ export default function Examens() {
             Rapport du jour
           </button>
         )}
-        {!isTraitant && (
+        {!lecture && !isTraitant && (
           <button onClick={() => setShowPrescrire(true)}
             style={{ padding: "8px 16px", background: ACCENT, color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
             + Prescrire un examen
           </button>
         )}
       </div>
+
+      {lecture && (
+        <div style={{ backgroundColor: "#EFF6FF", border: "1.5px solid #BFDBFE", borderRadius: 10, padding: "10px 16px", marginBottom: 18, fontSize: 13, color: "#1D4ED8", fontWeight: 600 }}>
+          Accès en lecture seule. Cet écran ne fait pas partie de votre navigation habituelle (accès élargi ponctuel) — seul le personnel clinique concerné peut y prescrire, traiter ou annuler un examen.
+        </div>
+      )}
 
       {/* Tableau */}
       <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
@@ -686,7 +699,7 @@ export default function Examens() {
                   <td style={{ padding: "10px 14px" }}><StatutBadge statut={e.statut} /></td>
                   <td style={{ padding: "10px 14px" }}>
                     <div style={{ display: "flex", gap: 6 }}>
-                      {(e.statut === "prescrit" || e.statut === "en_cours") && (
+                      {!lecture && (e.statut === "prescrit" || e.statut === "en_cours") && (
                         <>
                           <button onClick={() => updateExamen(e.id, { statut: "en_cours" }).then(load)}
                             style={{ fontSize: 11, padding: "3px 9px", border: "none", borderRadius: 6, background: "#DBEAFE", color: "#2563EB", cursor: "pointer", fontWeight: 600 }}>
@@ -706,10 +719,12 @@ export default function Examens() {
                           Voir
                         </button>
                       )}
-                      <button onClick={async () => { if (window.confirm("Annuler cet examen ?")) { await updateExamen(e.id, { statut: "annule" }); load(); success("Examen annule"); } }}
-                        style={{ fontSize: 11, padding: "3px 9px", border: "none", borderRadius: 6, background: "#FEF2F2", color: "#EF4444", cursor: "pointer", fontWeight: 600 }}>
-                        Annuler
-                      </button>
+                      {!lecture && (
+                        <button onClick={async () => { if (window.confirm("Annuler cet examen ?")) { await updateExamen(e.id, { statut: "annule" }); load(); success("Examen annule"); } }}
+                          style={{ fontSize: 11, padding: "3px 9px", border: "none", borderRadius: 6, background: "#FEF2F2", color: "#EF4444", cursor: "pointer", fontWeight: 600 }}>
+                          Annuler
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

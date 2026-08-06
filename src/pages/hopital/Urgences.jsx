@@ -4,6 +4,7 @@ import Layout from "../../components/Layout";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useAuth } from "../../context/AuthContext";
+import { useAccesEcranComplet } from "../../hooks/useAccesEcranComplet";
 import { supabase } from "../../supabaseClient";
 import { usePatients } from "../../hooks/useSupabaseData";
 import { insertConsultation, updateConsultation, insertConstante, upsertHospitalisation } from "../../hooks/useMutations";
@@ -397,7 +398,7 @@ function ModalConstantesRapides({ consultation, etabId, auth, onClose, onSaved }
 }
 
 // ── Carte patient urgences ─────────────────────────────────────────────────────
-function CartePatientUrgences({ consultation, patients, auth, etabId, onRefresh, phase }) {
+function CartePatientUrgences({ consultation, patients, auth, etabId, onRefresh, phase, lecture }) {
   const { success, error: showError } = useToast();
   const [modalTriage, setModalTriage]     = useState(false);
   const [modalOrient, setModalOrient]     = useState(false);
@@ -439,16 +440,18 @@ function CartePatientUrgences({ consultation, patients, auth, etabId, onRefresh,
           {consultation.medecin_nom && <span style={{ fontSize: 11, color: colors.textMuted }}>Dr. {consultation.medecin_nom}</span>}
         </div>
         <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-          {phase === "triage" && (
+          {!lecture && phase === "triage" && (
             <button onClick={() => setModalTriage(true)} style={{ padding: "4px 10px", fontSize: 11, fontWeight: 700, backgroundColor: "#FEF3C7", color: "#D97706", border: "none", borderRadius: 6, cursor: "pointer" }}>Trier</button>
           )}
-          {phase === "attente" && (
+          {!lecture && phase === "attente" && (
             <button onClick={handleAppeler} style={{ padding: "4px 10px", fontSize: 11, fontWeight: 700, backgroundColor: "#DBEAFE", color: "#2563EB", border: "none", borderRadius: 6, cursor: "pointer" }}>Appeler</button>
           )}
-          {(phase === "attente" || phase === "en_cours") && (
+          {!lecture && (phase === "attente" || phase === "en_cours") && (
             <button onClick={() => setModalOrient(true)} style={{ padding: "4px 10px", fontSize: 11, fontWeight: 700, backgroundColor: "#DCFCE7", color: "#16A34A", border: "none", borderRadius: 6, cursor: "pointer" }}>Orienter</button>
           )}
-          <button onClick={() => setModalConst(true)} style={{ padding: "4px 10px", fontSize: 11, fontWeight: 600, backgroundColor: colors.bgSurface, color: colors.textSecondary, border: `1px solid ${colors.border}`, borderRadius: 6, cursor: "pointer" }}>Constantes</button>
+          {!lecture && (
+            <button onClick={() => setModalConst(true)} style={{ padding: "4px 10px", fontSize: 11, fontWeight: 600, backgroundColor: colors.bgSurface, color: colors.textSecondary, border: `1px solid ${colors.border}`, borderRadius: 6, cursor: "pointer" }}>Constantes</button>
+          )}
         </div>
       </div>
     </>
@@ -458,6 +461,10 @@ function CartePatientUrgences({ consultation, patients, auth, etabId, onRefresh,
 // ── Page principale Urgences ───────────────────────────────────────────────────
 export default function Urgences() {
   const { auth }    = useAuth();
+  // Acces complet si cet ecran fait partie de la navigation par defaut du role
+  // (auth.nav) ; lecture seule si atteint seulement via un acces elargi ponctuel
+  // (voir DEBUG_PROGRESS.md, "Permissions par action").
+  const lecture     = !useAccesEcranComplet("/hopital/urgences");
   const { toasts }  = useToast();
   const { data: patients } = usePatients(auth?.etablissement_id);
   const [consultations, setConsultations] = useState([]);
@@ -595,9 +602,17 @@ export default function Urgences() {
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={imprimerRapport} style={{ padding: "8px 14px", backgroundColor: "#7C3AED", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Rapport urgences</button>
-          <button onClick={() => setShowArrivee(true)} style={{ padding: "8px 16px", backgroundColor: ACCENT, color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>+ Nouvelle arrivee</button>
+          {!lecture && (
+            <button onClick={() => setShowArrivee(true)} style={{ padding: "8px 16px", backgroundColor: ACCENT, color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>+ Nouvelle arrivee</button>
+          )}
         </div>
       </div>
+
+      {lecture && (
+        <div style={{ backgroundColor: "#EFF6FF", border: "1.5px solid #BFDBFE", borderRadius: 10, padding: "10px 16px", marginBottom: 18, fontSize: 13, color: "#1D4ED8", fontWeight: 600 }}>
+          Accès en lecture seule. Cet écran ne fait pas partie de votre navigation habituelle (accès élargi ponctuel) — seul le personnel clinique des urgences peut y enregistrer une action.
+        </div>
+      )}
 
       {/* KPIs */}
       <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
@@ -641,7 +656,7 @@ export default function Urgences() {
             })}
 
             {!loading && phase !== "termine" && items.map((c) => (
-              <CartePatientUrgences key={c.id} consultation={c} patients={patients} auth={auth} etabId={etabId} onRefresh={load} phase={phase} />
+              <CartePatientUrgences key={c.id} consultation={c} patients={patients} auth={auth} etabId={etabId} onRefresh={load} phase={phase} lecture={lecture} />
             ))}
           </div>
         ))}

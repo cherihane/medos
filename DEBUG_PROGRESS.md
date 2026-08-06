@@ -7740,3 +7740,47 @@ avant/après quand la nature du correctif le permettait.
   protection des données locaux (et, selon la clientèle visée, à des cadres internationaux)
   nécessite un avis juridique, pas une revue de code. Hors de portée de cette mission par nature.
 
+## Mission — résolution des 6 décisions produit en attente de l'audit hôpital (2026-08-07)
+
+Règle absolue inchangée : `AuthContext.jsx` non touché. Pour les points 1 et 4, diagnostic complet
+présenté et validé par l'utilisateur avant tout code (voir échanges de cette session).
+
+### Point 1 — Permissions par action (Urgences/Maternité/Examens/Pédiatrie) — CORRIGÉ
+
+**Diagnostic exact** : `Urgences.jsx`, `Maternite.jsx`, `Pediatrie.jsx` ne contenaient aucune
+occurrence de `role_interne` — aucune action mutante protégée par un contrôle de rôle.
+`Examens.jsx` protégeait "Prescrire" (`!isTraitant`) et "Résultat/Traiter" (`!isMedecin`) mais pas
+"En cours" ni "Annuler" — et même ces 2 gardes existantes ne protégeaient pas contre un rôle non
+clinique (un Caissier n'est ni `isTraitant` ni `isMedecin`, donc passait les deux). Mécanisme
+d'exploitation réel : la fonctionnalité "Accès élargi" (déjà en place, légitime pour la couverture
+ponctuelle) donne accès à la PAGE sans jamais distinguer de l'autorité clinique d'y AGIR.
+
+**Solution appliquée** (validée par l'utilisateur) : nouveau hook partagé
+`useAccesEcranComplet(chemin)` ([useAccesEcranComplet.js](src/hooks/useAccesEcranComplet.js)) —
+accès complet si l'écran fait partie de `auth.nav` (navigation par défaut du rôle, déjà filtrée
+par `role_interne` ET les permissions individuelles), lecture seule sinon (donc si atteint
+seulement via accès élargi). Direction (`role_interne` null) toujours accès complet. Appliqué aux
+4 écrans avec le même bandeau "Accès en lecture seule" déjà utilisé dans `Sterilisation.jsx` (donc
+cohérent avec un pattern déjà établi, pas un nouveau parti pris visuel) : masque "+ Nouvelle
+arrivee"/Trier/Appeler/Orienter/Constantes (Urgences), "+ Ouvrir un dossier"/"+ Nouvelle
+CPN"/"+ Admettre"/"Ajouter le relevé"/"Cloturer"/"+ Nouvelle consultation gyneco" (Maternité),
+"Administrer" (Pédiatrie), et ferme les 2 trous restants d'Examens.jsx (En cours, Annuler).
+
+**Preuve réelle avant/après**, comptes réels sur Hopital Audit Test 2 (mots de passe réinitialisés
+pour ce test) : demande d'accès élargi réelle insérée (`statut='approuve'`, `role_demande=
+'Médecin'`) pour le compte Caissier `r2caissier`. Connecté avec ce compte : bandeau violet natif
+"Accès élargi actif (Médecin)" confirmé réel (pas simulé), `/hopital/urgences` accessible mais
+**aucun bouton d'action visible**, seulement le bandeau bleu lecture seule — capture d'écran prise.
+Même vérification sur `/hopital/examens` : "+ Prescrire un examen" et "Annuler" absents, seul
+"Voir" (lecture) présent. Sanity-check inverse avec le vrai compte Médecin `r2medecin` (son propre
+rôle, pas d'accès élargi) : "+ Nouvelle arrivee" et "+ Prescrire un examen"/"Annuler" toujours
+visibles — aucune régression pour le personnel clinique légitime. Demande d'accès élargi de test et
+ses 2 entrées de journal supprimées après vérification.
+
+**Limite connue, signalée à l'utilisateur** : contrôle côté client uniquement (même limite que le
+pattern `Sterilisation.jsx` déjà en place) — une policy RLS vérifiant `role_interne` serait
+nécessaire pour une protection complète contre un appel API direct. Non construite dans cette
+session (accepté comme limite connue par l'utilisateur lors de la validation du diagnostic).
+
+Commit : `useAccesEcranComplet.js` + modifications des 4 écrans.
+

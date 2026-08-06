@@ -4,6 +4,7 @@ import Layout from "../../components/Layout";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useAuth } from "../../context/AuthContext";
+import { useAccesEcranComplet } from "../../hooks/useAccesEcranComplet";
 import { supabase } from "../../supabaseClient";
 import { usePatients } from "../../hooks/useSupabaseData";
 import {
@@ -304,7 +305,7 @@ function ModalCPN({ grossesse, patient, etabId, auth, onClose, onSaved }) {
 }
 
 // ── Detail grossesse ──────────────────────────────────────────────────────────
-function DetailGrossesse({ grossesse, patients, etabId, auth, onClose, onRefresh }) {
+function DetailGrossesse({ grossesse, patients, etabId, auth, onClose, onRefresh, lecture }) {
   const [cpns, setCpns] = useState([]);
   const [showCPN, setShowCPN] = useState(false);
   const patient = patients.find((p) => p.id === grossesse.patient_id);
@@ -339,7 +340,9 @@ function DetailGrossesse({ grossesse, patients, etabId, auth, onClose, onRefresh
         )}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: colors.navy }}>CPN ({cpns.length})</div>
-          <button onClick={() => setShowCPN(true)} style={{ padding: "6px 14px", backgroundColor: ACCENT, color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>+ Nouvelle CPN</button>
+          {!lecture && (
+            <button onClick={() => setShowCPN(true)} style={{ padding: "6px 14px", backgroundColor: ACCENT, color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>+ Nouvelle CPN</button>
+          )}
         </div>
         {cpns.length === 0 && <div style={{ textAlign: "center", color: colors.textMuted, fontSize: 13, padding: "16px 0" }}>Aucune CPN enregistree.</div>}
         {cpns.map((c) => (
@@ -414,7 +417,7 @@ function ModalAdmissionSalle({ grossessesActives, patients, etabId, auth, onClos
 }
 
 // ── Vue partogramme ───────────────────────────────────────────────────────────
-function VuePartogramme({ partogramme, patients, grossessesActives, etabId, auth, onClose, onRefresh }) {
+function VuePartogramme({ partogramme, patients, grossessesActives, etabId, auth, onClose, onRefresh, lecture }) {
   const { success, error: showError } = useToast();
   const [releve, setReleve] = useState({ heure: new Date().toISOString().slice(0, 16), dilatation_cm: "", descente_station: "", contractions_nb: "", contractions_duree: "", bcf: "", tension_sys: "", tension_dia: "", pouls_mere: "", liquide_amniotique: "clair", notes: "" });
   const [showAccouchement, setShowAccouchement] = useState(false);
@@ -518,7 +521,9 @@ function VuePartogramme({ partogramme, patients, grossessesActives, etabId, auth
             <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>Travail depuis : {fmtDuree(partogramme.heure_debut_travail)}</div>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => setShowAccouchement(true)} style={{ padding: "7px 14px", backgroundColor: "#1F2937", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Cloturer</button>
+            {!lecture && (
+              <button onClick={() => setShowAccouchement(true)} style={{ padding: "7px 14px", backgroundColor: "#1F2937", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Cloturer</button>
+            )}
             <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: colors.textMuted }}>×</button>
           </div>
         </div>
@@ -574,9 +579,11 @@ function VuePartogramme({ partogramme, patients, grossessesActives, etabId, auth
             </div>
           </div>
         </div>
-        <button onClick={handleAjouterReleve} disabled={saving} style={{ width: "100%", padding: 10, background: saving ? "#D1D5DB" : ACCENT, color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer", marginBottom: 4 }}>
-          {saving ? "Enregistrement..." : "Ajouter le releve"}
-        </button>
+        {!lecture && (
+          <button onClick={handleAjouterReleve} disabled={saving} style={{ width: "100%", padding: 10, background: saving ? "#D1D5DB" : ACCENT, color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer", marginBottom: 4 }}>
+            {saving ? "Enregistrement..." : "Ajouter le releve"}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -878,7 +885,7 @@ function OngletDashboard({ etabId, auth, grossessesActives, partogrammesActifs, 
 }
 
 // ── Onglet 2 : Grossesses ─────────────────────────────────────────────────────
-function OngletGrossesses({ etabId, patients, auth, onRefresh }) {
+function OngletGrossesses({ etabId, patients, auth, onRefresh, lecture }) {
   const { success, error: showError } = useToast();
   const [grossesses, setGrossesses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -905,7 +912,7 @@ function OngletGrossesses({ etabId, patients, auth, onRefresh }) {
   return (
     <div>
       {showModal && <ModalOuvrirGrossesse patients={patients} etabId={etabId} auth={auth} onClose={() => setShowModal(false)} onSaved={() => { load(); onRefresh(); success("Dossier ouvert"); }} />}
-      {detail && <DetailGrossesse grossesse={detail} patients={patients} etabId={etabId} auth={auth} onClose={() => setDetail(null)} onRefresh={load} />}
+      {detail && <DetailGrossesse grossesse={detail} patients={patients} etabId={etabId} auth={auth} onClose={() => setDetail(null)} onRefresh={load} lecture={lecture} />}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <div style={{ display: "flex", gap: 6 }}>
@@ -913,7 +920,9 @@ function OngletGrossesses({ etabId, patients, auth, onRefresh }) {
             <button key={v} onClick={() => setFiltre(v)} style={{ padding: "5px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: `1.5px solid ${filtre === v ? ACCENT : "#E5E7EB"}`, backgroundColor: filtre === v ? ACCENT + "18" : "white", color: filtre === v ? ACCENT : "#6B7280" }}>{l}</button>
           ))}
         </div>
-        <button onClick={() => setShowModal(true)} style={{ padding: "7px 16px", backgroundColor: ACCENT, color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>+ Ouvrir un dossier</button>
+        {!lecture && (
+          <button onClick={() => setShowModal(true)} style={{ padding: "7px 16px", backgroundColor: ACCENT, color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>+ Ouvrir un dossier</button>
+        )}
       </div>
 
       {loading && <div style={{ textAlign: "center", color: colors.textMuted, padding: 32 }}>Chargement...</div>}
@@ -955,7 +964,7 @@ function OngletGrossesses({ etabId, patients, auth, onRefresh }) {
 }
 
 // ── Onglet 3 : Salle d'accouchement ──────────────────────────────────────────
-function OngletSalle({ etabId, patients, grossessesActives, auth, onRefresh }) {
+function OngletSalle({ etabId, patients, grossessesActives, auth, onRefresh, lecture }) {
   const { success, error: showError } = useToast();
   const [partogrammes, setPartogrammes] = useState([]);
   const [showAdmission, setShowAdmission] = useState(false);
@@ -972,12 +981,14 @@ function OngletSalle({ etabId, patients, grossessesActives, auth, onRefresh }) {
     <div>
       {showAdmission && <ModalAdmissionSalle grossessesActives={grossessesActives} patients={patients} etabId={etabId} auth={auth} onClose={() => setShowAdmission(false)} onSaved={() => { load(); onRefresh(); setShowAdmission(false); }} />}
       {partogrammeOuvert && (
-        <VuePartogramme partogramme={partogrammeOuvert} patients={patients} grossessesActives={grossessesActives} etabId={etabId} auth={auth} onClose={() => setPartogrammeOuvert(null)} onRefresh={() => { load(); onRefresh(); setPartogrammeOuvert(null); }} />
+        <VuePartogramme partogramme={partogrammeOuvert} patients={patients} grossessesActives={grossessesActives} etabId={etabId} auth={auth} onClose={() => setPartogrammeOuvert(null)} onRefresh={() => { load(); onRefresh(); setPartogrammeOuvert(null); }} lecture={lecture} />
       )}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: colors.navy }}>Travaux en cours ({partogrammes.length})</div>
-        <button onClick={() => setShowAdmission(true)} style={{ padding: "7px 16px", backgroundColor: ACCENT, color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>+ Admettre une patiente</button>
+        {!lecture && (
+          <button onClick={() => setShowAdmission(true)} style={{ padding: "7px 16px", backgroundColor: ACCENT, color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>+ Admettre une patiente</button>
+        )}
       </div>
 
       {partogrammes.length === 0 && <div style={{ textAlign: "center", color: colors.textMuted, padding: 40, fontSize: 13 }}>Aucun travail en cours en salle d'accouchement.</div>}
@@ -1301,7 +1312,7 @@ function ModalConsultationGyneco({ patients, etabId, medecinNom, onClose, onSave
 }
 
 // ── Onglet 6 : Consultations gynéco (hors grossesse) ──────────────────────────
-function OngletConsultationsGyneco({ etabId, patients, auth }) {
+function OngletConsultationsGyneco({ etabId, patients, auth, lecture }) {
   const [consultations, setConsultations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -1340,10 +1351,12 @@ function OngletConsultationsGyneco({ etabId, patients, auth }) {
         <div style={{ fontSize: 12, color: colors.textSecondary }}>
           Consultations gynécologiques standards (hors suivi de grossesse — voir l'onglet Grossesses pour les CPN).
         </div>
-        <button onClick={() => setShowModal(true)}
-          style={{ padding: "8px 16px", background: ACCENT, color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
-          + Nouvelle consultation gyneco
-        </button>
+        {!lecture && (
+          <button onClick={() => setShowModal(true)}
+            style={{ padding: "8px 16px", background: ACCENT, color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+            + Nouvelle consultation gyneco
+          </button>
+        )}
       </div>
 
       {!loading && consultations.length === 0 && (
@@ -1380,6 +1393,10 @@ function OngletConsultationsGyneco({ etabId, patients, auth }) {
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function Maternite() {
   const { auth } = useAuth();
+  // Acces complet si cet ecran fait partie de la navigation par defaut du role ;
+  // lecture seule si atteint seulement via un acces elargi ponctuel (voir
+  // DEBUG_PROGRESS.md, "Permissions par action").
+  const lecture = !useAccesEcranComplet("/hopital/maternite");
   const { toasts, error: showError } = useToast();
   const { data: patients } = usePatients(auth?.etablissement_id);
   const [onglet, setOnglet] = useState("dashboard");
@@ -1431,11 +1448,17 @@ export default function Maternite() {
         ))}
       </div>
 
+      {lecture && (
+        <div style={{ backgroundColor: "#EFF6FF", border: "1.5px solid #BFDBFE", borderRadius: 10, padding: "10px 16px", marginBottom: 18, fontSize: 13, color: "#1D4ED8", fontWeight: 600 }}>
+          Accès en lecture seule. Cet écran ne fait pas partie de votre navigation habituelle (accès élargi ponctuel) — seul le personnel clinique de maternité peut y enregistrer une action.
+        </div>
+      )}
+
       {onglet === "dashboard" && <OngletDashboard etabId={etabId} auth={auth} grossessesActives={grossessesActives} partogrammesActifs={partogrammesActifs} onRefresh={loadBase} />}
-      {onglet === "grossesses" && <OngletGrossesses etabId={etabId} patients={patients} auth={auth} onRefresh={loadBase} />}
-      {onglet === "salle"     && <OngletSalle etabId={etabId} patients={patients} grossessesActives={grossessesActives} auth={auth} onRefresh={loadBase} />}
+      {onglet === "grossesses" && <OngletGrossesses etabId={etabId} patients={patients} auth={auth} onRefresh={loadBase} lecture={lecture} />}
+      {onglet === "salle"     && <OngletSalle etabId={etabId} patients={patients} grossessesActives={grossessesActives} auth={auth} onRefresh={loadBase} lecture={lecture} />}
       {onglet === "nnes"      && <OngletNouveauNes etabId={etabId} patients={patients} auth={auth} />}
-      {onglet === "gyneco"    && <OngletConsultationsGyneco etabId={etabId} patients={patients} auth={auth} />}
+      {onglet === "gyneco"    && <OngletConsultationsGyneco etabId={etabId} patients={patients} auth={auth} lecture={lecture} />}
       {onglet === "registre"  && <OngletRegistre etabId={etabId} patients={patients} auth={auth} />}
     </Layout>
   );
