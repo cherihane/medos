@@ -35,12 +35,31 @@ export async function insertMedicament(fields) {
 }
 
 // ─── Stock (décrémentation après vente) ───────────────────────────────────────
+// Point 6, mission "6 decisions produit" : l'ancienne version lisait
+// stock_actuel puis ecrivait la valeur calculee cote client — deux ventes/
+// dispensations concurrentes du meme medicament pouvaient lire le meme stock
+// de depart et la seconde ecriture ecrasait la premiere (lost update), sans
+// jamais rejeter une quantite superieure au stock reel. Remplace par un
+// UPDATE conditionnel atomique en un seul aller-retour (RPC
+// decrementer_stock_atomique, migration 20260807030000) : verifie et
+// decremente dans la meme instruction SQL, rejette si le stock reel au
+// moment exact de l'ecriture est insuffisant.
+const MESSAGES_STOCK = {
+  stock_insuffisant: "Stock insuffisant pour cette quantité — un autre mouvement a peut-être eu lieu entre-temps. Rechargez et vérifiez le stock disponible.",
+  medicament_introuvable_ou_non_autorise: "Médicament introuvable ou non autorisé.",
+  quantite_invalide: "Quantité invalide.",
+};
+
 export async function decrementStock(medicamentId, quantite) {
-  const { data: med, error } = await supabase
-    .from("medicaments").select("stock_actuel").eq("id", medicamentId).single();
-  if (error) throw new Error(error.message);
-  const newStock = Math.max(0, (med.stock_actuel ?? 0) - quantite);
-  return run(supabase.from("medicaments").update({ stock_actuel: newStock }).eq("id", medicamentId));
+  const { data, error } = await supabase.rpc("decrementer_stock_atomique", {
+    p_medicament_id: medicamentId,
+    p_quantite: quantite,
+  });
+  if (error) {
+    const code = (error.message ?? "").match(/stock_insuffisant|medicament_introuvable_ou_non_autorise|quantite_invalide/)?.[0];
+    throw new Error(MESSAGES_STOCK[code] ?? error.message);
+  }
+  return data;
 }
 
 // ─── Ventes ───────────────────────────────────────────────────────────────────
@@ -834,14 +853,19 @@ export async function fetchSessionActive(etablissement_id, caissier_email) {
   return data ?? null;
 }
 
+// Point 6, mission "6 decisions produit" : aucune garde sur le statut avant —
+// deux clotures concurrentes de la meme session (double-clic, deux onglets)
+// pouvaient toutes les deux reussir, la seconde ecrasant silencieusement les
+// totaux de cloture de la premiere. Meme motif que point 3 (garde
+// conditionnelle sur une seule table, pas besoin de RPC) : n'ecrit que si la
+// session est encore "ouverte", retourne un tableau vide (pas d'erreur) sinon
+// — a l'appelant de detecter ce cas (session deja fermee entre-temps).
 export async function fermerSessionCaisse(id, fields) {
-  return run(
-    supabase.from("sessions_caisse")
-      .update({ ...fields, statut: "fermee", heure_fermeture: new Date().toISOString() })
-      .eq("id", id)
-      .select()
-      .single()
-  );
+  const { data, error } = await supabase.from("sessions_caisse")
+    .update({ ...fields, statut: "fermee", heure_fermeture: new Date().toISOString() })
+    .eq("id", id).eq("statut", "ouverte").select();
+  if (error) throw new Error(error.message);
+  return data ?? [];
 }
 
 export async function fetchSessionsHistorique(etablissement_id, limit = 30) {
@@ -857,6 +881,46 @@ export async function fetchSessionsHistorique(etablissement_id, limit = 30) {
 // ─── Paiements ────────────────────────────────────────────────────────────────
 export async function insertPaiement(fields) {
   return run(supabase.from("paiements_facture").insert(fields).select().single());
+}
+
+// Point 6, mission "6 decisions produit" : l'ancien flux (insertPaiement puis
+// updateFacture separement, "reste du" calcule cote client au chargement du
+// modal) permettait a deux encaissements concurrents sur la meme facture de
+// se baser sur le meme "reste du" perime et de tous les deux s'inserer
+// integralement — double encaissement silencieux. Remplace par la RPC
+// encaisser_facture (migration 20260807030000), qui verrouille la ligne de
+// la facture (SELECT ... FOR UPDATE) et recalcule le reste du realite juste
+// avant d'inserer le paiement : la seconde tentative concurrente voit l'etat
+// post-premier-paiement et est soit reduite au montant reellement restant,
+// soit rejetee si la facture est deja entierement payee.
+const MESSAGES_ENCAISSEMENT = {
+  facture_introuvable: "Facture introuvable.",
+  non_autorise: "Accès non autorisé à cette facture.",
+  facture_deja_payee: "Cette facture a déjà été entièrement payée entre-temps (par vous-même dans un autre onglet, ou par une autre personne).",
+  montant_invalide: "Montant invalide.",
+};
+
+export async function encaisserFacture(fields) {
+  const { data, error } = await supabase.rpc("encaisser_facture", {
+    p_facture_id: fields.facture_id,
+    p_montant: fields.montant,
+    p_montant_recu: fields.montant_recu,
+    p_monnaie_rendue: fields.monnaie_rendue,
+    p_mode_paiement: fields.mode_paiement,
+    p_reference: fields.reference_paiement ?? null,
+    p_numero_recu: fields.numero_recu,
+    p_caissier_email: fields.caissier_email,
+    p_session_id: fields.session_id ?? null,
+    p_taux_couverture: fields.taux_couverture,
+    p_type_couverture: fields.type_couverture ?? null,
+    p_montant_couverture: fields.montant_couverture,
+    p_total_a_payer: fields.total_a_payer,
+  });
+  if (error) {
+    const code = (error.message ?? "").match(/facture_introuvable|non_autorise|facture_deja_payee|montant_invalide/)?.[0];
+    throw new Error(MESSAGES_ENCAISSEMENT[code] ?? error.message);
+  }
+  return data?.[0] ?? null;
 }
 
 export async function fetchPaiementsFacture(facture_id) {

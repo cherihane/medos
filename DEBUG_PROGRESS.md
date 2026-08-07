@@ -7990,3 +7990,69 @@ compte réel Direction :
 
 Lot de test supprimé après vérification.
 
+### Point 6 — Races financières restantes (Caisse/Stock) — CORRIGÉ
+
+**Rappel des 4 races déjà identifiées** (DEBUG_PROGRESS.md, ligne ~5885) : double clôture de
+caisse (`fermerSessionCaisse` sans garde de statut), double encaissement de la même facture (pas
+de verrou), décrément de stock non atomique (`decrementStock`, lost update en cas de dispensations
+concurrentes), dispensation sans vérification que la quantité demandée ≤ stock réel.
+
+**Correctifs appliqués** — migration [`20260807030000_races_financieres_caisse_stock.sql`](supabase/migrations/20260807030000_races_financieres_caisse_stock.sql) :
+
+1. **Décrément de stock** (`useMutations.js`) : l'ancienne version lisait `stock_actuel`, calculait
+   la nouvelle valeur côté client, puis écrivait — deux dispensations concurrentes du même
+   médicament lisaient le même stock de départ et la seconde écriture écrasait la première, sans
+   jamais rejeter une quantité supérieure au stock réel. Remplacé par la RPC
+   `decrementer_stock_atomique` — un seul `UPDATE ... SET stock_actuel = stock_actuel - ? WHERE
+   stock_actuel >= ?` atomique, qui vérifie et décrémente dans la même instruction SQL. Corrige
+   les races #3 et #4 en même temps (un décrément insuffisant est désormais rejeté, jamais
+   accepté silencieusement). Bénéficie aux 4 écrans qui appellent `decrementStock` (`Stock.jsx`
+   hôpital, `Caisse.jsx`/`Ordonnances.jsx`/`Peremptions.jsx` pharmacie) puisque le correctif est au
+   niveau de la fonction partagée, même raisonnement que le point 3 sur `upsertHospitalisation`.
+2. **Encaissement** (`CaissePage.jsx` / `useMutations.js`) : l'ancien flux faisait `insertPaiement`
+   puis `updateFacture` séparément, avec le "reste dû" calculé côté client à l'ouverture du modal
+   — deux encaissements concurrents sur la même facture pouvaient tous les deux s'insérer
+   intégralement. Remplacé par la RPC `encaisser_facture`, qui verrouille la ligne de la facture
+   (`SELECT ... FOR UPDATE`) et recalcule le reste dû réel juste avant d'insérer le paiement — la
+   tentative concurrente voit l'état post-premier-paiement et est rejetée (`facture_deja_payee`)
+   si la facture est déjà entièrement payée. Nécessitait une RPC (pas un simple `UPDATE`
+   conditionnel comme au point 3) car l'opération combine deux écritures (`paiements_facture` +
+   `factures_hopital`) qui doivent rester atomiques ensemble.
+3. **Double clôture de caisse** (`useMutations.js`) : `fermerSessionCaisse` n'écrit désormais que
+   si la session est encore `statut = 'ouverte'` (garde conditionnelle simple, même motif que le
+   point 3, pas besoin de RPC pour une seule table), retourne un tableau vide sinon.
+   `CaissePage.jsx` détecte ce cas et affiche un message clair au lieu de continuer comme si la
+   clôture avait réussi.
+
+**Preuve réelle avant/après** (simulée via `set role authenticated; set local
+request.jwt.claims` avec de vrais comptes/uid réels, puis vérifiée en direct dans l'UI pour
+l'encaissement) :
+
+- **Stock** : médicament réel "Amoxicilline" (compte `cherihaneadam123@gmail.com`), stock 2 → 1
+  après un décrément de 1 (succès). Tentative de décrémenter de 5 alors qu'il n'en reste que 1 →
+  rejetée avec `stock_insuffisant`, stock resté à 1 (vérifié en base, aucune écriture partielle).
+- **Encaissement** : facture de test 5000 FCFA créée, "onglet A" encaisse 5000 → `facture_statut:
+  "payee"`, `reste_patient: 0`, un seul paiement inséré. "Onglet B" tente ensuite le même
+  encaissement complet de 5000 en se basant sur le même `total_a_payer` (reproduisant exactement
+  la race — deux caissiers avec le même modal ouvert en même temps) → rejeté avec
+  `facture_deja_payee`. Vérifié en base : **une seule ligne** dans `paiements_facture` pour cette
+  facture (celle de l'onglet A). Testé aussi en conditions réelles dans l'UI (compte Direction
+  Hôpital Audit Test 2, session de caisse ouverte, facture réelle 3000 FCFA créée puis encaissée
+  via le bouton "Valider et imprimer le reçu") : requête `POST .../rpc/encaisser_facture` capturée
+  avec la charge exacte envoyée par le formulaire, réponse `200`, `facture_statut: "payee"`,
+  facture et paiement bien visibles ensuite dans le journal de la session — confirme que le
+  nouveau code client est correctement câblé à la RPC, pas seulement que la RPC elle-même
+  fonctionne en SQL direct.
+- **Double clôture** : session de caisse de test ouverte, première clôture (`UPDATE ... WHERE
+  statut='ouverte'`) → succès, `total_theorique` écrit à 10000. Seconde clôture concurrente
+  (même requête, `total_theorique` différent volontairement à 99999) → **0 ligne retournée**,
+  vérifié en base que `total_theorique` est resté à 10000 (les chiffres de la première clôture
+  n'ont pas été écrasés par la seconde tentative).
+
+Toutes les données de test (médicament restauré à son stock d'origine, factures/paiements/session
+de test créés pour la preuve) ont été supprimées ou remises à leur état d'origine après
+vérification.
+
+Fichiers modifiés : [`supabase/migrations/20260807030000_races_financieres_caisse_stock.sql`](supabase/migrations/20260807030000_races_financieres_caisse_stock.sql),
+[`src/hooks/useMutations.js`](src/hooks/useMutations.js), [`src/pages/hopital/CaissePage.jsx`](src/pages/hopital/CaissePage.jsx).
+

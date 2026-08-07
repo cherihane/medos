@@ -13,7 +13,7 @@ import {
   fetchTarifsActes, fetchTarifsActesTous, insertTarifActe, updateTarifActe, deleteTarifActe,
   insertJournalCaisse, insertClotureCaisse,
   ouvrirSessionCaisse, fetchSessionActive, fermerSessionCaisse, fetchSessionsHistorique,
-  insertPaiement, fetchPaiementsFacture, fetchPaiementsSession,
+  encaisserFacture, fetchPaiementsFacture, fetchPaiementsSession,
   genererNumeroRecu, fetchConfigCaisse, upsertConfigCaisse, fetchFacturesAvecPaiements,
 } from "../../hooks/useMutations";
 import { openDocument, tableHTML, infoGridHTML, signatureRowHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
@@ -117,27 +117,23 @@ function ModalEncaissement({ facture, patient, session, etabId, auth, config, on
       const numeroRecu  = await genererNumeroRecu(etabId);
       const montantPaye = Math.min(montEnc, resteDu);
 
-      await insertPaiement({
-        facture_id: facture.id, etablissement_id: etabId,
+      // Point 6, mission "6 decisions produit" : insertPaiement + updateFacture
+      // separement laissait une fenetre ou deux encaissements concurrents sur
+      // la meme facture se basaient sur le meme "reste du" (calcule ci-dessus
+      // a l'ouverture du modal) et pouvaient tous les deux s'inserer
+      // integralement. encaisser_facture (RPC atomique, verrou de ligne)
+      // recalcule le reste du reel juste avant d'inserer — rejette si la
+      // facture a deja ete entierement payee entre-temps.
+      await encaisserFacture({
+        facture_id: facture.id,
         session_id: session?.id ?? null,
         caissier_email: auth?.user?.email ?? "",
         montant: montantPaye, montant_recu: montEnc,
         monnaie_rendue: monnaieR, mode_paiement: mode,
         reference_paiement: reference || null, numero_recu: numeroRecu,
+        taux_couverture: tauxClamp, type_couverture: typeCouv || null,
+        montant_couverture: montCouv, total_a_payer: totalAPayer,
       });
-
-      if (montEnc >= resteDu) {
-        await updateFacture(facture.id, {
-          statut: "payee", mode_paiement: mode, date_paiement: new Date().toISOString(),
-          taux_couverture: tauxClamp, type_couverture: typeCouv || null,
-          montant_couverture: montCouv, reste_patient: 0,
-        });
-      } else {
-        await updateFacture(facture.id, {
-          statut: "acompte", taux_couverture: tauxClamp, type_couverture: typeCouv || null,
-          montant_couverture: montCouv, reste_patient: resteDu - montantPaye,
-        });
-      }
 
       await insertJournalCaisse({
         etablissement_id: etabId, caissier_email: auth?.user?.email ?? "",
@@ -265,13 +261,23 @@ function ModalFermetureCaisse({ session, paiements, etabId, auth, onClose, onSav
     try {
       const today = new Date().toISOString().slice(0, 10);
       const ecartFinal = ecart ?? 0;
-      await fermerSessionCaisse(session.id, {
+      // Point 6, mission "6 decisions produit" : deux clotures concurrentes de
+      // la meme session (double-clic, deux onglets) — fermerSessionCaisse
+      // n'ecrit desormais que si la session est encore "ouverte" et retourne
+      // un tableau vide sinon (voir useMutations.js).
+      const fermee = await fermerSessionCaisse(session.id, {
         total_especes: totalEspeces, total_mobile_money: totalMobile,
         total_cheque: totalCheque, total_tiers_payant: totalTiers,
         total_theorique: totalTheorique,
         total_physique_compte: physique !== "" ? physiqueN : null,
         ecart: ecartFinal, notes_fermeture: notes || null,
       });
+      if (fermee.length === 0) {
+        showError("Cette session de caisse a deja ete cloturee entre-temps (par vous-meme dans un autre onglet, ou par une autre personne).");
+        setSaving(false);
+        onSaved(); onClose();
+        return;
+      }
       await insertClotureCaisse({
         etablissement_id: etabId, date_journee: today,
         total_encaisse: totalTheorique - (session.fond_initial ?? 0),
