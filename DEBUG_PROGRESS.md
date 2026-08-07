@@ -7784,6 +7784,78 @@ session (accepté comme limite connue par l'utilisateur lors de la validation du
 
 Commit : `useAccesEcranComplet.js` + modifications des 4 écrans.
 
+### Point 3 — Pertes de données concurrentes sur `hospitalisations` — CORRIGÉ
+
+**Rappel du risque déjà identifié** (DEBUG_PROGRESS.md, ligne ~5856) : même famille de bug que
+la feuille de réveil post-anesthésique et le partogramme (déjà corrigés, migration
+`20260803000000_detection_conflit_ecriture_concurrente.sql`) — `upsertHospitalisation` écrase
+sans jamais vérifier si un autre poste a modifié la même ligne entre-temps (ex. changement de lit
+vs changement de motif en parallèle, saisis depuis Patients.jsx).
+
+**Correctif appliqué** (même motif exact que feuille de réveil/partogramme) :
+- Migration [`20260807010000_hospitalisations_concurrence.sql`](supabase/migrations/20260807010000_hospitalisations_concurrence.sql) :
+  la colonne `updated_at` existait déjà sur `hospitalisations` mais n'était jamais mise à jour
+  automatiquement (aucun trigger) — corrigé avec le même trigger `set_updated_at()` déjà utilisé
+  ailleurs.
+- `useMutations.js` : `updateHospitalisationSiInchangee(id, fields, updatedAtAttendu)` — écriture
+  conditionnelle `UPDATE ... WHERE id = ? AND updated_at = ?`, retourne un tableau vide (pas
+  d'erreur) si la ligne a changé entre-temps ; `fetchHospitalisationParId(id)` pour recharger la
+  version la plus récente en cas de conflit.
+- `Patients.jsx` (onglet Hospitalisation, seul écran concerné qui garde un éditeur ouvert
+  longtemps — voir "écrans volontairement non modifiés" ci-dessous) : `handleSaveHospi` utilise
+  la variante conditionnelle quand une hospitalisation existe déjà ; si 0 ligne retournée, affiche
+  un modal "Modification concurrente détectée" avec deux choix explicites — "Écraser quand même
+  avec mes valeurs" ou "Recharger les valeurs récentes (recommandé)" — même UX que le correctif
+  déjà prouvé sur la feuille de réveil/partogramme.
+
+**Bug additionnel trouvé pendant le test en direct, corrigé au passage** : `handleSaveHospi`
+envoyait `date_sortie_prevue: ""` (chaîne vide, valeur par défaut du champ `<input type="date">`
+non renseigné) directement à PostgREST. Une colonne `date` refuse `""` (`22007 invalid input
+syntax for type date`). Ce bug était invisible en test superficiel car Postgres n'évalue les
+expressions `SET` d'un `UPDATE` que pour les lignes qui satisfont le `WHERE` — tant que le
+`WHERE updated_at = ?` ne correspondait à aucune ligne (le cas justement testé), l'erreur de type
+n'était jamais déclenchée et PostgREST répondait `200 []`, indiscernable en apparence d'un vrai
+conflit détecté. Dès qu'une écriture non conflictuelle était tentée, l'enregistrement échouait
+silencieusement avec un message Postgres brut. Corrigé en normalisant `date_entree` et
+`date_sortie_prevue` en `null` quand vides (`hospiPayload()`), même normalisation que celle déjà
+appliquée dans `Lits.jsx` (`form.date_sortie_prevue || null`) qui n'avait jamais ce problème.
+
+**Preuve réelle avant/après (2 onglets, compte Direction Hôpital Audit Test 2, dossier réel
+"Fatou Kone", hospitalisation `465491a6-...`)** :
+1. Onglet A et B chargent la même ligne (`updated_at` identique après synchronisation).
+2. Onglet A change "Lit" → "5-A" et enregistre → `PATCH .../hospitalisations?...&updated_at=eq.<T0>`
+   → `200`, ligne retournée avec `lit:"5-A"` et `updated_at` avancé à `<T1>`. Première écriture
+   réussie confirmée en base (`select lit, updated_at` direct en base : `5-A`, `<T1>`).
+3. Onglet B (qui tenait toujours `<T0>`, jamais rafraîchi) change "Chambre" → "201-B" et
+   enregistre → `PATCH .../updated_at=eq.<T0>` → `200 []` (0 ligne, conflit réel détecté, pas une
+   erreur). Modal "Modification concurrente détectée" affiché immédiatement dans l'UI de l'onglet
+   B — capturé via `get_page_text`.
+4. Test "Écraser quand même" (onglet B) : `PATCH` inconditionnel envoyé, `chambre:"201-B"` écrit
+   en base, mais `lit` revient à `""` (valeur locale obsolète de l'onglet B, qui n'avait jamais vu
+   le "5-A" de l'onglet A) — comportement documenté et attendu, l'utilisateur est explicitement
+   prévenu par le libellé du bouton ("avec MES valeurs").
+5. Test "Recharger les valeurs récentes" (onglet A, conflit reproduit naturellement par l'écrasement
+   précédent) : formulaire rechargé avec `chambre:"201-B"`, `lit:""` (état réel le plus récent de
+   la base), aucune écriture envoyée, modal fermé — vérifié par lecture directe des champs du
+   formulaire après clic.
+6. Nettoyage : ligne remise à son état d'origine (`chambre`, `lit`, `motif_hospitalisation`,
+   `date_sortie_prevue` → `NULL`) après le test.
+
+**Écrans volontairement non modifiés** : `Lits.jsx` (`ModalAdmettre`) et `Urgences.jsx`
+(`ModalOrientation`) appellent aussi `upsertHospitalisation`, mais ce sont des actions ponctuelles
+déclenchées depuis un modal qui s'ouvre et se soumet en quelques secondes — pas un éditeur resté
+ouvert pendant que quelqu'un d'autre modifie la même ligne en parallèle, contrairement à l'onglet
+Hospitalisation de Patients.jsx qui peut rester affiché longtemps pendant une garde. Le
+lost-update empiriquement prouvé (ici et sur feuille de réveil/partogramme) exige deux sessions
+qui chargent une valeur de référence puis écrivent après un délai — ce scénario ne s'applique pas
+à un modal d'admission à usage unique. Risque résiduel plus étroit (ré-admission d'un patient déjà
+hospitalisé pile au moment où un autre poste modifie sa fiche) volontairement non couvert faute de
+UX de résolution de conflit adaptée à un flux de création — signalé ici pour arbitrage si jugé
+prioritaire dans une session dédiée.
+
+Fichiers modifiés : [`supabase/migrations/20260807010000_hospitalisations_concurrence.sql`](supabase/migrations/20260807010000_hospitalisations_concurrence.sql),
+[`src/hooks/useMutations.js`](src/hooks/useMutations.js), [`src/pages/hopital/Patients.jsx`](src/pages/hopital/Patients.jsx).
+
 ### Point 4 — Workflow de redistribution en impasse (Reseau.jsx) — CORRIGÉ
 
 **Diagnostic exact** : grep exhaustif de `useMutations.js` — seules `insertTransfertStock`

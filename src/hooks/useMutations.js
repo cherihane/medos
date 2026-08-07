@@ -370,6 +370,21 @@ export async function upsertHospitalisation(patient_id, fields) {
   return run(supabase.from("hospitalisations").insert({ patient_id, ...fields }).select().single());
 }
 
+// Ecriture protegee contre les modifications concurrentes silencieuses — meme
+// motif que updateFeuilleReveilSiInchangee/updatePartogrammeSiInchangee (point
+// 3, mission "6 decisions produit") : upsertHospitalisation est appelee depuis
+// 3 ecrans differents (Patients.jsx, Lits.jsx, Urgences.jsx) sans jamais
+// verifier que la ligne n'a pas change entre le chargement et l'ecriture
+// (ex. changement de lit vs changement de motif en parallele). N'ecrit que si
+// updated_at n'a pas change ; retourne un tableau vide (pas d'erreur) si la
+// ligne a change entre-temps, a l'appelant de detecter ce cas.
+export async function updateHospitalisationSiInchangee(id, fields, updatedAtAttendu) {
+  const { data, error } = await supabase.from("hospitalisations").update(fields)
+    .eq("id", id).eq("updated_at", updatedAtAttendu).select();
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function fetchHospitalisation(patient_id) {
   const { data } = await supabase
     .from("hospitalisations")
@@ -379,6 +394,11 @@ export async function fetchHospitalisation(patient_id) {
     .limit(1)
     .maybeSingle();
   return data;
+}
+
+export async function fetchHospitalisationParId(id) {
+  const { data } = await supabase.from("hospitalisations").select("*").eq("id", id).maybeSingle();
+  return data ?? null;
 }
 
 export async function fetchLitsOccupes(etablissement_id) {

@@ -10,7 +10,7 @@ import Layout from "../../components/Layout";
 import { usePatientsPaginated, usePatientsStats, useMedicaments, useSpecialiteMedecin, useEtablissements } from "../../hooks/useSupabaseData";
 import { getSpecialiteConfig, CHAMP_LABEL_PAR_CLE } from "../../config/specialitesMedecin";
 import Pagination from "../../components/Pagination";
-import { insertPatient, insertOrdonnance, upsertHospitalisation, fetchHospitalisation, insertConstante, fetchConstantes, updatePatientTriage, insertNoteEvolution, fetchNotesEvolution, fetchPlanSoinsPatient, fetchPerfusionsPatient, insertAdministration, insertPlanSoins, insertDeces, fetchDecesEtablissement, fetchDecesByPatient, genererNumeroCertificat, updatePatient, fetchRegimePatient, insertImagerie, fetchImageriePatient, insertCompteRendu, insertTransfertPatient, ajouterNotificationTransfert } from "../../hooks/useMutations";
+import { insertPatient, insertOrdonnance, upsertHospitalisation, updateHospitalisationSiInchangee, fetchHospitalisationParId, fetchHospitalisation, insertConstante, fetchConstantes, updatePatientTriage, insertNoteEvolution, fetchNotesEvolution, fetchPlanSoinsPatient, fetchPerfusionsPatient, insertAdministration, insertPlanSoins, insertDeces, fetchDecesEtablissement, fetchDecesByPatient, genererNumeroCertificat, updatePatient, fetchRegimePatient, insertImagerie, fetchImageriePatient, insertCompteRendu, insertTransfertPatient, ajouterNotificationTransfert } from "../../hooks/useMutations";
 import { imprimerFicheTransfertExterne, envoyerFicheTransfertExterne } from "../../utils/ficheTransfertExterne";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../supabaseClient";
@@ -1458,6 +1458,7 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
   const [comptes, setComptes]         = useState([]);
   const [constantes, setConstantes]   = useState([]);
   const [hospi, setHospi]             = useState(null);
+  const [conflitHospi, setConflitHospi] = useState(null); // derniere version en base si modifiee entre-temps
   const [dossier, setDossier]         = useState([]);
   const [filtreDossier, setFiltreDossier] = useState("Tous");
   const [loading, setLoading]         = useState(true);
@@ -1650,17 +1651,76 @@ En tant qu'assistant clinique, donne en 3 phrases maximum : 1) le risque princip
     finally { setSavingConst(false); }
   };
 
-  // Sauvegarder hospitalisation
+  // Sauvegarder hospitalisation — protege contre les modifications concurrentes
+  // silencieuses (point 3, mission "6 decisions produit") : upsertHospitalisation
+  // ecrasait sans jamais verifier si un autre poste (Lits.jsx, Urgences.jsx, ou
+  // cet ecran ouvert dans un autre onglet) avait modifie la meme ligne entre
+  // temps (ex. changement de lit vs changement de motif en parallele). Meme
+  // motif deja prouve sur feuille de reveil/partogramme.
+  // hospiForm garde "" pour les champs date non renseignes (controle du champ
+  // <input type="date">) ; Postgres rejette "" pour une colonne date (attendu :
+  // une vraie date ou NULL) — meme normalisation que Lits.jsx (form.xxx || null).
+  const hospiPayload = () => ({
+    ...hospiForm,
+    date_entree: hospiForm.date_entree || null,
+    date_sortie_prevue: hospiForm.date_sortie_prevue || null,
+    etablissement_id: etablissement_id ?? null,
+  });
+
   const handleSaveHospi = async () => {
     setSavingHospi(true);
     try {
-      await upsertHospitalisation(patient.id, { ...hospiForm, etablissement_id: etablissement_id ?? null });
+      if (hospi?.id) {
+        const updated = await updateHospitalisationSiInchangee(
+          hospi.id,
+          hospiPayload(),
+          hospi.updated_at
+        );
+        if (updated.length === 0) {
+          const latest = await fetchHospitalisationParId(hospi.id);
+          setConflitHospi(latest);
+          setSavingHospi(false);
+          return;
+        }
+        setHospi(updated[0]);
+      } else {
+        await upsertHospitalisation(patient.id, hospiPayload());
+      }
       setHospiSaved(true);
       setTimeout(() => setHospiSaved(false), 2000);
       charger();
       onPatientUpdated("Statut d'hospitalisation mis a jour.");
     } catch (e) { showError("Erreur : " + e.message); }
     finally { setSavingHospi(false); }
+  };
+
+  const resoudreConflitHospiEcraser = async () => {
+    if (!conflitHospi) return;
+    setSavingHospi(true);
+    try {
+      await upsertHospitalisation(patient.id, hospiPayload());
+      setConflitHospi(null);
+      setHospiSaved(true);
+      setTimeout(() => setHospiSaved(false), 2000);
+      charger();
+      onPatientUpdated("Statut d'hospitalisation mis a jour (ecrase).");
+    } catch (e) { showError("Erreur : " + e.message); }
+    finally { setSavingHospi(false); }
+  };
+
+  const resoudreConflitHospiRecharger = () => {
+    if (!conflitHospi) return;
+    setHospi(conflitHospi);
+    setHospiForm((f) => ({
+      ...f,
+      statut: conflitHospi.statut ?? "ambulatoire",
+      chambre: conflitHospi.chambre ?? "",
+      lit: conflitHospi.lit ?? "",
+      date_entree: conflitHospi.date_entree ?? "",
+      date_sortie_prevue: conflitHospi.date_sortie_prevue ?? "",
+      motif_hospitalisation: conflitHospi.motif_hospitalisation ?? "",
+    }));
+    setConflitHospi(null);
   };
 
   const svcColor = SERVICE_COLOR[patient.service] ?? "#6B7280";
@@ -1937,6 +1997,28 @@ En tant qu'assistant clinique, donne en 3 phrases maximum : 1) le risque princip
                 ) : (
                   <div style={{ fontSize: 12, color: colors.textMuted, padding: "10px 14px", background: "#F9FAFB", borderRadius: 8 }}>Aucun régime prescrit</div>
                 )}
+              </div>
+            )}
+
+            {conflitHospi && (
+              <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1400, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+                <div style={{ background: "white", borderRadius: 14, maxWidth: 460, width: "100%", padding: 24, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: "#DC2626", marginBottom: 10 }}>Modification concurrente détectée</div>
+                  <p style={{ fontSize: 13, color: colors.text, marginBottom: 16, lineHeight: 1.5 }}>
+                    Ce dossier d'hospitalisation a été modifié entre-temps par quelqu'un d'autre — voulez-vous écraser ou recharger les valeurs les plus récentes ?
+                  </p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <button onClick={resoudreConflitHospiEcraser} disabled={savingHospi} style={{ padding: 11, background: "#FEF2F2", color: "#DC2626", border: "1.5px solid #EF4444", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: savingHospi ? "wait" : "pointer" }}>
+                      Écraser quand même avec mes valeurs
+                    </button>
+                    <button onClick={resoudreConflitHospiRecharger} disabled={savingHospi} style={{ padding: 11, background: ACCENT, color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: savingHospi ? "wait" : "pointer" }}>
+                      Recharger les valeurs récentes (recommandé)
+                    </button>
+                    <button onClick={() => setConflitHospi(null)} disabled={savingHospi} style={{ padding: 11, background: "#F8FAFC", color: colors.text, border: `1px solid ${colors.border}`, borderRadius: 8, fontSize: 13, cursor: savingHospi ? "wait" : "pointer" }}>
+                      Annuler
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 
