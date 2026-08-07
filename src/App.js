@@ -4,6 +4,8 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import { NotificationsProvider } from "./context/NotificationsContext";
 import { AccesElargiProvider, useAccesElargi } from "./context/AccesElargiContext";
 import { DarkModeProvider } from "./context/DarkModeContext";
+import { NetworkProvider } from "./context/NetworkContext";
+import { SyncProvider } from "./context/SyncContext";
 import InactivityGuard from "./components/InactivityGuard";
 import WidgetAccesElargi from "./components/WidgetAccesElargi";
 
@@ -687,13 +689,17 @@ export default function App() {
   return (
     <BrowserRouter>
       <DarkModeProvider>
-        <AuthProvider>
-          <NotificationsProvider>
-            <AccesElargiProvider>
-              <AppRoutes />
-            </AccesElargiProvider>
-          </NotificationsProvider>
-        </AuthProvider>
+        <NetworkProvider>
+          <SyncProvider>
+            <AuthProvider>
+              <NotificationsProvider>
+                <AccesElargiProvider>
+                  <AppRoutes />
+                </AccesElargiProvider>
+              </NotificationsProvider>
+            </AuthProvider>
+          </SyncProvider>
+        </NetworkProvider>
       </DarkModeProvider>
     </BrowserRouter>
   );

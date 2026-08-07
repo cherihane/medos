@@ -5,6 +5,7 @@ import { colors, sidebar, spacing } from "../theme";
 import { useNotifications } from "../context/NotificationsContext";
 import { useAuth } from "../context/AuthContext";
 import { enregistrerConnexion } from "../hooks/useMutations";
+import OfflineIndicator from "./OfflineIndicator";
 
 const SIDEBAR_WIDTH = sidebar.width;
 const HEARTBEAT_INTERVAL_MS = 3 * 60 * 1000;
@@ -30,6 +31,7 @@ export default function Layout({ children, title, subtitle }) {
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", backgroundColor: colors.bg }}>
+      <OfflineIndicator />
       {auth?.role === "hopital" && lastNotif && (
         <div style={{ position: "fixed", top: 20, right: 24, zIndex: 9999, backgroundColor: "white", borderRadius: 12, boxShadow: "0 8px 32px rgba(0,0,0,0.15)", padding: "14px 18px", maxWidth: 340, borderLeft: "4px solid #3B82F6" }}>
           <button onClick={dismissLast} style={{ position: "absolute", top: 8, right: 10, background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "#9CA3AF" }}>×</button>

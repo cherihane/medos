@@ -8056,3 +8056,97 @@ vérification.
 Fichiers modifiés : [`supabase/migrations/20260807030000_races_financieres_caisse_stock.sql`](supabase/migrations/20260807030000_races_financieres_caisse_stock.sql),
 [`src/hooks/useMutations.js`](src/hooks/useMutations.js), [`src/pages/hopital/CaissePage.jsx`](src/pages/hopital/CaissePage.jsx).
 
+
+---
+
+## MISSION HORS-LIGNE — Rendre toute la plateforme MedOS fonctionnelle sans réseau
+
+Mission explicite (2026-08-07) : pharmacie, distributeur, hôpital, sans exception, en 4 phases
+(Phase 0 moteur partagé, Phase 1 pharmacie, Phase 2 distributeur, Phase 3 hôpital, Phase 4 test
+global). Règle absolue inchangée : ne jamais toucher aux fonctions protégées d'`AuthContext.jsx`
+(non touché dans cette phase). Limite physique documentée dès le départ par la mission elle-même,
+pas une réduction de périmètre : les notifications temps réel entre deux utilisateurs (ex.
+médecin→laborantin) ne peuvent pas être instantanées si l'un des deux est hors-ligne — elles se
+synchroniseront dès la reconnexion comme toute donnée en attente, jamais "par magie" sans réseau.
+
+### Phase 0 — Moteur partagé : ✅ terminée et testée
+
+**Primitives construites** (aucune ne touche encore un écran réel — c'est l'objet de la Phase 1) :
+
+| # | Élément | Fichier | Rôle |
+|---|---|---|---|
+| 1 | Détection réseau fiable | [`src/offline/networkStatus.js`](src/offline/networkStatus.js), [`src/context/NetworkContext.jsx`](src/context/NetworkContext.jsx) | `navigator.onLine` seul ne suffit pas (faux positif type portail captif) — complété par une sonde réelle (`HEAD /rest/v1/` sur Supabase, timeout 4s), appelée sur les évènements `online`/`offline` du navigateur et toutes les 30s. |
+| 2 | Cache local (lecture) | [`src/offline/db.js`](src/offline/db.js), [`src/offline/cache.js`](src/offline/cache.js) | Wrapper IndexedDB minimal (aucune dépendance externe) + `cacheFirstOrNetwork(key, online, fetchFn)` — écrit en cache si en ligne, relit la dernière copie si hors-ligne. Clé conseillée `ressource:etablissement_id` pour ne jamais mélanger les données de deux établissements. Le peuplement par écran/rôle (stock, patients, prix, médicaments, ordonnances en cours) se fera Phase 1+, primitive prête. |
+| 3 | File d'attente locale | [`src/offline/syncQueue.js`](src/offline/syncQueue.js) | Toute action hors-ligne est enregistrée dans IndexedDB avec un statut visible (`pending`/`syncing`/`conflict`/`error`) — jamais perdue silencieusement. |
+| 4 | Moteur de synchro + conflits | [`src/offline/syncEngine.js`](src/offline/syncEngine.js), [`src/offline/mutationRegistry.js`](src/offline/mutationRegistry.js) | Rejoue la file en FIFO au retour de connexion. **Réutilise le mécanisme déjà prouvé sur les hospitalisations/feuille de réveil/partogramme** (`updateHospitalisationSiInchangee` et consorts) plutôt que d'en inventer un nouveau : toute mutation dont le nom finit par `SiInchangee` qui renvoie un tableau vide au rejeu est traitée comme un conflit (statut `conflict`), jamais écrasée automatiquement. `discardQueuedConflict`/`retryQueuedConflict` réutilisent le même choix "écraser ou recharger" que la modal déjà en place sur `Patients.jsx`. Un échec ou conflit sur une action n'empêche pas le rejeu des suivantes. |
+| 5 | App shell hors-ligne | [`src/service-worker.js`](src/service-worker.js), [`src/serviceWorkerRegistration.js`](src/serviceWorkerRegistration.js) | Gabarit standard CRA/Workbox (`InjectManifest`, déjà supporté nativement par `react-scripts` sans eject — vérifié dans `node_modules/react-scripts/config/webpack.config.js`) : précache tous les fichiers du build + route "app shell" pour que toute navigation interne (`/pharmacie/caisse` en F5) soit servie par `index.html` précaché même sans réseau. Actif uniquement en production (`npm run build`), jamais en dev. |
+| 6 | Indicateur visuel permanent | [`src/components/OfflineIndicator.jsx`](src/components/OfflineIndicator.jsx), monté dans [`Layout.jsx`](src/components/Layout.jsx) | Visible sur tous les écrans authentifiés (Layout est commun à tous les rôles) : pastille verte discrète "En ligne" au repos, bandeau rouge "Hors ligne" expliqué, bandeau ambre si conflits/erreurs en attente avec détail de la file et bouton "Synchroniser maintenant". |
+| — | Point d'entrée pour les écrans | [`src/context/SyncContext.jsx`](src/context/SyncContext.jsx) | `useSyncQueue().enqueueOrRun(nomMutation, args, { description, module })` — exécute directement si en ligne, met en file sinon. C'est ce que les écrans Phase 1+ appelleront à la place des fonctions `useMutations.js` directes. |
+
+Providers câblés dans `App.js` : `NetworkProvider` et `SyncProvider` ajoutés (englobent
+`AuthProvider`, ne dépendent pas de lui). Aucune modification d'`AuthContext.jsx`.
+
+**Tests isolés et rigoureux (avant toute application à un écran réel, comme demandé)** —
+`src/offline/__tests__/` (17 tests, `fake-indexeddb` en dépendance de dev, `useMutations.js`
+mocké pour isoler la logique du moteur de tout appel réseau réel) :
+
+- coupure en plein milieu d'une action → mise en file confirmée, statut `pending`, action non
+  rejouée avant reconnexion ;
+- reconnexion → rejeu en ordre FIFO exact, file vidée proprement en cas de succès (3/3 tests) ;
+- échec au rejeu (ex. stock insuffisant constaté à la resynchro) → reste en file avec statut
+  `error` et message, ne bloque pas les actions suivantes ;
+- **conflit détecté au rejeu** (écriture conditionnelle `SiInchangee`, ex. deux modifications
+  concurrentes du même dossier d'hospitalisation par deux postes différents pendant la coupure) →
+  statut `conflict`, jamais écrasé automatiquement, jamais perdu ;
+- résolution du conflit — "recharger" (abandonne l'action locale) et "écraser quand même" (remise
+  en file puis resynchronisation réussie) — les deux chemins de la modal déjà prouvée sur
+  Hospitalisation ;
+- deux appels concurrents au moteur de synchro (ex. évènement `online` + clic manuel
+  "Synchroniser") ne rejouent pas la file deux fois.
+
+```
+Test Suites: 3 passed, 3 total (src/offline)
+Tests:       17 passed, 17 total
+```
+
+**Vérification en conditions réelles dans le navigateur** (build de production réel,
+`npm run build` + `serve -s build`, connecté au vrai compte `cherihaneadam123@gmail.com` /
+"Pharmacie Mimi" sur le vrai backend Supabase — pas de mock) :
+
+- Service worker enregistré et **actif** (`navigator.serviceWorker.getRegistrations()` →
+  `state: "activated"`) sur le build de prod.
+- **85 fichiers précachés** dans le cache Workbox, `index.html` du build confirmé présent dedans
+  — preuve structurelle que la navigation interne sera servie même sans réseau (stratégie
+  "app shell" : la route de navigation est bornée au précache, jamais au réseau).
+- Indicateur visible en haut à droite sur un écran authentifié réel (Dashboard Pharmacie) :
+  pastille verte "En ligne" au repos.
+- Simulation d'une coupure réseau (`navigator.onLine` forcé à `false` + évènement `offline`
+  déclenché dans la page réelle, pas un test unitaire) → bandeau rouge "Hors ligne" affiché
+  immédiatement avec le message d'explication. Retour à `true` + évènement `online` → la sonde
+  réelle (fetch vers Supabase) confirme la reconnexion → repasse à "En ligne" tout seul.
+
+**Limite documentée, pas cachée** : les outils de navigateur disponibles dans cet environnement
+ne permettent pas de couper réellement le réseau au niveau système (pas d'émulation CDP
+"offline" exposée) — seule la réaction de l'app aux évènements `online`/`offline` a pu être
+vérifiée en conditions réelles de navigateur, en plus des 17 tests automatisés qui, eux, exercent
+la vraie logique de file/rejeu/conflit de bout en bout sans dépendre de cette limite d'outillage.
+La preuve de bout en bout "vraie coupure physique pendant une vraie vente, reconnexion, vérifiée
+en base" sera faite Phase 1 point 1 (Caisse), une fois `enqueueOrRun` câblé sur un vrai écran —
+c'est explicitement l'ordre demandé par la mission (tester le moteur isolé avant de l'appliquer à
+un seul écran réel).
+
+**Pas encore fait (attendu, ce sera Phase 1+)** : aucun écran n'appelle encore `enqueueOrRun` ni
+`cacheFirstOrNetwork` — Caisse, Inventaire, Ordonnances, Patients, etc. utilisent toujours
+`useMutations.js`/`useSupabaseData.js` directement, donc à ce stade **rien ne fonctionne encore
+réellement hors-ligne pour l'utilisateur final**, seul le moteur et l'app shell le sont. C'est la
+Phase 1 qui câble le premier écran réel (Caisse pharmacie).
+
+Fichiers ajoutés : `src/offline/{db,cache,syncQueue,syncEngine,mutationRegistry,networkStatus}.js`
+et `src/offline/__tests__/`, `src/context/{NetworkContext,SyncContext}.jsx`,
+`src/components/OfflineIndicator.jsx`, `src/service-worker.js`, `src/serviceWorkerRegistration.js`.
+Fichiers modifiés : `src/App.js` (providers), `src/index.js` (enregistrement SW),
+`src/components/Layout.jsx` (montage de l'indicateur), `src/supabaseClient.js` (export de
+`supabaseUrl`/`supabaseKey`, nécessaires à la sonde réseau — `AuthContext.jsx` non touché),
+`src/setupTests.js` (polyfill `structuredClone` + `fake-indexeddb` pour les tests), `.claude/launch.json`
+(config `medos-build-preview` pour tester le build de prod en local), `package.json` (dépendance
+de dev `fake-indexeddb`).

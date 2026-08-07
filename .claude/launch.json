@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "medos-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start"],
+      "port": 3000
+    },
+    {
+      "name": "medos-landing",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd landing && python3 -m http.server 8917"],
+      "port": 8917
+    },
+    {
+      "name": "medos-build-preview",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-s", "build", "-l", "4173"],
+      "port": 4173
+    }
+  ]
+}

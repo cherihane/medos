@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = "https://yehqmvwmosskumbegzty.supabase.co";
-const supabaseKey =
+export const supabaseUrl = "https://yehqmvwmosskumbegzty.supabase.co";
+export const supabaseKey =
   "sb_publishable_d0hgwt-SF7pzOswk-JVvZA_CkLm-4nI";
 
 // Identifiant unique par onglet, persistant en sessionStorage (jamais partage entre onglets,
