@@ -10,7 +10,7 @@ import Layout from "../../components/Layout";
 import { usePatientsPaginated, usePatientsStats, useMedicaments, useSpecialiteMedecin, useEtablissements } from "../../hooks/useSupabaseData";
 import { getSpecialiteConfig, CHAMP_LABEL_PAR_CLE } from "../../config/specialitesMedecin";
 import Pagination from "../../components/Pagination";
-import { insertPatient, insertOrdonnance, upsertHospitalisation, updateHospitalisationSiInchangee, fetchHospitalisationParId, fetchHospitalisation, insertConstante, fetchConstantes, updatePatientTriage, insertNoteEvolution, fetchNotesEvolution, fetchPlanSoinsPatient, fetchPerfusionsPatient, insertAdministration, insertPlanSoins, insertDeces, fetchDecesEtablissement, fetchDecesByPatient, genererNumeroCertificat, updatePatient, fetchRegimePatient, insertImagerie, fetchImageriePatient, insertCompteRendu, insertTransfertPatient, ajouterNotificationTransfert } from "../../hooks/useMutations";
+import { insertPatient, insertOrdonnance, upsertHospitalisation, updateHospitalisationSiInchangee, fetchHospitalisationParId, fetchHospitalisation, insertConstante, fetchConstantes, updatePatientTriage, insertNoteEvolution, fetchNotesEvolution, fetchPlanSoinsPatient, fetchPerfusionsPatient, insertAdministration, insertPlanSoins, insertDeces, fetchDecesEtablissement, fetchDecesByPatient, genererNumeroCertificat, updatePatient, fetchRegimePatient, insertImagerie, fetchImageriePatient, insertCompteRendu, insertTransfertPatient, ajouterNotificationTransfert, fetchHistoriqueModificationsPatient } from "../../hooks/useMutations";
 import { imprimerFicheTransfertExterne, envoyerFicheTransfertExterne } from "../../utils/ficheTransfertExterne";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../supabaseClient";
@@ -400,6 +400,143 @@ function ModalNouveauPatient({ etablissement_id, medecinNom, onClose, onSaved, o
           <button onClick={onClose} style={{ flex: 1, padding: 11, background: "#F8FAFC", color: colors.text, border: "1px solid var(--border)", borderRadius: 10, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>Annuler</button>
           <button onClick={handleSave} disabled={saving} style={{ flex: 2, padding: 11, background: saving ? "#E5E7EB" : ACCENT, color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
             {saving ? <><Spin />Enregistrement…</> : "Enregistrer le patient"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Modal Editer patient ──────────────────────────────────────────────────────
+// Point 2, mission "6 decisions produit" : jusqu'ici aucun ecran ne permettait
+// de corriger le dossier apres creation (groupe sanguin, allergies,
+// antecedents, coordonnees...). Toute modification est tracee cote base par
+// trg_log_patient_modification (voir migration 20260807020000) — journal
+// append-only, non modifiable depuis le client.
+const CHAMP_LABEL_HISTORIQUE = {
+  prenom: "Prenom", nom: "Nom", date_naissance: "Date de naissance", genre: "Sexe",
+  telephone: "Telephone", email: "Email", groupe_sanguin: "Groupe sanguin",
+  antecedents: "Antecedents", allergies: "Allergies", adresse: "Adresse",
+  medecin_referent: "Medecin referent", service: "Service", assurance: "Assurance",
+  numero_assurance: "N° assurance", mutuelle: "Mutuelle",
+};
+
+function ModalEditerPatient({ patient, etablissement_id, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    prenom: patient.prenom ?? "", nom: patient.nom ?? "",
+    date_naissance: patient.date_naissance ?? "", genre: patient.genre ?? "",
+    telephone: patient.telephone ?? "", email: patient.email ?? "",
+    groupe_sanguin: patient.groupe_sanguin ?? "",
+    allergies: (patient.allergies ?? []).join(", "),
+    antecedents: (patient.antecedents ?? []).join(", "),
+    adresse: patient.adresse ?? "", medecin_referent: patient.medecin_referent ?? "",
+    service: patient.service ?? "Médecine générale",
+    assurance: patient.assurance ?? "", numero_assurance: patient.numero_assurance ?? "",
+    mutuelle: patient.mutuelle ?? "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr]       = useState(null);
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const handleSave = async () => {
+    setErr(null);
+    if (!form.prenom.trim() || !form.nom.trim()) { setErr("Prénom et nom sont obligatoires."); return; }
+    setSaving(true);
+    try {
+      const updated = await updatePatient(patient.id, {
+        prenom: form.prenom.trim(), nom: form.nom.trim(),
+        date_naissance: form.date_naissance || null,
+        genre: form.genre || null,
+        telephone: form.telephone.trim() || null,
+        email: form.email.trim() || null,
+        groupe_sanguin: form.groupe_sanguin || null,
+        allergies: form.allergies ? form.allergies.split(",").map((s) => s.trim()).filter(Boolean) : [],
+        antecedents: form.antecedents ? form.antecedents.split(",").map((s) => s.trim()).filter(Boolean) : [],
+        adresse: form.adresse.trim() || null,
+        medecin_referent: form.medecin_referent.trim() || null,
+        service: form.service,
+        assurance: form.assurance.trim() || null,
+        numero_assurance: form.numero_assurance.trim() || null,
+        mutuelle: form.mutuelle.trim() || null,
+        ...(etablissement_id ? { etablissement_id } : {}),
+      });
+      onSaved(updated);
+    } catch (e) { setErr(e.message); setSaving(false); }
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ background: "white", borderRadius: 16, width: "100%", maxWidth: 620, maxHeight: "90vh", overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+        <div style={{ padding: "22px 26px 0", flexShrink: 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: colors.navy }}>Modifier le dossier</h3>
+              <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 3 }}>
+                {patient.prenom} {patient.nom} — <span style={{ fontFamily: "monospace" }}>{patient.numero_dossier ?? ""}</span>
+              </div>
+            </div>
+            <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: colors.textMuted }}>×</button>
+          </div>
+        </div>
+
+        <div style={{ overflowY: "auto", padding: "0 26px 10px", flexGrow: 1, display: "flex", flexDirection: "column", gap: 14 }}>
+          <div className="form-row-2">
+            <div><label style={labelSt}>Prénom <span style={{ color: "#EF4444" }}>*</span></label><input style={inputSt} value={form.prenom} onChange={(e) => set("prenom", e.target.value)} placeholder="Prénom" /></div>
+            <div><label style={labelSt}>Nom <span style={{ color: "#EF4444" }}>*</span></label><input style={inputSt} value={form.nom} onChange={(e) => set("nom", e.target.value)} placeholder="Nom de famille" /></div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+            <div><label style={labelSt}>Date de naissance</label><input style={inputSt} type="date" max={new Date().toISOString().slice(0, 10)} value={form.date_naissance} onChange={(e) => set("date_naissance", e.target.value)} /></div>
+            <div>
+              <label style={labelSt}>Sexe</label>
+              <select style={{ ...inputSt, cursor: "pointer" }} value={form.genre} onChange={(e) => set("genre", e.target.value)}>
+                <option value="">—</option><option value="M">Masculin</option><option value="F">Féminin</option><option value="Autre">Autre</option>
+              </select>
+            </div>
+            <div>
+              <label style={labelSt}>Groupe sanguin</label>
+              <select style={{ ...inputSt, cursor: "pointer" }} value={form.groupe_sanguin} onChange={(e) => set("groupe_sanguin", e.target.value)}>
+                <option value="">—</option>
+                {["A+","A-","B+","B-","AB+","AB-","O+","O-"].map((g) => <option key={g}>{g}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="form-row-2">
+            <div><label style={labelSt}>Téléphone</label><input style={inputSt} value={form.telephone} onChange={(e) => set("telephone", e.target.value)} placeholder="+225 07 00 00 00 00" /></div>
+            <div><label style={labelSt}>Email</label><input style={inputSt} type="email" value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="patient@email.com" /></div>
+          </div>
+          <div><label style={labelSt}>Adresse</label><input style={inputSt} value={form.adresse} onChange={(e) => set("adresse", e.target.value)} placeholder="Quartier, ville" /></div>
+
+          {/* Allergies — meme mise en avant visuelle rouge que le reste de l'app (bandeau, badges Informations) */}
+          <div style={{ padding: "12px 14px", background: "#FEF2F2", borderRadius: 10, border: "1.5px solid #FECACA" }}>
+            <label style={{ ...labelSt, color: "#DC2626" }}>Allergies et contre-indications <span style={{ fontSize: 10, fontWeight: 400, color: "#B91C1C" }}>— séparez par des virgules</span></label>
+            <input style={{ ...inputSt, borderColor: form.allergies ? "#FCA5A5" : "#E5E7EB" }} value={form.allergies} onChange={(e) => set("allergies", e.target.value)} placeholder="Ex : Pénicilline, Aspirine, Latex" />
+          </div>
+          <div>
+            <label style={labelSt}>Antécédents médicaux <span style={{ fontSize: 10, fontWeight: 400, color: colors.textMuted }}>— séparez par des virgules</span></label>
+            <input style={inputSt} value={form.antecedents} onChange={(e) => set("antecedents", e.target.value)} placeholder="Ex : Diabète type 2, Hypertension" />
+          </div>
+
+          <div className="form-row-2">
+            <div><label style={labelSt}>Médecin référent</label><input style={inputSt} value={form.medecin_referent} onChange={(e) => set("medecin_referent", e.target.value)} placeholder="Dr. Nom" /></div>
+            <div>
+              <label style={labelSt}>Service</label>
+              <select style={{ ...inputSt, cursor: "pointer" }} value={form.service} onChange={(e) => set("service", e.target.value)}>
+                {SERVICES.map((s) => <option key={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+            <div><label style={labelSt}>Assurance</label><input style={inputSt} value={form.assurance} onChange={(e) => set("assurance", e.target.value)} placeholder="Ex : CNPS, UAM, Saham..." /></div>
+            <div><label style={labelSt}>N° carte assurance</label><input style={inputSt} value={form.numero_assurance} onChange={(e) => set("numero_assurance", e.target.value)} placeholder="Ex : ASS-2026-00123" /></div>
+            <div><label style={labelSt}>Mutuelle</label><input style={inputSt} value={form.mutuelle} onChange={(e) => set("mutuelle", e.target.value)} placeholder="Nom de la mutuelle" /></div>
+          </div>
+          {err && <div style={{ padding: "8px 12px", background: "#FEF2F2", borderRadius: 8, fontSize: 12, color: "#DC2626" }}>{err}</div>}
+        </div>
+
+        <div style={{ display: "flex", gap: 10, padding: "16px 26px", borderTop: "1px solid var(--border-light)", flexShrink: 0 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: 11, background: "#F8FAFC", color: colors.text, border: "1px solid var(--border)", borderRadius: 10, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>Annuler</button>
+          <button onClick={handleSave} disabled={saving} style={{ flex: 2, padding: 11, background: saving ? "#E5E7EB" : ACCENT, color: saving ? "#9CA3AF" : "white", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: saving ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+            {saving ? <><Spin />Enregistrement…</> : "Enregistrer les modifications"}
           </button>
         </div>
       </div>
@@ -1481,6 +1618,8 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
   const [loadingSoins, setLoadingSoins] = useState(false);
   const [hospiSaved, setHospiSaved]   = useState(false);
   const [showModalDeces, setShowModalDeces] = useState(false);
+  const [showEditPatient, setShowEditPatient] = useState(false);
+  const [historiqueModifs, setHistoriqueModifs] = useState([]);
   // Notes d'evolution
   const [notes, setNotes]             = useState([]);
   const [showNoteForm, setShowNoteForm] = useState(false);
@@ -1539,6 +1678,7 @@ function FichePatient({ patient, etablissement_id, medecinNom, hopitalNom, medic
   useEffect(() => {
     fetchRegimePatient(patient.id).then(setRegimeActif);
     fetchImageriePatient(patient.id).then(setImagerie);
+    fetchHistoriqueModificationsPatient(patient.id).then(setHistoriqueModifs);
   }, [patient.id]);
 
   const parseLignes = (notes) => { try { return JSON.parse(notes).lignes ?? []; } catch { return []; } };
@@ -1737,6 +1877,10 @@ En tant qu'assistant clinique, donne en 3 phrases maximum : 1) le risque princip
   const peutCreerOrd       = !ri || ri === "Médecin" || ri === "Directeur";
   const peutVoirSoins      = !ri || ri === "Médecin" || ri === "Infirmière" || ri === "Directeur";
   const peutTransferer     = !ri || ri === "Médecin" || ri === "Directeur";
+  // Meme perimetre que la visibilite de l'onglet Informations (ri !== "Caissier")
+  // — editer le dossier (identite, allergies, antecedents) suppose de pouvoir
+  // deja consulter ces memes informations.
+  const peutEditerPatient  = ri !== "Caissier";
 
   // Charger soins quand l'onglet est ouvert
   useEffect(() => {
@@ -1766,6 +1910,18 @@ En tant qu'assistant clinique, donne en 3 phrases maximum : 1) le risque princip
       {ordRenouveler && <ModalNouvelleOrdonnance patient={patient} etablissement_id={etablissement_id} medecinNom={medecinNom} medicaments={medicaments} lignesInitiales={(() => { try { return JSON.parse(ordRenouveler.notes ?? "{}").lignes ?? []; } catch { return []; } })()} onClose={() => setOrdRenouveler(null)} onSaved={() => { setOrdRenouveler(null); charger(); onPatientUpdated("Ordonnance renouvelee."); }} />}
       {showCR  && <ModalNouveauCompteRendu patient={patient} etablissement_id={etablissement_id} medecinNom={medecinNom} onClose={() => setShowCR(false)} onSaved={() => { setShowCR(false); charger(); onPatientUpdated("Compte rendu enregistré."); }} />}
       {showTransfert && <ModalTransfertPatient patient={patient} comptes={comptes} etablissement_id={etablissement_id} medecinNom={medecinNom} onClose={() => setShowTransfert(false)} onSaved={() => { setShowTransfert(false); onPatientUpdated("Transfert propose a l'etablissement destination."); }} />}
+      {showEditPatient && (
+        <ModalEditerPatient
+          patient={patient}
+          etablissement_id={etablissement_id}
+          onClose={() => setShowEditPatient(false)}
+          onSaved={(updatedPatient) => {
+            setShowEditPatient(false);
+            fetchHistoriqueModificationsPatient(patient.id).then(setHistoriqueModifs);
+            onPatientUpdated("Dossier patient mis à jour.", updatedPatient);
+          }}
+        />
+      )}
 
       {/* Détail compte rendu */}
       {detailCR && (
@@ -1973,6 +2129,27 @@ En tant qu'assistant clinique, donne en 3 phrases maximum : 1) le risque princip
                         {patient.allergies.map((a) => <span key={a} style={{ padding: "4px 10px", background: "#FEE2E2", color: "#DC2626", borderRadius: 6, fontSize: 12, fontWeight: 700 }}>{a}</span>)}
                       </div>
                       <div style={{ fontSize: 11, color: colors.textMuted }}>Vérifiez systématiquement avant toute prescription.</div>
+                    </div>
+                  </div>
+                )}
+                {historiqueModifs.length > 0 && (
+                  <div>
+                    <h4 style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 700, color: colors.navy }}>Historique des modifications</h4>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {historiqueModifs.map((h) => (
+                        <div key={h.id} style={{ padding: "10px 14px", background: "#F8FAFC", borderRadius: 8, fontSize: 12 }}>
+                          <div style={{ color: colors.textMuted, marginBottom: 4 }}>
+                            {new Date(h.created_at).toLocaleString("fr-FR")} — {h.modifie_par_email ?? "Inconnu"}
+                          </div>
+                          <div style={{ color: colors.text }}>
+                            {Object.entries(h.champs_modifies).map(([champ, { avant, apres }]) => (
+                              <div key={champ}>
+                                <strong>{CHAMP_LABEL_HISTORIQUE[champ] ?? champ}</strong> : {avant || "—"} → {apres || "—"}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -2535,6 +2712,12 @@ En tant qu'assistant clinique, donne en 3 phrases maximum : 1) le risque princip
           {/* Actions */}
           <div style={{ padding: "14px 26px", borderTop: "1px solid var(--border-light)", display: "flex", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
             <button onClick={onClose} style={{ padding: "9px 16px", background: "#F8FAFC", color: colors.text, border: "1px solid var(--border)", borderRadius: 9, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>Fermer</button>
+            {peutEditerPatient && (
+              <button onClick={() => setShowEditPatient(true)} style={{ padding: "9px 16px", background: "white", color: colors.navy, border: `1.5px solid ${colors.border}`, borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                Modifier le dossier
+              </button>
+            )}
             <button onClick={() => printFichePatient({ patient, ordonnances, comptes, auth })} style={{ padding: "9px 16px", background: "#1D4ED8", color: "white", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Imprimer la fiche</button>
             {peutVoirComptes && (
               <button onClick={() => { setShowCR(true); setOnglet("comptes"); }} style={{ padding: "9px 16px", background: "#0A1628", color: "white", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
@@ -2741,7 +2924,7 @@ export default function PatientsHopital() {
       {toast && <div style={{ position: "fixed", top: 20, right: 20, background: ACCENT, color: "white", padding: "12px 20px", borderRadius: 10, fontWeight: 600, fontSize: 13, zIndex: 2000, boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}>{toast}</div>}
 
       {showNouv && <ModalNouveauPatient etablissement_id={etablissement_id} medecinNom={medecinNom} onClose={() => setShowNouv(false)} onSaved={() => { setShowNouv(false); refetch(); showToast("Patient enregistré."); }} onDoublonSelected={(p) => { setShowNouv(false); setFichePatient(p); }} />}
-      {fichePatient && <FichePatient patient={fichePatient} etablissement_id={etablissement_id} medecinNom={medecinNom} hopitalNom={hopitalNom} medicaments={medicaments} onClose={() => setFichePatient(null)} onPatientUpdated={(msg) => { refetch(); showToast(msg); }} auth={auth} />}
+      {fichePatient && <FichePatient patient={fichePatient} etablissement_id={etablissement_id} medecinNom={medecinNom} hopitalNom={hopitalNom} medicaments={medicaments} onClose={() => setFichePatient(null)} onPatientUpdated={(msg, updatedPatient) => { refetch(); showToast(msg); if (updatedPatient) setFichePatient(updatedPatient); }} auth={auth} />}
 
       {pageOnglet === "deces" ? null : <>
 

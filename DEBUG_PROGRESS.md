@@ -7784,6 +7784,69 @@ session (accepté comme limite connue par l'utilisateur lors de la validation du
 
 Commit : `useAccesEcranComplet.js` + modifications des 4 écrans.
 
+### Point 2 — Écran d'édition de patient — CORRIGÉ
+
+**Constat de départ** (déjà noté dans l'audit précédent, ligne ~5852) : aucun formulaire d'édition
+n'existait après la création du patient — groupe sanguin, allergies, antécédents, date de
+naissance ne pouvaient jamais être corrigés depuis l'app en cas d'oubli ou d'erreur initiale.
+
+**Construit** :
+- `ModalEditerPatient` (`Patients.jsx`) — nouveau modal accessible via le bouton "Modifier le
+  dossier" dans la fiche patient (gardé par `peutEditerPatient = ri !== "Caissier"`, même
+  périmètre que l'onglet Informations). Modifie tous les champs éditables du dossier : prénom,
+  nom, date de naissance, sexe, téléphone, email, groupe sanguin, allergies, antécédents, adresse,
+  médecin référent, service, assurance, n° assurance, mutuelle.
+- **Exclus intentionnellement** de cet écran générique : `statut` (géré par les flux dédiés —
+  onglet Hospitalisation, "Déclarer un décès", Lits.jsx — qui ont chacun leur propre logique
+  métier) et `triage` (géré par `updatePatientTriage` depuis Urgences.jsx). Dupliquer ces champs
+  ici risquerait de contourner cette logique dédiée. `numero_dossier`, `nb_visites`,
+  `derniere_visite` sont auto-générés/gérés par trigger, non éditables.
+- **Allergies/antécédents avec la même mise en avant visuelle que le reste de l'app** : le champ
+  Allergies est encadré dans le même bandeau rouge (`#FEF2F2` / bordure `#FECACA` / libellé
+  `#DC2626`) que la bannière et le badge "URGENT — Allergies" déjà utilisés partout ailleurs dans
+  la fiche patient — vérifié en direct que l'édition se reflète immédiatement (badge header,
+  bandeau, ligne du tableau patients) sans rechargement de page.
+- **Traçabilité (qui a modifié quoi, quand)** : migration
+  [`20260807020000_patients_audit_modifications.sql`](supabase/migrations/20260807020000_patients_audit_modifications.sql) —
+  nouvelle table `patients_modifications_historique`, remplie exclusivement par un trigger
+  `SECURITY DEFINER` (`log_patient_modification`, `AFTER UPDATE ON patients`) qui calcule un diff
+  champ par champ (`jsonb_each_text` sur `OLD`/`NEW`) pour les colonnes sensibles, capture
+  `auth.uid()` + l'email, et insère une ligne. Même convention déjà établie dans ce projet pour
+  les journaux sensibles (`journal_caisse`, `ventes`, etc., cf.
+  `20260804020000_journalisation_append_only.sql`) : RLS activé, lecture scoped à
+  `mes_etablissements()`, **aucune** policy insert/update/delete pour `authenticated` — seul le
+  trigger peut écrire, le journal est donc non modifiable/non supprimable depuis le client, même
+  par un administrateur. L'historique est affiché directement dans l'onglet Informations de la
+  fiche patient (pas seulement écrit en base sans jamais être consultable).
+
+**Preuve réelle avant/après** (compte Direction Hôpital Audit Test 2, dossier réel "Fatou Kone",
+`990258ba-...`) :
+1. Avant : `allergies: []`, `telephone: null` (aucune fiche allergie, aucun badge).
+2. Modal "Modifier le dossier" ouvert, `Allergies` → "Pénicilline, Latex", `Téléphone` →
+   "0700000099", enregistré.
+3. Immédiatement après (sans rechargement) : badge header "URGENT — Allergies", bandeau
+   "Contre-indications : Pénicilline Latex", et la ligne "Fatou Kone" dans le tableau patients
+   affiche aussi désormais "URGENT" — capturé via `get_page_text`.
+4. Onglet Informations → section "Historique des modifications" affiche : `07/08/2026 13:00:27 —
+   cherihaneadam123+hopitalaudit2@gmail.com` / `Allergies : [] → ["Pénicilline", "Latex"]` /
+   `Telephone : — → 0700000099`.
+5. Vérifié directement en base (`select * from patients_modifications_historique order by
+   created_at desc limit 1`) : même diff, même email, confirmant que l'affichage UI reflète bien
+   une écriture réelle en base et non un état local uniquement.
+6. Nettoyage : `allergies`/`telephone` remis à leur état d'origine après le test (cette
+   remise à zéro elle-même génère une nouvelle ligne d'audit, comme attendu d'un journal
+   append-only — non supprimée, pour ne pas contredire l'invariant "non modifiable/non
+   supprimable" que ce correctif vise justement à garantir).
+
+**Limite connue** : `updatePatient` (et donc `ModalEditerPatient`) n'utilise pas de verrou
+optimiste — contrairement au correctif du point 3, deux personnes éditant simultanément le
+dossier général d'un même patient peuvent encore s'écraser mutuellement. Risque jugé plus faible
+ici (édition ponctuelle et rare, pas un écran de surveillance clinique laissé ouvert pendant une
+garde comme l'onglet Hospitalisation) — signalé pour arbitrage si jugé prioritaire.
+
+Fichiers modifiés : [`supabase/migrations/20260807020000_patients_audit_modifications.sql`](supabase/migrations/20260807020000_patients_audit_modifications.sql),
+[`src/hooks/useMutations.js`](src/hooks/useMutations.js), [`src/pages/hopital/Patients.jsx`](src/pages/hopital/Patients.jsx).
+
 ### Point 3 — Pertes de données concurrentes sur `hospitalisations` — CORRIGÉ
 
 **Rappel du risque déjà identifié** (DEBUG_PROGRESS.md, ligne ~5856) : même famille de bug que

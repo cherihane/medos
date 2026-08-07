@@ -136,6 +136,20 @@ export async function updatePatient(id, fields) {
   return run(supabase.from("patients").update(fields).eq("id", id).select().single());
 }
 
+// Journal d'audit des modifications du dossier patient (point 2, mission "6
+// decisions produit") : ecriture uniquement via trigger cote base
+// (trg_log_patient_modification, voir 20260807020000_patients_audit_modifications.sql)
+// — cette fonction ne fait que lire l'historique deja constitue.
+export async function fetchHistoriqueModificationsPatient(patient_id) {
+  const { data } = await supabase
+    .from("patients_modifications_historique")
+    .select("*")
+    .eq("patient_id", patient_id)
+    .order("created_at", { ascending: false })
+    .limit(20);
+  return data ?? [];
+}
+
 // ─── Ordonnances ──────────────────────────────────────────────────────────────
 export async function insertOrdonnance(fields) {
   return run(supabase.from("ordonnances").insert(fields).select().single());
