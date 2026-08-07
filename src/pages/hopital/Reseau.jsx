@@ -5,7 +5,7 @@ import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../c
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useEtablissements, useMedicaments } from "../../hooks/useSupabaseData";
-import { insertTransfertStock, fetchTransfertsStock } from "../../hooks/useMutations";
+import { insertTransfertStock, fetchTransfertsStock, accepterTransfertStock, refuserTransfertStock } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
 
 // ── Modal Détails établissement ───────────────────────────────────────────────
@@ -96,15 +96,25 @@ const STATUT_LABEL = {
   effectue:{ label: "Effectué",color: "#2563EB", bg: "#EFF6FF" },
 };
 
+// Traduit les codes retournes par les RPC accepter_transfert_stock /
+// refuser_transfert_stock en messages lisibles.
+const MESSAGES_RPC = {
+  medicament_introuvable: "Ce médicament n'existe pas encore dans votre inventaire — ajoutez-le d'abord dans Inventaire/Stock avant d'accepter ce transfert.",
+  non_autorise: "Vous n'êtes pas l'établissement destinataire de ce transfert.",
+  statut_invalide: "Ce transfert a déjà été traité entre-temps.",
+  transfert_introuvable: "Transfert introuvable.",
+};
+
 export default function Reseau() {
   const { auth } = useAuth();
   const { data: etablissements, loading } = useEtablissements();
   const { data: medicaments } = useMedicaments();
-  const { toasts, success } = useToast();
+  const { toasts, success, error: showError } = useToast();
   const [etabModal, setEtabModal] = useState(null);
   const [redistribModal, setRedistribModal] = useState(null);
   const [transferts, setTransferts] = useState([]);
   const [loadingTransferts, setLoadingTransferts] = useState(true);
+  const [traitement, setTraitement] = useState(null); // id du transfert en cours de traitement
 
   const etabId = auth?.etablissement_id ?? null;
 
@@ -117,6 +127,28 @@ export default function Reseau() {
   };
 
   useEffect(() => { loadTransferts(); }, [etabId]); // eslint-disable-line
+
+  const handleAccepter = async (t) => {
+    setTraitement(t.id);
+    try {
+      const resultat = await accepterTransfertStock(t.id);
+      if (resultat !== "ok") { showError(MESSAGES_RPC[resultat] ?? "Erreur inconnue."); return; }
+      success("Transfert accepté — stock mis à jour des deux côtés");
+      loadTransferts();
+    } catch (e) { showError("Erreur : " + e.message); }
+    finally { setTraitement(null); }
+  };
+
+  const handleRefuser = async (t) => {
+    setTraitement(t.id);
+    try {
+      const resultat = await refuserTransfertStock(t.id);
+      if (resultat !== "ok") { showError(MESSAGES_RPC[resultat] ?? "Erreur inconnue."); return; }
+      success("Transfert refusé");
+      loadTransferts();
+    } catch (e) { showError("Erreur : " + e.message); }
+    finally { setTraitement(null); }
+  };
 
   return (
     <Layout title="Réseau Hospitalier" subtitle="Connexions inter-établissements et partage de ressources">
@@ -191,18 +223,40 @@ export default function Reseau() {
         )}
         {!loadingTransferts && transferts.map((t) => {
           const s = STATUT_LABEL[t.statut] ?? STATUT_LABEL.propose;
+          const jeSuisDestinataire = t.etablissement_dest_id === etabId;
+          const autreEtabId = jeSuisDestinataire ? t.etablissement_source_id : t.etablissement_dest_id;
+          const autreEtab = etablissements.find((e) => e.id === autreEtabId);
+          const enAttenteDeMoi = t.statut === "propose" && jeSuisDestinataire;
           return (
-            <div key={t.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", backgroundColor: colors.bgSurface, borderRadius: 10, marginBottom: 8 }}>
+            <div key={t.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", backgroundColor: colors.bgSurface, borderRadius: 10, marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: colors.navy }}>{t.medicament_nom ?? t.medicaments?.nom ?? "—"}</div>
                 <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>
-                  Qté : {t.quantite} · {new Date(t.created_at).toLocaleDateString("fr-FR")}
+                  {jeSuisDestinataire ? "De" : "Vers"} {autreEtab?.nom ?? "établissement inconnu"} · Qté : {t.quantite} · {new Date(t.created_at).toLocaleDateString("fr-FR")}
                   {t.notes ? ` · ${t.notes}` : ""}
                 </div>
               </div>
-              <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 10, backgroundColor: s.bg, color: s.color }}>
-                {s.label}
-              </span>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {enAttenteDeMoi && (
+                  <>
+                    <button
+                      onClick={() => handleAccepter(t)}
+                      disabled={traitement === t.id}
+                      style={{ padding: "4px 10px", backgroundColor: "#DCFCE7", color: "#16A34A", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: traitement === t.id ? "wait" : "pointer" }}>
+                      Accepter
+                    </button>
+                    <button
+                      onClick={() => handleRefuser(t)}
+                      disabled={traitement === t.id}
+                      style={{ padding: "4px 10px", backgroundColor: "#FEF2F2", color: "#DC2626", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: traitement === t.id ? "wait" : "pointer" }}>
+                      Refuser
+                    </button>
+                  </>
+                )}
+                <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 10, backgroundColor: s.bg, color: s.color }}>
+                  {s.label}
+                </span>
+              </div>
             </div>
           );
         })}

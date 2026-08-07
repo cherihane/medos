@@ -7784,3 +7784,44 @@ session (accepté comme limite connue par l'utilisateur lors de la validation du
 
 Commit : `useAccesEcranComplet.js` + modifications des 4 écrans.
 
+### Point 4 — Workflow de redistribution en impasse (Reseau.jsx) — CORRIGÉ
+
+**Diagnostic exact** : grep exhaustif de `useMutations.js` — seules `insertTransfertStock`
+(création, `statut:"propose"`) et `fetchTransfertsStock` (lecture) existaient. Aucune fonction
+`updateTransfertStock` nulle part dans tout le code. `Reseau.jsx` affichait les 4 statuts
+(`STATUT_LABEL` : Proposé/Accepté/Refusé/Effectué) comme si le cycle complet existait, mais aucun
+chemin de code ne pouvait jamais faire progresser un transfert au-delà de "Proposé" — pas un bug
+dans une logique existante, une fonctionnalité dont seule l'étape 1 sur 3 avait jamais été
+construite.
+
+**Solution appliquée** (validée par l'utilisateur : compléter plutôt que retirer) : réutilise
+exactement le patron déjà éprouvé pour les livraisons distributeur↔pharmacie
+(`receive_livraison`/`expedier_depuis_entrepot`, migration `20260721l_...sql`) plutôt que
+d'inventer un nouveau mécanisme. Migration
+[20260807000000_completer_workflow_redistribution.sql](supabase/migrations/20260807000000_completer_workflow_redistribution.sql) :
+2 fonctions RPC `SECURITY DEFINER` — `accepter_transfert_stock(id)` (vérifie l'autorisation via
+`mes_etablissements()`, le statut, décrémente le stock source, incrémente/résout le médicament
+destinataire par nom, écrit 2 lignes `mouvements_stock`, passe le statut à `effectue` — retourne
+`medicament_introuvable` si le destinataire n'a jamais eu ce médicament en stock, même limite déjà
+acceptée pour les livraisons plutôt que de créer une ligne automatiquement) et
+`refuser_transfert_stock(id)` (même vérification, statut → `refuse`, aucun mouvement). Nouvelles
+fonctions `accepterTransfertStock`/`refuserTransfertStock` dans `useMutations.js`. `Reseau.jsx` :
+boutons "Accepter"/"Refuser" affichés uniquement à l'établissement destinataire sur un transfert
+`propose`, libellé "De"/"Vers" selon le sens, messages d'erreur RPC traduits.
+
+**Preuve réelle avant/après**, 2 vrais établissements hôpital distincts (Hopital Audit Test 2 →
+Hopital Audit Test Destination), médicament de test créé dans les deux (100 et 20 en stock) :
+1. **Chemin acceptation** : proposition réelle de 30 unités créée depuis le compte réel
+   `hopitalaudit2` (statut "Proposé" confirmé dans l'UI côté source, libellé "Vers Hopital Audit
+   Test Destination"). Connecté avec le vrai compte destinataire `hopitaldest` : transfert visible
+   avec libellé "De Hopital Audit Test 2" et boutons Accepter/Refuser. Clic sur "Accepter" → statut
+   passe à "Effectué" dans l'UI. **Vérifié directement en base** : stock source
+   100 → **70** (-30), stock destination 20 → **50** (+30), exactement les 2 lignes
+   `mouvements_stock` attendues (`sortie`/`entree`, 30 chacune) créées.
+2. **Chemin refus** : 2ème transfert de 15 unités proposé, refusé cette fois depuis le compte
+   destinataire → statut "Refusé" dans l'UI. **Vérifié en base** : stock des deux établissements
+   resté strictement inchangé (70/50), aucune ligne `mouvements_stock` supplémentaire créée.
+
+Données de test supprimées après vérification (2 lignes `transferts_stock`, 2 lignes
+`mouvements_stock`, le médicament de test dans les 2 établissements).
+

@@ -676,6 +676,22 @@ export async function fetchTransfertsStock(etablissement_id) {
   return data ?? [];
 }
 
+// Complete le cycle propose -> accepte/refuse -> effectue (point 4, mission
+// "6 decisions produit") : RPC SECURITY DEFINER, meme patron que
+// receive_livraison/expedier_depuis_entrepot — mouvement de stock reel a
+// l'acceptation, aucun mouvement au refus.
+export async function accepterTransfertStock(transfert_id) {
+  const { data, error } = await supabase.rpc("accepter_transfert_stock", { p_transfert_id: transfert_id });
+  if (error) throw error;
+  return data;
+}
+
+export async function refuserTransfertStock(transfert_id) {
+  const { data, error } = await supabase.rpc("refuser_transfert_stock", { p_transfert_id: transfert_id });
+  if (error) throw error;
+  return data;
+}
+
 // ─── Transferts de patients inter-établissements (référé, pas redistribution
 // de stock — voir transferts_stock ci-dessus, mécanisme distinct) ──────────────
 export async function insertTransfertPatient(fields) {
