@@ -7825,3 +7825,33 @@ Hopital Audit Test Destination), médicament de test créé dans les deux (100 e
 Données de test supprimées après vérification (2 lignes `transferts_stock`, 2 lignes
 `mouvements_stock`, le médicament de test dans les 2 établissements).
 
+### Point 5 — Règle provisoire de double confirmation stérilisation — CORRIGÉ
+
+**Consigne stricte respectée** : n'invente aucune règle clinique définitive. `canValider`
+(`lot.indicateur_chimique === "conforme" && ["negatif","non_fait"].includes(lot.test_biologique)`)
+n'a pas été modifié — la question de fond (un test biologique "non fait" équivaut-il à un résultat
+négatif ?) reste explicitement non tranchée, documentée en commentaire directement au-dessus de la
+ligne `canValider` dans le code, et reste dans la liste des décisions produit en attente d'un vrai
+référent qualité.
+
+**Ajouté** : `ModalValiderLot` (même principe que `ModalTransfusion` dans `BanqueSang.jsx`), avec
+**2 cases à cocher distinctes** (pas une seule, conformément à la demande explicite) avant de
+pouvoir valider un lot — une pour l'indicateur chimique, une pour le test biologique, cette
+dernière affichant un avertissement explicite supplémentaire quand le test est "non fait" plutôt
+que "négatif" confirmé. Le bouton "Confirmer la validation" reste désactivé tant que les 2 cases
+ne sont pas cochées.
+
+**Preuve réelle avant/après**, lot de test réel créé sur Hopital Audit Test 2
+(`indicateur_chimique='conforme'`, `test_biologique='non_fait'`, statut `en_attente_validation`),
+compte réel Direction :
+1. Clic sur "Valider" → modale ouverte, texte exact vérifié y compris l'avertissement "non_fait".
+2. **0 case cochée** : bouton "Confirmer la validation" `disabled = true` (vérifié directement sur
+   l'élément DOM, pas supposé).
+3. **1 seule case cochée** (indicateur chimique) : bouton **toujours** `disabled = true` — confirme
+   que la double confirmation en est bien une, pas satisfaite par un seul clic.
+4. **2 cases cochées** : bouton `disabled = false`. Clic → **vérifié en base** :
+   `lots_sterilisation.statut` passé à `valide`, `valide_par` correctement renseigné avec l'email du
+   compte réel.
+
+Lot de test supprimé après vérification.
+

@@ -298,10 +298,70 @@ function ModalAjouterEquipement({ etablissement_id, onClose, onSaved }) {
   );
 }
 
+// ─── Modal validation lot (double confirmation explicite) ──────────────────
+// Règle PROVISOIRE prudente (mission "6 décisions produit", point 5) : ne
+// tranche PAS la question clinique de fond (un test biologique "non fait"
+// équivaut-il vraiment à un résultat négatif ? — voir Sterilisation.jsx,
+// canValider, et DEBUG_PROGRESS.md pour le détail de cette question laissée
+// ouverte). Se contente d'exiger une confirmation explicite à deux cases
+// distinctes, jamais un simple clic, avant de marquer un lot "conforme" —
+// même principe que ModalTransfusion (BanqueSang.jsx). À VALIDER PAR UN VRAI
+// RÉFÉRENT QUALITÉ avant d'être considérée définitive.
+function ModalValiderLot({ lot, onClose, onConfirme }) {
+  const [chimiqueOk, setChimiqueOk] = useState(false);
+  const [bioOk, setBioOk] = useState(false);
+  const testBioLabel = TEST_BIO_CONFIG[lot.test_biologique]?.label ?? lot.test_biologique;
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1001, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div style={{ background: colors.bgCard, borderRadius: 16, width: "100%", maxWidth: 480, padding: "22px 26px", boxShadow: "0 20px 60px rgba(0,0,0,0.22)" }}>
+        <h3 style={{ margin: "0 0 6px", fontSize: 15, fontWeight: 700, color: colors.navy }}>Confirmer la validation du lot {lot.numero_lot}</h3>
+        <p style={{ margin: "0 0 16px", fontSize: 12, color: colors.textMuted }}>
+          Règle provisoire — à valider par un référent qualité. Deux confirmations distinctes sont requises.
+        </p>
+
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 14, cursor: "pointer" }}>
+          <input type="checkbox" checked={chimiqueOk} onChange={(e) => setChimiqueOk(e.target.checked)} style={{ marginTop: 2 }} />
+          <span style={{ fontSize: 12, color: colors.text }}>
+            Je confirme avoir vérifié l'indicateur chimique de ce lot : <strong>{INDICATEUR_CONFIG[lot.indicateur_chimique]?.label ?? lot.indicateur_chimique}</strong>.
+          </span>
+        </label>
+
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 18, cursor: "pointer" }}>
+          <input type="checkbox" checked={bioOk} onChange={(e) => setBioOk(e.target.checked)} style={{ marginTop: 2 }} />
+          <span style={{ fontSize: 12, color: colors.text }}>
+            Je confirme avoir vérifié le test biologique de ce lot : <strong>{testBioLabel}</strong>.
+            {lot.test_biologique === "non_fait" && (
+              <> <strong>Un test "non fait" n'est pas un résultat négatif confirmé</strong> — je valide ce lot en connaissance de cause, selon la procédure actuelle de l'établissement.</>
+            )}
+          </span>
+        </label>
+
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: 11, background: colors.bgSurface, border: `1px solid ${colors.border}`, borderRadius: 8, fontSize: 13, cursor: "pointer" }}>Annuler</button>
+          <button onClick={onConfirme} disabled={!chimiqueOk || !bioOk}
+            style={{ flex: 2, padding: 11, background: (chimiqueOk && bioOk) ? ACCENT : colors.border, color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: (chimiqueOk && bioOk) ? "pointer" : "default" }}>
+            Confirmer la validation
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Carte lot ────────────────────────────────────────────────────────────────
 function CarteLot({ lot, onAction, lecture }) {
   const { success } = useToast();
   const { auth } = useAuth();
+  const [modalValider, setModalValider] = useState(false);
+  // NON MODIFIÉ VOLONTAIREMENT : "non_fait" traité comme équivalent à "negatif"
+  // pour le test biologique — pourrait refléter une pratique réelle acceptée
+  // (libération sur indicateurs chimiques/physiques, test biologique en
+  // surveillance périodique plutôt que systématique pour du matériel non
+  // implantable) mais reste une question clinique de fond non tranchée ici,
+  // à valider avec un référent qualité/stérilisation (voir DEBUG_PROGRESS.md).
+  // En attendant : ModalValiderLot ci-dessus impose une double confirmation
+  // explicite (2 cases distinctes) avant toute validation, règle PROVISOIRE.
   const canValider = lot.indicateur_chimique === "conforme" && ["negatif", "non_fait"].includes(lot.test_biologique);
 
   async function action(type) {
@@ -373,10 +433,18 @@ function CarteLot({ lot, onAction, lecture }) {
         </div>
       </div>
 
+      {modalValider && (
+        <ModalValiderLot
+          lot={lot}
+          onClose={() => setModalValider(false)}
+          onConfirme={async () => { setModalValider(false); await action("valider"); }}
+        />
+      )}
+
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
         {!lecture && lot.statut === "en_attente_validation" && (
           <>
-            {canValider && <button onClick={() => action("valider")} style={{ padding: "5px 11px", background: ACCENT, color: "white", border: "none", borderRadius: 7, fontSize: 12, cursor: "pointer", fontWeight: 600 }}>Valider</button>}
+            {canValider && <button onClick={() => setModalValider(true)} style={{ padding: "5px 11px", background: ACCENT, color: "white", border: "none", borderRadius: 7, fontSize: 12, cursor: "pointer", fontWeight: 600 }}>Valider</button>}
             <button onClick={() => action("non_conforme")} style={{ padding: "5px 11px", background: "#FEE2E2", color: "#DC2626", border: "none", borderRadius: 7, fontSize: 12, cursor: "pointer", fontWeight: 600 }}>Non conforme</button>
           </>
         )}
