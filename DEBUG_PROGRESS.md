@@ -8150,3 +8150,85 @@ Fichiers modifiés : `src/App.js` (providers), `src/index.js` (enregistrement SW
 `src/setupTests.js` (polyfill `structuredClone` + `fake-indexeddb` pour les tests), `.claude/launch.json`
 (config `medos-build-preview` pour tester le build de prod en local), `package.json` (dépendance
 de dev `fake-indexeddb`).
+
+### Phase 1 — Pharmacie — Point 1 : Caisse : ✅ terminée et prouvée en conditions réelles
+
+Câblage du premier écran réel sur le moteur de la Phase 0 — la Caisse, désignée par la mission
+comme le flux le plus critique et la preuve de concept à faire en premier.
+
+**Changements** ([src/pages/pharmacie/Caisse.jsx](src/pages/pharmacie/Caisse.jsx)) :
+
+1. **Lecture des médicaments (recherche, panier, vérification de stock)** : remplacé
+   `useMedicaments()` (réseau uniquement) par `useCachedQuery` (Phase 0) — en ligne, lit Supabase
+   et rafraîchit le cache ; hors-ligne, relit la dernière copie connue avec un badge visible
+   "Hors-ligne — stock du JJ/MM HH:mm" à côté du titre "Produits disponibles", pour que le
+   caissier sache toujours si les chiffres affichés sont temps réel ou une dernière copie connue.
+2. **Écriture de la vente** (`handleEncaisser`) : les 3 écritures (`insertVentes`,
+   `decrementStock` par médicament, `insertJournalCaisse`) passent maintenant par
+   `enqueueOrRun` (Phase 0) au lieu d'appeler directement `useMutations.js` — transparent en
+   ligne (comportement inchangé), mise en file locale hors-ligne. La référence du ticket
+   (`TKT-...`) est désormais générée avant les écritures (au lieu d'après) pour rester identique
+   qu'on soit en ligne ou hors-ligne.
+3. **Décrément de stock hors-ligne** : la RPC atomique `decrementer_stock_atomique` n'est
+   joignable qu'en ligne — hors-ligne, la validation s'appuie sur le dernier stock connu
+   localement (déjà vérifié par `addToCart`), décrémenté optimistiquement dans le cache après
+   chaque vente pour qu'une 2e vente hors-ligne sur ce même poste ne survende pas non plus.
+   **Limite physique documentée, pas cachée** (comme demandé par la mission) : un autre poste
+   hors-ligne en parallèle sur le même établissement ne peut pas être vu avant reconnexion — si
+   le stock réel s'avère insuffisant au rejeu, la RPC le rejette et l'action reste visible en
+   erreur dans la file (jamais acceptée silencieusement), nécessitant une vérification manuelle
+   du gérant.
+4. **UI** : bannière du ticket en ambre avec badge "En attente de synchronisation" quand la vente
+   a été faite hors-ligne (verte comme avant si en ligne) ; message de succès différent
+   ("Vente enregistrée hors-ligne — sera synchronisée à la reconnexion").
+
+**Preuve réelle en conditions simulées** (build de production réel, backend Supabase réel, compte
+`cherihaneadam123@gmail.com` / "Pharmacie Mimi") — méthode : `navigator.onLine` forcé à `false` +
+évènement `offline` **et** `window.fetch` intercepté pour rejeter toute requête vers le domaine
+Supabase (nécessaire : la simple simulation d'évènements ne suffit pas à empêcher un vrai fetch
+d'aboutir si le réseau réel fonctionne — voir "Écueil rencontré" ci-dessous) :
+
+1. Vente de 1× Ibuprofène 400mg (600 FCFA, stock réel avant : 46) déclenchée avec le réseau
+   effectivement bloqué → confirmé via logs `[DEBUG]` temporaires que `enqueueOrRun` a bien
+   évalué `online=false` pour les 3 écritures, **aucune requête réseau envoyée** (l'erreur de
+   fetch simulée n'apparaît pas, contrairement à quand online valait true).
+2. Vérifié dans IndexedDB (`sync_queue`) : exactement 3 actions en attente, statut `pending`
+   (`insertVentes`, `decrementStock`, `insertJournalCaisse`), avec description lisible.
+3. UI hors-ligne validée : bannière ticket ambre "En attente de synchronisation", indicateur
+   global "Hors ligne — 3", stock Ibuprofène 400mg affiché à 45 (décrément optimiste local,
+   avant toute synchro réseau).
+4. Reconnexion simulée (réseau réel restauré + évènement `online`) → **rejeu automatique**
+   (aucune action manuelle) → file vidée (0 élément restant dans `sync_queue`).
+5. **Vérification en base après reload complet de la page** (pas seulement en mémoire) : stock
+   Ibuprofène 400mg réellement passé à **45** côté serveur. Onglet "Journal du gérant" du jour :
+   **exactement 2 transactions** — la vente hors-ligne synchronisée (600 FCFA, Ibuprofène 400mg)
+   et une vente de test antérieure (700 FCFA, Amoxicilline, faite involontairement en ligne
+   pendant la mise au point du test, voir "Écueil rencontré") — **aucun doublon, aucune perte**,
+   conforme à l'exigence de la mission ("vérification que la vente et le décrément de stock sont
+   bien arrivés en base sans doublon ni perte").
+
+**Écueil rencontré et corrigé pendant le test** (documenté honnêtement, pas juste le résultat
+final) : la première tentative de simulation hors-ligne (évènements `online`/`offline` seuls,
+sans bloquer `fetch`) a laissé passer une vraie vente en ligne — la sonde de connectivité réelle
+(Phase 0, `probeRealConnectivity`, appelée toutes les 30s) a fini par détecter que le réseau
+fonctionnait réellement et a repassé l'état à "en ligne" pendant que je manipulais l'interface
+entre deux actions de test, avant le clic de validation. C'est le comportement **correct et
+voulu** du moteur (auto-guérison d'un état "hors-ligne" obsolète sans action de l'utilisateur) —
+mais ça veut dire qu'un simple événement `offline` simulé ne suffit pas à tester le moteur de
+façon fiable dans cet environnement de navigateur automatisé : il faut aussi bloquer `fetch` vers
+Supabase pour simuler une vraie coupure réseau. Corrigé pour le test 2, qui a produit la preuve
+ci-dessus. La vente involontaire (Amoxicilline, 700 FCFA, stock 2→1) a été laissée telle quelle
+en base (même pratique que les sessions précédentes de test sur ce compte — le registre de caisse
+est immuable par design, jamais supprimé) plutôt que d'être artificiellement effacée.
+
+**Pas encore fait sur cet écran** (hors du périmètre du point 1, à voir si besoin) : le fond de
+caisse (`fetchFondJour`/`insertFondCaisse`) et le solde de TVA/établissement
+(`fetchEtabFromAuth`) ne sont pas câblés sur le cache — ils dégradent déjà proprement sans
+planter (fallback existant), mais n'affichent pas les vraies valeurs de l'établissement en
+cache si la page est rechargée hors-ligne avant tout chargement en ligne. L'onglet "Journal du
+gérant" (registre de la journée) reste réseau uniquement — c'est un écran de vérification de fin
+de journée, pas un flux d'écriture hors-ligne.
+
+Fichiers ajoutés : [`src/offline/useCachedQuery.js`](src/offline/useCachedQuery.js) (hook
+générique cache-first, réutilisable pour les prochains écrans de la Phase 1). Fichiers modifiés :
+[`src/pages/pharmacie/Caisse.jsx`](src/pages/pharmacie/Caisse.jsx).

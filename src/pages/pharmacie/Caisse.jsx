@@ -6,12 +6,14 @@ import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useMedicaments } from "../../hooks/useSupabaseData";
 import {
-  insertVentes, decrementStock, incrementStock, insertJournalCaisse, fetchJournalJour,
+  incrementStock, fetchJournalJour,
   insertClotureCaisse, fetchClotureCaisse, insertFondCaisse, fetchFondJour,
   insertMouvementStock, insertRetour, insertRetourLignes, fetchRetoursParJournalCaisseId,
 } from "../../hooks/useMutations";
 import { supabase } from "../../supabaseClient";
 import { useAuth } from "../../context/AuthContext";
+import { useSyncQueue } from "../../context/SyncContext";
+import { useCachedQuery } from "../../offline/useCachedQuery";
 import { openDocument, tableHTML, kpiHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
 import { useIsMobile } from "../../hooks/useWindowSize";
 import QrScanner from "../../components/QrScanner";
@@ -344,7 +346,19 @@ function exportCSV(journal, date) {
 function OngletCaisse({ onSaleComplete }) {
   const isMobile = useIsMobile();
   const { auth } = useAuth();
-  const { data: medicaments, loading } = useMedicaments();
+  const { online, enqueueOrRun } = useSyncQueue();
+  // Cache-first (Phase 1, mission hors-ligne) : en ligne, lit Supabase et
+  // rafraîchit le cache ; hors-ligne, relit la dernière copie connue en
+  // IndexedDB — indispensable pour que la Caisse reste utilisable (recherche,
+  // ajout au panier, vérification de stock) pendant une coupure réseau.
+  const medKey = `medicaments:${auth?.etablissement_id ?? "global"}`;
+  const fetchMedicaments = useCallback(async () => {
+    const { data, error } = await supabase.from("medicaments").select("*").order("nom", { ascending: true }).limit(500);
+    if (error) throw error;
+    return data ?? [];
+  }, []);
+  const { data: medicaments, loading, fromCache, cachedAt, mutateLocalCache: mutateMedicamentsCache } =
+    useCachedQuery(medKey, fetchMedicaments, [medKey]);
   const { toasts, success, error: showError } = useToast();
   const [cart, setCart] = useState([]);
   const [search, setSearch] = useState("");
@@ -500,7 +514,15 @@ function OngletCaisse({ onSaleComplete }) {
         montantRecuNum = restePatient; // part patient seulement
       }
 
-      // 1. Insert ventes (prix snapshot depuis le panier, pas depuis la DB)
+      // Référence générée côté client (jamais depuis un id serveur) — le ticket
+      // reste imprimable immédiatement, même hors-ligne, avant toute synchro.
+      const ticketYear = now.getFullYear();
+      const rand = Math.random().toString(36).slice(2, 7).toUpperCase();
+      const ref = `TKT-${ticketYear}-${rand}`;
+      const nbArticles = cart.reduce((s, i) => s + i.qty, 0);
+
+      // 1. Vente (prix snapshot depuis le panier, pas depuis la DB) — insertion
+      // pure, sans risque de conflit, donc sûre à mettre en file hors-ligne.
       const rows = cart.map((item) => ({
         medicament_id: item.id,
         quantite: item.qty,
@@ -511,13 +533,39 @@ function OngletCaisse({ onSaleComplete }) {
         ...(etablissement_id ? { etablissement_id } : {}),
         ...(caissier_id ? { vendu_par: caissier_id } : {}),
       }));
-      await insertVentes(rows);
+      await enqueueOrRun("insertVentes", [rows], {
+        description: `Vente ${ref} — ${nbArticles} article(s), ${total.toLocaleString()} FCFA`,
+        module: "pharmacie.caisse",
+        etablissementId: etablissement_id,
+      });
 
-      // 2. Décrémenter le stock
-      await Promise.all(cart.map((item) => decrementStock(item.id, item.qty)));
+      // 2. Décrémenter le stock — un élément de file par médicament, dans
+      // l'ordre du panier. Hors-ligne, la RPC atomique qui vérifie le stock
+      // réel n'est joignable qu'au retour du réseau : la validation ici se fait
+      // sur le dernier stock connu localement (addToCart empêche déjà de
+      // dépasser cette valeur), décrémenté optimistiquement ci-dessous pour que
+      // la vente suivante SUR CE POSTE ne survende pas non plus. Limite physique
+      // documentée, pas cachée : un autre poste hors-ligne en parallèle sur le
+      // même établissement ne peut pas être vu avant reconnexion — si le stock
+      // réel s'avère insuffisant au rejeu, la RPC le rejette et l'action reste
+      // visible en erreur dans la file (jamais acceptée silencieusement),
+      // nécessitant une vérification manuelle du gérant.
+      for (const item of cart) {
+        await enqueueOrRun("decrementStock", [item.id, item.qty], {
+          description: `Décrément stock — ${item.nom} ×${item.qty} (${ref})`,
+          module: "pharmacie.caisse",
+          etablissementId: etablissement_id,
+        });
+      }
 
       // 3. Journal de caisse avec détail complet (prix snapshot)
-      await insertJournalCaisse({
+      const detail = cart.map((i) => ({
+        nom: i.nom,
+        qty: i.qty,
+        prix_unitaire: i.prix_unitaire,           // snapshot — jamais 0
+        sous_total: i.prix_unitaire * i.qty,       // snapshot
+      }));
+      await enqueueOrRun("insertJournalCaisse", [{
         etablissement_id,
         caissier_id,
         caissier_email,
@@ -525,20 +573,25 @@ function OngletCaisse({ onSaleComplete }) {
         montant_recu: montantRecuNum,
         monnaie_rendue: monnaieRendue,
         mode_paiement: paiement,
-        nb_articles: cart.reduce((s, i) => s + i.qty, 0),
-        detail: cart.map((i) => ({
-          nom: i.nom,
-          qty: i.qty,
-          prix_unitaire: i.prix_unitaire,           // snapshot — jamais 0
-          sous_total: i.prix_unitaire * i.qty,       // snapshot
-        })),
+        nb_articles: nbArticles,
+        detail,
+      }], {
+        description: `Journal de caisse — ${ref}`,
+        module: "pharmacie.caisse",
+        etablissementId: etablissement_id,
       });
 
-      success(`Vente enregistrée — ${total.toLocaleString()} FCFA`);
-      const ticketYear = now.getFullYear();
-      const rand = Math.random().toString(36).slice(2, 7).toUpperCase();
+      // Décrément optimiste du cache local de stock — voir commentaire point 2.
+      mutateMedicamentsCache((meds) => meds.map((m) => {
+        const item = cart.find((c) => c.id === m.id);
+        return item ? { ...m, stock_actuel: Math.max(0, (m.stock_actuel ?? 0) - item.qty) } : m;
+      }));
+
+      success(online
+        ? `Vente enregistrée — ${total.toLocaleString()} FCFA`
+        : `Vente enregistrée hors-ligne — ${total.toLocaleString()} FCFA (sera synchronisée à la reconnexion)`);
       setLastTicket({
-        ref: `TKT-${ticketYear}-${rand}`,
+        ref,
         date: now,
         items: cart.map((i) => ({ nom: i.nom, qty: i.qty, prix_unitaire: i.prix_unitaire })),
         paiement,
@@ -546,6 +599,7 @@ function OngletCaisse({ onSaleComplete }) {
         montantRecu: montantRecuNum,
         monnaie: monnaieRendue,
         etab: await fetchEtabFromAuth(auth),
+        enAttenteSync: !online,
       });
       setCart([]);
       setMontantRecu("");
@@ -586,21 +640,35 @@ function OngletCaisse({ onSaleComplete }) {
 
       {/* Bannière ticket après vente */}
       {lastTicket && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px", backgroundColor: "#DCFCE7", border: "1.5px solid #16A34A", borderRadius: 12, marginBottom: 16 }}>
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px",
+          backgroundColor: lastTicket.enAttenteSync ? "#FFFBEB" : "#DCFCE7",
+          border: `1.5px solid ${lastTicket.enAttenteSync ? "#F59E0B" : "#16A34A"}`,
+          borderRadius: 12, marginBottom: 16,
+        }}>
           <div>
-            <span style={{ fontSize: 13, fontWeight: 700, color: "#15803D" }}>Vente enregistrée — {lastTicket.ref}</span>
-            <span style={{ fontSize: 12, color: "#16A34A", marginLeft: 12 }}>{lastTicket.total.toLocaleString()} FCFA · {MODE_LABELS[lastTicket.paiement] ?? lastTicket.paiement}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: lastTicket.enAttenteSync ? "#92400E" : "#15803D" }}>
+              Vente enregistrée — {lastTicket.ref}
+            </span>
+            <span style={{ fontSize: 12, color: lastTicket.enAttenteSync ? "#B45309" : "#16A34A", marginLeft: 12 }}>
+              {lastTicket.total.toLocaleString()} FCFA · {MODE_LABELS[lastTicket.paiement] ?? lastTicket.paiement}
+            </span>
+            {lastTicket.enAttenteSync && (
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#92400E", marginLeft: 12, padding: "2px 8px", backgroundColor: "#FEF3C7", borderRadius: 10 }}>
+                En attente de synchronisation
+              </span>
+            )}
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button
               onClick={() => { try { printTicket(lastTicket); } catch (e) { showError(e.message); } }}
-              style={{ padding: "7px 16px", backgroundColor: "#16A34A", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+              style={{ padding: "7px 16px", backgroundColor: lastTicket.enAttenteSync ? "#F59E0B" : "#16A34A", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
             >
               Imprimer le ticket
             </button>
             <button
               onClick={() => setLastTicket(null)}
-              style={{ padding: "7px 12px", backgroundColor: "transparent", color: "#16A34A", border: "1.5px solid #16A34A", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+              style={{ padding: "7px 12px", backgroundColor: "transparent", color: lastTicket.enAttenteSync ? "#92400E" : "#16A34A", border: `1.5px solid ${lastTicket.enAttenteSync ? "#92400E" : "#16A34A"}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
             >
               Fermer
             </button>
@@ -635,6 +703,11 @@ function OngletCaisse({ onSaleComplete }) {
           <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: "20px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
             <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 700, color: colors.navy }}>
               Produits disponibles {!loading && `(${medicaments.length})`}
+              {!loading && fromCache && (
+                <span style={{ marginLeft: 10, fontSize: 11, fontWeight: 600, color: "#B45309", backgroundColor: "#FFFBEB", border: "1px solid #FCD34D", borderRadius: 8, padding: "2px 8px" }}>
+                  Hors-ligne — stock du {cachedAt ? new Date(cachedAt).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "?"}
+                </span>
+              )}
             </h3>
             {loading ? (
               <div className="kpi-grid kpi-grid-4" style={{ gap: 10 }}>
