@@ -1,14 +1,17 @@
 import { colors } from "../../theme";
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useMedicamentsPaginated, useMedicamentStats, useFournisseurs } from "../../hooks/useSupabaseData";
-import { updateMedicament, insertMedicament, insertCommande, upsertMedicaments } from "../../hooks/useMutations";
 import Pagination from "../../components/Pagination";
 import Papa from "papaparse";
 import { useAuth } from "../../context/AuthContext";
+import { useNetwork } from "../../context/NetworkContext";
+import { useSyncQueue } from "../../context/SyncContext";
+import { useCachedQuery } from "../../offline/useCachedQuery";
+import { supabase } from "../../supabaseClient";
 import QrScanner from "../../components/QrScanner";
 import { rechercherLotPourPrefill } from "../../hooks/useVerificationLot";
 
@@ -42,6 +45,7 @@ function SkeletonRow() {
 
 // ── Modal Éditer ──────────────────────────────────────────────────────────────
 function EditModal({ med, onClose, onSaved }) {
+  const { enqueueOrRun } = useSyncQueue();
   const [form, setForm] = useState({
     nom:           med.nom           ?? "",
     stock_actuel:  med.stock_actuel  ?? 0,
@@ -60,7 +64,7 @@ function EditModal({ med, onClose, onSaved }) {
     if (Number(form.stock_actuel) < 0) { setFormError("Le stock actuel ne peut pas être négatif."); return; }
     setSaving(true);
     try {
-      await updateMedicament(med.id, {
+      const fields = {
         nom:           form.nom.trim(),
         stock_actuel:  Number(form.stock_actuel),
         stock_minimum: Number(form.stock_minimum),
@@ -68,8 +72,12 @@ function EditModal({ med, onClose, onSaved }) {
         categorie:     form.categorie,
         forme:         form.forme,
         date_peremption: form.date_peremption || null,
+      };
+      const { queued } = await enqueueOrRun("updateMedicament", [med.id, fields], {
+        description: `Édition — ${form.nom.trim()}`,
+        module: "pharmacie.inventaire",
       });
-      onSaved();
+      onSaved(queued);
       onClose();
     } catch (e) {
       setFormError("Erreur : " + e.message);
@@ -125,6 +133,7 @@ function EditModal({ med, onClose, onSaved }) {
 // ── Modal Commander ───────────────────────────────────────────────────────────
 function CommanderModal({ med, fournisseurs, onClose, onSaved }) {
   const { auth } = useAuth();
+  const { enqueueOrRun } = useSyncQueue();
   const [form, setForm] = useState({
     fournisseur_id:        fournisseurs[0]?.id ?? "",
     quantite:              med.stock_minimum ?? 100,
@@ -140,7 +149,7 @@ function CommanderModal({ med, fournisseurs, onClose, onSaved }) {
     if (Number(form.quantite) <= 0) { setFormError("La quantité doit être supérieure à 0."); return; }
     setSaving(true);
     try {
-      await insertCommande({
+      const fields = {
         fournisseur_id:        form.fournisseur_id,
         etablissement_id:      auth?.etablissement_id ?? null,
         statut:                "envoyee",
@@ -148,8 +157,13 @@ function CommanderModal({ med, fournisseurs, onClose, onSaved }) {
         date_livraison_prevue: form.date_livraison_prevue || null,
         notes:                 `${med.nom} — Qté : ${form.quantite}${form.notes ? " — " + form.notes : ""}`,
         montant_total:         0,
+      };
+      const { queued } = await enqueueOrRun("insertCommande", [fields], {
+        description: `Commande — ${med.nom} ×${form.quantite}`,
+        module: "pharmacie.inventaire",
+        etablissementId: auth?.etablissement_id ?? null,
       });
-      onSaved();
+      onSaved(queued);
       onClose();
     } catch (e) {
       setFormError("Erreur : " + e.message);
@@ -190,6 +204,7 @@ function CommanderModal({ med, fournisseurs, onClose, onSaved }) {
 // ── Modal Nouveau produit ──────────────────────────────────────────────────────
 function NouveauModal({ onClose, onSaved }) {
   const { auth } = useAuth();
+  const { enqueueOrRun } = useSyncQueue();
   const { success, error: showError } = useToast();
   const [form, setForm] = useState({
     nom: "", code: "", categorie: "", forme: "",
@@ -237,7 +252,7 @@ function NouveauModal({ onClose, onSaved }) {
     if (Number(form.stock_actuel) < 0) { setFormError("Le stock initial ne peut pas être négatif."); return; }
     setSaving(true);
     try {
-      await insertMedicament({
+      const fields = {
         nom:              form.nom.trim(),
         code:             form.code || null,
         categorie:        form.categorie || null,
@@ -250,8 +265,13 @@ function NouveauModal({ onClose, onSaved }) {
         dci:              form.dci || null,
         date_peremption:  form.date_peremption || null,
         etablissement_id: auth?.etablissement_id ?? null,
+      };
+      const { queued } = await enqueueOrRun("insertMedicament", [fields], {
+        description: `Nouveau médicament — ${form.nom.trim()}`,
+        module: "pharmacie.inventaire",
+        etablissementId: auth?.etablissement_id ?? null,
       });
-      onSaved();
+      onSaved(queued);
       onClose();
     } catch (e) {
       setFormError("Erreur : " + e.message);
@@ -361,6 +381,7 @@ const IMPORT_MAX_TAILLE_OCTETS = 5 * 1024 * 1024; // 5 Mo — largement au-dessu
 const IMPORT_XLSX_TIMEOUT_MS = 10000;
 
 function ImportModal({ auth, onClose, onImported }) {
+  const { enqueueOrRun } = useSyncQueue();
   const [preview, setPreview] = useState(null);
   const [rows, setRows]       = useState([]);
   const [saving, setSaving]   = useState(false);
@@ -438,8 +459,12 @@ function ImportModal({ auth, onClose, onImported }) {
         ...r,
         etablissement_id: auth?.etablissement_id ?? null,
       }));
-      await upsertMedicaments(payload);
-      onImported(rows.length);
+      const { queued } = await enqueueOrRun("upsertMedicaments", [payload], {
+        description: `Import inventaire — ${rows.length} produit(s)`,
+        module: "pharmacie.inventaire",
+        etablissementId: auth?.etablissement_id ?? null,
+      });
+      onImported(rows.length, queued);
       onClose();
     } catch (e) {
       setErr("Erreur import : " + e.message);
@@ -500,14 +525,50 @@ function ImportModal({ auth, onClose, onImported }) {
   );
 }
 
+const INVENTAIRE_PAGE_SIZE = 20;
+
 export default function Inventaire() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("tous");
-  const { data: medicaments, loading, error, total, page, setPage, totalPages, refetch } = useMedicamentsPaginated(search);
+  const { auth } = useAuth();
+  const { online } = useNetwork();
+
+  // En ligne : pagination + recherche côté serveur (inchangé). Hors-ligne : la
+  // RPC de pagination serveur n'est pas joignable — on retombe sur la dernière
+  // copie complète connue en cache (même clé que la Caisse, donc partagée si
+  // l'une des deux a déjà été ouverte en ligne aujourd'hui), filtrée et paginée
+  // côté client. Les deux hooks sont toujours appelés (règle des Hooks React) ;
+  // seul le résultat utilisé bascule selon `online`.
+  const paginated = useMedicamentsPaginated(search);
+  const medKey = `medicaments:${auth?.etablissement_id ?? "global"}`;
+  const fetchAllMedicaments = useCallback(async () => {
+    const { data, error } = await supabase.from("medicaments").select("*").order("nom", { ascending: true }).limit(500);
+    if (error) throw error;
+    return data ?? [];
+  }, []);
+  const cached = useCachedQuery(medKey, fetchAllMedicaments, [medKey]);
+  const [offlinePage, setOfflinePage] = useState(0);
+  useEffect(() => { setOfflinePage(0); }, [search]);
+  const offlineFiltered = useMemo(() => {
+    const list = cached.data ?? [];
+    const s = search.trim().toLowerCase();
+    return s ? list.filter((m) => (m.nom ?? "").toLowerCase().includes(s)) : list;
+  }, [cached.data, search]);
+  const offlineTotalPages = Math.max(1, Math.ceil(offlineFiltered.length / INVENTAIRE_PAGE_SIZE));
+  const offlinePageData = offlineFiltered.slice(offlinePage * INVENTAIRE_PAGE_SIZE, offlinePage * INVENTAIRE_PAGE_SIZE + INVENTAIRE_PAGE_SIZE);
+
+  const medicaments  = online ? paginated.data       : offlinePageData;
+  const loading      = online ? paginated.loading    : cached.loading;
+  const error        = online ? paginated.error      : cached.error;
+  const total        = online ? paginated.total      : offlineFiltered.length;
+  const page         = online ? paginated.page       : offlinePage;
+  const setPage      = online ? paginated.setPage    : setOfflinePage;
+  const totalPages   = online ? paginated.totalPages : offlineTotalPages;
+  const refetch      = online ? paginated.refetch    : cached.refetch;
+
   const { data: statsData } = useMedicamentStats();
   const { data: fournisseurs } = useFournisseurs();
   const { toasts, success } = useToast();
-  const { auth } = useAuth();
   const [editMed, setEditMed] = useState(null);
   const [commandMed, setCommandMed] = useState(null);
   const [showNouveau, setShowNouveau] = useState(false);
@@ -528,9 +589,10 @@ export default function Inventaire() {
   const enriched = medicaments.map((m) => ({ ...m, statut: getStatut(m) }));
   const filtered = filter === "tous" ? enriched : enriched.filter((m) => m.statut === filter);
 
-  const handleEditSaved = () => { refetch(); success("Médicament mis à jour avec succès"); };
-  const handleCommandSaved = () => { refetch(); success("Commande passée avec succès"); };
-  const handleNouveauSaved = () => { refetch(); success("Médicament ajouté à l'inventaire"); };
+  const msgSuccesOuAttente = (label, queued) => success(queued ? `${label} — en attente de synchronisation` : label);
+  const handleEditSaved = (queued) => { refetch(); msgSuccesOuAttente("Médicament mis à jour avec succès", queued); };
+  const handleCommandSaved = (queued) => { refetch(); msgSuccesOuAttente("Commande passée avec succès", queued); };
+  const handleNouveauSaved = (queued) => { refetch(); msgSuccesOuAttente("Médicament ajouté à l'inventaire", queued); };
 
   return (
     <Layout title="Inventaire Produits" subtitle="Gestion du stock et des niveaux de réapprovisionnement">
@@ -562,8 +624,14 @@ export default function Inventaire() {
         <ImportModal
           auth={auth}
           onClose={() => setShowImport(false)}
-          onImported={(n) => { refetch(); success(`${n} produit${n !== 1 ? "s" : ""} importé${n !== 1 ? "s" : ""}`); }}
+          onImported={(n, queued) => { refetch(); msgSuccesOuAttente(`${n} produit${n !== 1 ? "s" : ""} importé${n !== 1 ? "s" : ""}`, queued); }}
         />
+      )}
+
+      {!online && (
+        <div style={{ display: "inline-flex", marginBottom: 14, fontSize: 11, fontWeight: 600, color: "#B45309", backgroundColor: "#FFFBEB", border: "1px solid #FCD34D", borderRadius: 8, padding: "4px 10px" }}>
+          Hors-ligne — inventaire du {cached.cachedAt ? new Date(cached.cachedAt).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "?"}
+        </div>
       )}
 
       {/* ── Barre de filtres ── */}

@@ -8232,3 +8232,48 @@ de journée, pas un flux d'écriture hors-ligne.
 Fichiers ajoutés : [`src/offline/useCachedQuery.js`](src/offline/useCachedQuery.js) (hook
 générique cache-first, réutilisable pour les prochains écrans de la Phase 1). Fichiers modifiés :
 [`src/pages/pharmacie/Caisse.jsx`](src/pages/pharmacie/Caisse.jsx).
+
+### Phase 1 — Pharmacie — Point 2 : Stock et Inventaire : ✅ terminée et prouvée en conditions réelles
+
+Câblage de [src/pages/pharmacie/Inventaire.jsx](src/pages/pharmacie/Inventaire.jsx) sur le moteur
+de la Phase 0, deuxième écran de la Phase 1.
+
+**Changements** :
+
+1. **Lecture** : `Inventaire` utilise normalement `useMedicamentsPaginated` (pagination + recherche
+   côté serveur). Hors-ligne, cette RPC n'est pas joignable — bascule sur `useCachedQuery` avec la
+   **même clé de cache que la Caisse** (`medicaments:${etablissement_id}`, partagée entre les deux
+   écrans), filtrée et paginée côté client (20 par page, comme en ligne). Badge "Hors-ligne —
+   inventaire du JJ/MM HH:mm" affiché à côté des filtres. Les deux hooks (`useMedicamentsPaginated`
+   et `useCachedQuery`) sont toujours appelés (règle des Hooks React) — seul le résultat utilisé
+   bascule selon `online`, sans changer le comportement en ligne.
+2. **Écritures** — les 4 flux d'écriture de l'écran passent par `enqueueOrRun` (même pattern que la
+   Caisse) : édition d'un médicament (`updateMedicament`), nouveau médicament
+   (`insertMedicament`), commande fournisseur depuis une ligne de stock (`insertCommande`), import
+   CSV/Excel en masse (`upsertMedicaments`, tout le lot comme un seul élément de file). Message de
+   succès suffixé "— en attente de synchronisation" quand l'action a été mise en file plutôt
+   qu'exécutée immédiatement.
+
+**Preuve réelle** (même méthode que la Caisse — build de production, backend réel, `fetch` bloqué
+vers Supabase) :
+- **Lecture hors-ligne** : page rechargée avec le réseau coupé → les 12 médicaments s'affichent
+  depuis le cache (identique aux valeurs réelles), badge "Hors-ligne — inventaire du 08/08 14:07"
+  visible, KPI cohérents.
+- **Écriture hors-ligne** : édition du prix d'Ibuprofène 400mg (600 → 650 FCFA) avec le réseau
+  coupé → toast "Médicament mis à jour avec succès — en attente de synchronisation", indicateur
+  "Hors ligne 1", élément vérifié dans IndexedDB (`updateMedicament`, statut `pending`, arguments
+  corrects). Reconnexion → rejeu automatique → file vidée → **vérifié après reload complet que le
+  prix réel en base est bien passé à 650 FCFA**. Remis à 600 FCFA ensuite (édition en ligne
+  normale, pour laisser l'inventaire de test dans son état d'origine).
+
+Seul `EditModal` a été testé de bout en bout en conditions réelles hors-ligne (lecture + écriture
++ resynchronisation vérifiée en base). `NouveauModal`, `CommanderModal` et `ImportModal` utilisent
+exactement le même appel `enqueueOrRun` déjà prouvé deux fois (Caisse ×3 mutations, Inventaire
+`updateMedicament`) — non retestés individuellement en direct par souci de temps, mais reposant sur
+un chemin de code identique, pas un nouveau mécanisme.
+
+**Pas encore fait sur cet écran** : `useMedicamentStats` (KPI globaux) et `useFournisseurs` (liste
+déroulante de `CommanderModal`) restent réseau uniquement — s'ils ont déjà été chargés avant la
+coupure, l'affichage reste correct (state React conservé), mais un rechargement de page hors-ligne
+avant tout chargement en ligne les laisserait vides. Même limite déjà documentée pour le fond de
+caisse de l'écran Caisse.
