@@ -12,9 +12,12 @@ import { useLocation, useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
-import { useMedicaments, useFabricants, useFabricantsPaginated, useCommandesFabricantPaginated, useCommandeHistorique } from "../../hooks/useSupabaseData";
-import { insertLot, incrementStock, insertCommande, updateCommande, deleteCommande, insertCommandeLignes, insertFabricant, updateFabricant, insertMedicament, updateMedicament, deleteMedicament } from "../../hooks/useMutations";
+import { useFabricants, useFabricantsPaginated, useCommandesFabricantPaginated, useCommandeHistorique } from "../../hooks/useSupabaseData";
+import { deleteMedicament } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
+import { useNetwork } from "../../context/NetworkContext";
+import { useSyncQueue } from "../../context/SyncContext";
+import { useCachedQuery } from "../../offline/useCachedQuery";
 import { supabase } from "../../supabaseClient";
 import { openDocument, tableHTML, infoGridHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
 import Pagination from "../../components/Pagination";
@@ -185,6 +188,7 @@ const inputStyle = {
 const labelStyle = { fontSize: 12, fontWeight: 600, color: colors.text, display: "block", marginBottom: 5 };
 
 function ModalReception({ medicaments, etablissement_id, onClose, onSuccess }) {
+  const { enqueueOrRun } = useSyncQueue();
   const [form, setForm] = useState({
     nom: "",
     dosage: "",
@@ -220,9 +224,16 @@ function ModalReception({ medicaments, etablissement_id, onClose, onSuccess }) {
     setSaving(true);
     setErr(null);
     try {
+      // Id genere cote client (au lieu de laisser Postgres le generer) : le
+      // lot et l'incrementation de stock en ont besoin immediatement, y
+      // compris hors-ligne ou la fiche medicament reelle n'existera qu'au
+      // rejeu, plus tard, deconnecte de cet ecran (meme pattern que la
+      // commande fournisseur pharmacie, Phase 1 point 5).
       let medicamentId = existant?.id;
       if (!medicamentId) {
-        const nouveau = await insertMedicament({
+        medicamentId = crypto.randomUUID();
+        await enqueueOrRun("insertMedicament", [{
+          id: medicamentId,
           nom: form.nom.trim(),
           dosage: form.dosage.trim() || null,
           forme: form.forme.trim() || null,
@@ -232,11 +243,13 @@ function ModalReception({ medicaments, etablissement_id, onClose, onSuccess }) {
           stock_minimum: 10,
           prix_unitaire: form.prix_unitaire ? Number(form.prix_unitaire) : null,
           prix_achat: form.prix_achat ? Number(form.prix_achat) : null,
+        }], {
+          description: `Nouveau médicament (réception) — ${form.nom.trim()}`,
+          module: "distributeur.entrepot", etablissementId: etablissement_id,
         });
-        medicamentId = nouveau.id;
       }
       // 1. Insérer le lot dans Supabase → alimentera le scanner
-      await insertLot({
+      const { queued } = await enqueueOrRun("insertLot", [{
         numero_lot: lotGenere,
         medicament_id: medicamentId,
         fabricant: form.fabricant,
@@ -245,15 +258,21 @@ function ModalReception({ medicaments, etablissement_id, onClose, onSuccess }) {
         date_expiration: form.date_expiration,
         qr_code: JSON.stringify({ lot: lotGenere, medicament_id: medicamentId }),
         ...(form.prix_achat ? { prix_achat: Number(form.prix_achat) } : {}),
+      }], {
+        description: `Lot ${lotGenere} — ${form.nom.trim()} ×${qty}`,
+        module: "distributeur.entrepot", etablissementId: etablissement_id,
       });
       // 2. Incrémenter le stock du médicament
-      await incrementStock(medicamentId, qty);
-      onSuccess(lotGenere, qty);
+      await enqueueOrRun("incrementStock", [medicamentId, qty], {
+        description: `Incrément stock — ${form.nom.trim()} +${qty}`,
+        module: "distributeur.entrepot", etablissementId: etablissement_id,
+      });
+      onSuccess(lotGenere, qty, queued);
     } catch (e) {
       setErr(e.message);
       setSaving(false);
     }
-  }, [form, lotGenere, onSuccess, existant, etablissement_id]);
+  }, [form, lotGenere, onSuccess, existant, etablissement_id, enqueueOrRun]);
 
   return (
     <div style={{
@@ -386,6 +405,8 @@ function ModalReception({ medicaments, etablissement_id, onClose, onSuccess }) {
 const LIGNE_VIDE = () => ({ id: Date.now() + Math.random(), medicament_id: "", nom: "", dosage: "", quantite: "" });
 
 function ModalCommandeFabricant({ medicaments, etablissement_id, auth, prefillLignes, onClose, onSuccess }) {
+  const { online } = useNetwork();
+  const { enqueueOrRun } = useSyncQueue();
   const { data: fabricants } = useFabricants();
   const [fabricantSelectionId, setFabricantSelectionId] = useState("");
   const [header, setHeader] = useState({ email_fabricant: "", fabricant: "", telephone: "", date_livraison: "", notes: "" });
@@ -457,26 +478,34 @@ function ModalCommandeFabricant({ medicaments, etablissement_id, auth, prefillLi
 
       // Résout le fabricant : contact existant sélectionné (ou retrouvé par
       // email), sinon nouvelle fiche créée à la volée — réutilisable pour les
-      // prochaines commandes, sans jamais créer de compte MedOS.
+      // prochaines commandes, sans jamais créer de compte MedOS. Id généré
+      // côté client dès qu'une nouvelle fiche est nécessaire, pour que la
+      // commande puisse le référencer immédiatement même hors-ligne.
       let fabricantId = fabricantSelectionId || null;
       if (!fabricantId) {
         const existant = fabricants.find((f) => f.email && f.email.toLowerCase() === header.email_fabricant.trim().toLowerCase());
         if (existant) {
           fabricantId = existant.id;
         } else {
-          const nouveau = await insertFabricant({
+          fabricantId = crypto.randomUUID();
+          await enqueueOrRun("insertFabricant", [{
+            id: fabricantId,
             nom: header.fabricant.trim(),
             email: header.email_fabricant.trim(),
             telephone: header.telephone.trim() || null,
             actif: true,
             ...(etablissement_id ? { etablissement_id } : {}),
+          }], {
+            description: `Nouveau fabricant — ${header.fabricant.trim()}`,
+            module: "distributeur.entrepot", etablissementId: etablissement_id,
           });
-          fabricantId = nouveau.id;
         }
       }
 
       const reference = "CMD-" + Date.now().toString().slice(-8);
-      const commande = await insertCommande({
+      const commandeId = crypto.randomUUID();
+      const { queued: commandeQueued } = await enqueueOrRun("insertCommande", [{
+        id: commandeId,
         reference,
         fabricant_id:          fabricantId,
         statut:                "envoyee",
@@ -485,47 +514,62 @@ function ModalCommandeFabricant({ medicaments, etablissement_id, auth, prefillLi
         montant_total:         0,
         notes:                 header.notes.trim() || null,
         ...(etablissement_id ? { etablissement_id } : {}),
+      }], {
+        description: `Commande fabricant ${reference} — ${header.fabricant.trim()}`,
+        module: "distributeur.entrepot", etablissementId: etablissement_id,
       });
 
-      await insertCommandeLignes(lignesPayload.map((l) => ({
-        commande_id:      commande.id,
+      await enqueueOrRun("insertCommandeLignes", [lignesPayload.map((l) => ({
+        commande_id:      commandeId,
         etablissement_id: etablissement_id ?? null,
         medicament_id:    l.medicament_id,
         medicament_nom:   l.medicamentNom,
         dosage:           l.dosage,
         quantite:         l.quantite,
-      })));
-
-      const etab = await fetchEtabFromAuth(auth);
-      const pieceJointe = await genererPieceJointeBonCommandeFabricant({
-        fabricantNom: header.fabricant.trim(), emailFabricant: header.email_fabricant.trim(),
-        lignes: lignesAffichage, dateLivraison: header.date_livraison, notes: header.notes.trim(),
-        etabNom: etab.nom, reference,
+      }))], {
+        description: `Lignes de commande ${reference}`,
+        module: "distributeur.entrepot", etablissementId: etablissement_id,
       });
 
-      // L'email est une étape distincte de l'enregistrement de la commande :
-      // la commande reste valide même si l'envoi échoue, mais le statut réel
-      // est toujours tracé et remonté honnêtement à l'utilisateur.
-      let emailStatut = "non_envoye";
-      let emailErreur = null;
-      try {
-        await sendCommandeEmail({
-          emailFabricant: header.email_fabricant.trim(),
-          fabricant:      header.fabricant.trim(),
-          lignes:         lignesAffichage,
-          dateLivraison:  header.date_livraison,
-          notes:          header.notes.trim(),
-          distributeur:   etab.nom,
-          pieceJointe,
-        });
-        emailStatut = "envoye";
-      } catch (emailErr) {
+      // L'email (fonction Edge) ne peut physiquement pas partir hors-ligne —
+      // limite documentee, pas contournee : pas tente si `online` est faux.
+      let emailStatut, emailErreur;
+      if (!online) {
         emailStatut = "echec";
-        emailErreur = emailErr.message;
+        emailErreur = "Commande créée hors-ligne — l'envoi d'email nécessite une connexion. Renvoyez-la manuellement une fois reconnecté.";
+      } else {
+        const etab = await fetchEtabFromAuth(auth);
+        const pieceJointe = await genererPieceJointeBonCommandeFabricant({
+          fabricantNom: header.fabricant.trim(), emailFabricant: header.email_fabricant.trim(),
+          lignes: lignesAffichage, dateLivraison: header.date_livraison, notes: header.notes.trim(),
+          etabNom: etab.nom, reference,
+        });
+        // L'email est une étape distincte de l'enregistrement de la commande :
+        // la commande reste valide même si l'envoi échoue, mais le statut réel
+        // est toujours tracé et remonté honnêtement à l'utilisateur.
+        try {
+          await sendCommandeEmail({
+            emailFabricant: header.email_fabricant.trim(),
+            fabricant:      header.fabricant.trim(),
+            lignes:         lignesAffichage,
+            dateLivraison:  header.date_livraison,
+            notes:          header.notes.trim(),
+            distributeur:   etab.nom,
+            pieceJointe,
+          });
+          emailStatut = "envoye";
+          emailErreur = null;
+        } catch (emailErr) {
+          emailStatut = "echec";
+          emailErreur = emailErr.message;
+        }
       }
-      await updateCommande(commande.id, { email_statut: emailStatut, email_erreur: emailErreur });
+      await enqueueOrRun("updateCommande", [commandeId, { email_statut: emailStatut, email_erreur: emailErreur }], {
+        description: `Statut email — commande ${reference}`,
+        module: "distributeur.entrepot", etablissementId: etablissement_id,
+      });
 
-      onSuccess({ emailStatut, emailErreur, reference, fabricantNom: header.fabricant.trim(), nbLignes: lignesPayload.length });
+      onSuccess({ emailStatut, emailErreur, reference, fabricantNom: header.fabricant.trim(), nbLignes: lignesPayload.length, commandeQueued });
     } catch (e) {
       setErr(e.message);
       setSaving(false);
@@ -714,6 +758,7 @@ function ModalCommandeFabricant({ medicaments, etablissement_id, auth, prefillLi
 
 // ── Modal Modifier un médicament ────────────────────────────────────────────
 function ModalEditMedicament({ medicament, onClose, onSaved }) {
+  const { enqueueOrRun } = useSyncQueue();
   const [form, setForm] = useState({
     nom: medicament.nom || "",
     dosage: medicament.dosage || "",
@@ -735,7 +780,7 @@ function ModalEditMedicament({ medicament, onClose, onSaved }) {
     setSaving(true);
     setErr(null);
     try {
-      await updateMedicament(medicament.id, {
+      const { queued } = await enqueueOrRun("updateMedicament", [medicament.id, {
         nom: form.nom.trim(),
         dosage: form.dosage.trim() || null,
         forme: form.forme.trim() || null,
@@ -746,8 +791,11 @@ function ModalEditMedicament({ medicament, onClose, onSaved }) {
         stock_minimum: parseInt(form.stock_minimum, 10) || 0,
         prix_achat: form.prix_achat ? Number(form.prix_achat) : null,
         prix_unitaire: form.prix_unitaire ? Number(form.prix_unitaire) : null,
+      }], {
+        description: `Édition — ${form.nom.trim()}`,
+        module: "distributeur.entrepot",
       });
-      onSaved();
+      onSaved(queued);
       onClose();
     } catch (e) {
       setErr(e.message);
@@ -831,6 +879,7 @@ function ModalEditMedicament({ medicament, onClose, onSaved }) {
 
 // ── Modal Détail médicament (voir / modifier / supprimer / archiver) ───────────
 function ModalDetailMedicament({ medicament, onClose, onEdit, onChanged }) {
+  const { enqueueOrRun } = useSyncQueue();
   const [lots, setLots] = useState([]);
   const [mouvements, setMouvements] = useState([]);
   const [loadingRel, setLoadingRel] = useState(true);
@@ -901,8 +950,12 @@ function ModalDetailMedicament({ medicament, onClose, onEdit, onChanged }) {
     setErr(null);
     try {
       const nextActif = medicament.actif === false;
-      await updateMedicament(medicament.id, { actif: nextActif });
-      onChanged(nextActif ? `${medicament.nom} réactivé.` : `${medicament.nom} archivé.`);
+      const { queued } = await enqueueOrRun("updateMedicament", [medicament.id, { actif: nextActif }], {
+        description: `${nextActif ? "Réactivation" : "Archivage"} — ${medicament.nom}`,
+        module: "distributeur.entrepot",
+      });
+      const label = nextActif ? `${medicament.nom} réactivé.` : `${medicament.nom} archivé.`;
+      onChanged(queued ? `${label} — en attente de synchronisation` : label);
       onClose();
     } catch (e) {
       setErr(e.message);
@@ -1026,6 +1079,7 @@ function ModalDetailMedicament({ medicament, onClose, onEdit, onChanged }) {
 
 // ── Modal Fabricant (ajout + édition d'un contact externe) ─────────────────────
 function FabricantModal({ initial, etablissement_id, onClose, onSaved }) {
+  const { enqueueOrRun } = useSyncQueue();
   const [form, setForm] = useState({
     nom: initial?.nom || "", email: initial?.email || "",
     telephone: initial?.telephone || "", notes: initial?.notes || "",
@@ -1040,12 +1094,16 @@ function FabricantModal({ initial, etablissement_id, onClose, onSaved }) {
     setSaving(true);
     setErr(null);
     try {
-      if (isEdit) {
-        await updateFabricant(initial.id, form);
-      } else {
-        await insertFabricant({ ...form, actif: true, ...(etablissement_id ? { etablissement_id } : {}) });
-      }
-      onSaved();
+      const { queued } = isEdit
+        ? await enqueueOrRun("updateFabricant", [initial.id, form], {
+            description: `Édition fabricant — ${form.nom}`,
+            module: "distributeur.entrepot", etablissementId: etablissement_id,
+          })
+        : await enqueueOrRun("insertFabricant", [{ ...form, actif: true, ...(etablissement_id ? { etablissement_id } : {}) }], {
+            description: `Nouveau fabricant — ${form.nom}`,
+            module: "distributeur.entrepot", etablissementId: etablissement_id,
+          });
+      onSaved(queued);
     } catch (e) {
       setErr(e.message);
       setSaving(false);
@@ -1093,6 +1151,7 @@ function FabricantModal({ initial, etablissement_id, onClose, onSaved }) {
 
 // ── Onglet Fabricants (contacts externes du distributeur) ──────────────────────
 function FabricantsTab({ etablissement_id, success, toastError }) {
+  const { enqueueOrRun } = useSyncQueue();
   const [filtre, setFiltre] = useState("actifs");
   const { data: liste, loading, total, refetch } = useFabricantsPaginated(filtre);
   const [addModal, setAddModal]   = useState(false);
@@ -1102,8 +1161,12 @@ function FabricantsTab({ etablissement_id, success, toastError }) {
   const handleToggleActif = async (f) => {
     setToggling(f.id);
     try {
-      await updateFabricant(f.id, { actif: !f.actif });
-      success(f.actif ? `${f.nom} désactivé` : `${f.nom} réactivé`);
+      const { queued } = await enqueueOrRun("updateFabricant", [f.id, { actif: !f.actif }], {
+        description: `${f.actif ? "Désactivation" : "Réactivation"} — ${f.nom}`,
+        module: "distributeur.entrepot", etablissementId: etablissement_id,
+      });
+      const label = f.actif ? `${f.nom} désactivé` : `${f.nom} réactivé`;
+      success(queued ? `${label} — en attente de synchronisation` : label);
       refetch();
     } catch (e) {
       toastError("Erreur : " + e.message);
@@ -1118,11 +1181,11 @@ function FabricantsTab({ etablissement_id, success, toastError }) {
     <div>
       {addModal && (
         <FabricantModal etablissement_id={etablissement_id} onClose={() => setAddModal(false)}
-          onSaved={() => { success("Fabricant ajouté avec succès"); refetch(); setAddModal(false); }} />
+          onSaved={(queued) => { success(queued ? "Fabricant ajouté — en attente de synchronisation" : "Fabricant ajouté avec succès"); refetch(); setAddModal(false); }} />
       )}
       {editModal && (
         <FabricantModal initial={editModal} etablissement_id={etablissement_id} onClose={() => setEditModal(null)}
-          onSaved={() => { success(`${editModal.nom} mis à jour`); refetch(); setEditModal(null); }} />
+          onSaved={(queued) => { success(queued ? `${editModal.nom} mis à jour — en attente de synchronisation` : `${editModal.nom} mis à jour`); refetch(); setEditModal(null); }} />
       )}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -1216,6 +1279,7 @@ function CommandeFabricantHistoriqueInline({ commandeId }) {
 }
 
 function CommandeFabricantCard({ commande, auth, medicaments, success, toastError, onChanged }) {
+  const { enqueueOrRun } = useSyncQueue();
   const [expanded, setExpanded] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [showScanCamera, setShowScanCamera] = useState(false);
@@ -1247,21 +1311,32 @@ function CommandeFabricantCard({ commande, auth, medicaments, success, toastErro
         for (const l of lignes) {
           let medicamentId = l.medicament_id;
           if (!medicamentId) {
-            const nouveau = await insertMedicament({
+            medicamentId = crypto.randomUUID();
+            await enqueueOrRun("insertMedicament", [{
+              id: medicamentId,
               nom: l.medicament_nom,
               dosage: l.dosage || null,
               fabricant: commande.fabricants?.nom || null,
               etablissement_id: auth?.etablissement_id,
               stock_actuel: 0,
               stock_minimum: 10,
+            }], {
+              description: `Nouveau médicament (réception commande) — ${l.medicament_nom}`,
+              module: "distributeur.entrepot", etablissementId: auth?.etablissement_id,
             });
-            medicamentId = nouveau.id;
           }
-          await incrementStock(medicamentId, l.quantite);
+          await enqueueOrRun("incrementStock", [medicamentId, l.quantite], {
+            description: `Incrément stock — ${l.medicament_nom} +${l.quantite}`,
+            module: "distributeur.entrepot", etablissementId: auth?.etablissement_id,
+          });
         }
       }
-      await updateCommande(commande.id, { statut: next });
-      success(`${commande.reference ?? "Commande"} — ${label.toLowerCase()}${next === "livree" ? " : stock entrepôt mis à jour" : ""}`);
+      const { queued } = await enqueueOrRun("updateCommande", [commande.id, { statut: next }], {
+        description: `Commande ${commande.reference ?? ""} — ${label}`,
+        module: "distributeur.entrepot", etablissementId: auth?.etablissement_id,
+      });
+      const label2 = `${commande.reference ?? "Commande"} — ${label.toLowerCase()}${next === "livree" ? " : stock entrepôt mis à jour" : ""}`;
+      success(queued ? `${label2} — en attente de synchronisation` : label2);
       onChanged();
     } catch (e) {
       toastError("Erreur : " + e.message);
@@ -1274,8 +1349,11 @@ function CommandeFabricantCard({ commande, auth, medicaments, success, toastErro
     if (!window.confirm(`Supprimer définitivement le brouillon ${commande.reference ?? ""} ? Cette action est irréversible.`)) return;
     setUpdating(true);
     try {
-      await deleteCommande(commande.id);
-      success(`${commande.reference ?? "Brouillon"} supprimé.`);
+      const { queued } = await enqueueOrRun("deleteCommande", [commande.id], {
+        description: `Suppression brouillon — ${commande.reference ?? ""}`,
+        module: "distributeur.entrepot", etablissementId: auth?.etablissement_id,
+      });
+      success(queued ? `${commande.reference ?? "Brouillon"} — suppression en attente de synchronisation.` : `${commande.reference ?? "Brouillon"} supprimé.`);
       onChanged();
     } catch (e) {
       toastError("Erreur : " + e.message);
@@ -1424,7 +1502,17 @@ export default function Entrepot() {
   const { auth } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const { data: medicamentsAll, loading, refetch } = useMedicaments(auth?.etablissement_id);
+  const { online } = useNetwork();
+  // Meme cle de cache que les ecrans pharmacie (medicaments:${etablissement_id})
+  // — partitionnee par etablissement, donc jamais de collision entre un
+  // distributeur et une pharmacie meme s'ils utilisent le meme poste.
+  const medKey = `medicaments:${auth?.etablissement_id ?? "global"}`;
+  const fetchAllMedicaments = useCallback(async () => {
+    const { data, error } = await supabase.from("medicaments").select("*").eq("etablissement_id", auth?.etablissement_id).order("nom", { ascending: true }).limit(500);
+    if (error) throw error;
+    return data ?? [];
+  }, [auth?.etablissement_id]);
+  const { data: medicamentsAll, loading, refetch, fromCache, cachedAt } = useCachedQuery(medKey, fetchAllMedicaments, [medKey]);
   const { toasts, success, error: toastError } = useToast();
   const [tab, setTab]                           = useState("stock"); // "stock" | "fabricants" | "commandes"
   const [showModal, setShowModal]               = useState(false);
@@ -1466,10 +1554,12 @@ export default function Entrepot() {
     return sum + (m.stock_actuel ?? 0) * (m.prix_achat ?? m.prix_unitaire ?? 0);
   }, 0);
 
-  const handleSuccess = useCallback((lot, qty) => {
+  const handleSuccess = useCallback((lot, qty, queued) => {
     setShowModal(false);
     refetch();
-    success(`Lot ${lot} créé — ${qty} unités ajoutées au stock`);
+    success(queued
+      ? `Lot ${lot} créé — ${qty} unités en attente de synchronisation`
+      : `Lot ${lot} créé — ${qty} unités ajoutées au stock`);
   }, [refetch, success]);
 
   return (
@@ -1480,6 +1570,11 @@ export default function Entrepot() {
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
       `}</style>
       <Toast toasts={toasts} />
+      {!online && fromCache && (
+        <div style={{ display: "inline-flex", marginBottom: 14, fontSize: 11, fontWeight: 600, color: "#B45309", backgroundColor: "#FFFBEB", border: "1px solid #FCD34D", borderRadius: 8, padding: "4px 10px" }}>
+          Hors-ligne — stock du {cachedAt ? new Date(cachedAt).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "?"}
+        </div>
+      )}
       {showModal && (
         <ModalReception
           medicaments={medicaments}
@@ -1495,10 +1590,12 @@ export default function Entrepot() {
           auth={auth}
           prefillLignes={prefillLignes}
           onClose={() => { setShowCommande(false); setPrefillLignes(null); }}
-          onSuccess={({ emailStatut, emailErreur, reference, fabricantNom, nbLignes }) => {
+          onSuccess={({ emailStatut, emailErreur, reference, fabricantNom, nbLignes, commandeQueued }) => {
             setShowCommande(false);
             setPrefillLignes(null);
-            if (emailStatut === "envoye") {
+            if (commandeQueued) {
+              success(`Commande ${reference} enregistrée hors-ligne chez ${fabricantNom} — en attente de synchronisation.`);
+            } else if (emailStatut === "envoye") {
               success(`Commande ${reference} envoyée à ${fabricantNom} — ${nbLignes} médicament${nbLignes > 1 ? "s" : ""}.`);
             } else {
               toastError(`Commande ${reference} enregistrée chez ${fabricantNom}, mais l'email n'a pas pu être envoyé : ${emailErreur}`);
@@ -1518,7 +1615,7 @@ export default function Entrepot() {
         <ModalEditMedicament
           medicament={editModal}
           onClose={() => setEditModal(null)}
-          onSaved={() => { refetch(); success(`${editModal.nom} mis à jour.`); }}
+          onSaved={(queued) => { refetch(); success(queued ? `${editModal.nom} mis à jour — en attente de synchronisation.` : `${editModal.nom} mis à jour.`); }}
         />
       )}
 

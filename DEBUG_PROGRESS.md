@@ -8425,3 +8425,63 @@ permanent (Phase 0) visible sur chaque écran.
 ne s'affichent jamais (signalé séparément, non corrigé ici).
 
 Prochaine étape : Phase 2 — Distributeur (Entrepôt, Traçabilité, Livraisons, Clients, Fournisseurs).
+
+---
+
+## PHASE 2 — DISTRIBUTEUR
+
+Même traitement systématique que la Phase 1 : Entrepôt, Traçabilité, Livraisons, Clients. **Pas
+de Banque de sang ni de Fournisseurs pour le distributeur** : aucun écran dédié n'existe pour ces
+concepts côté distributeur (le distributeur EST le fournisseur des pharmacies/hôpitaux — il a des
+"Fabricants" comme fournisseurs amont, déjà couvert par le point 1 ci-dessous ; la banque de sang
+est un concept hospitalier uniquement) — documenté ici, pas une réduction silencieuse du
+périmètre.
+
+### Phase 2 — Point 1 : Entrepôt : ✅ terminée et prouvée en conditions réelles
+
+Câblage de [src/pages/distributeur/Entrepot.jsx](src/pages/distributeur/Entrepot.jsx) — le plus
+gros écran traité jusqu'ici (1750+ lignes, 11 mutations), équivalent Caisse+Inventaire+Fournisseurs
+réunis côté distributeur (stock, catalogue médicaments, fabricants, commandes fabricant).
+
+**Changements** :
+1. **Lecture** : `useMedicaments(etablissement_id)` (réseau uniquement, avec filtre explicite
+   `etablissement_id` — nécessaire car le RLS distributeur laisse aussi passer le stock de ses
+   clients pharmacies) remplacé par `useCachedQuery`, même clé partagée `medicaments:${etablissement_id}`
+   que les écrans pharmacie (partitionnée par établissement donc sans collision), avec le même
+   filtre explicite conservé dans la fonction de fetch. Badge "Hors-ligne — stock du JJ/MM HH:mm".
+2. **Réception de livraison** (`ModalReception`, le flux le plus critique de l'écran — génère un
+   lot MedOS certifié) : `insertMedicament` (si nouveau produit) → `insertLot` → `incrementStock`
+   passent par `enqueueOrRun`, avec le même id généré côté client (`crypto.randomUUID()`) que la
+   commande fournisseur pharmacie, pour que le lot et l'incrément de stock puissent référencer la
+   fiche médicament immédiatement même hors-ligne.
+3. **Commande fabricant** (`ModalCommandeFabricant`) — réplique exacte du pattern déjà prouvé sur
+   Fournisseurs.jsx (Phase 1 point 5) : `insertFabricant`/`insertCommande`/`insertCommandeLignes`
+   par `enqueueOrRun` avec id de commande généré côté client ; email (fonction Edge) jamais tenté
+   si hors-ligne, statut marqué `"echec"` avec message explicite, réutilisant l'affichage
+   d'erreur déjà existant.
+4. **Édition/archivage médicament**, **CRUD fabricant**, **réception d'une commande fabricant**
+   (marquer "livrée" incrémente le stock, même pattern d'id généré côté client si le produit
+   n'existait pas encore), **suppression d'un brouillon de commande** : tous passent par
+   `enqueueOrRun`.
+5. **Suppression définitive d'un médicament** (`ModalDetailMedicament`) : **non câblée
+   intentionnellement** — le contrôle de sécurité préalable (compter les lots/mouvements/
+   livraisons/commandes liés avant d'autoriser la suppression) nécessite par nature une lecture
+   réseau à jour ; le laisser hors-ligne reviendrait à autoriser une suppression sans vérification
+   fiable des dépendances. Reste réseau uniquement, échoue proprement (pas silencieusement) si
+   hors-ligne.
+
+**Preuve réelle** (build de production, backend réel — compte distributeur réel "Poto-Poto",
+`cherihaneadam123+distributeur@gmail.com` — `fetch` bloqué vers Supabase) :
+- **Réception hors-ligne d'un nouveau produit** : "Doxycycline 100mg" (300 unités, fabricant
+  Sanofi) réceptionnée avec le réseau coupé → **3 actions mises en file** vérifiées dans
+  IndexedDB (`insertMedicament` avec id pré-généré, `insertLot` et `incrementStock` référençant
+  ce même id). Reconnexion → rejeu automatique → file vidée → **vérifié après reload complet**
+  que le produit existe en base avec 300 unités en stock (3 produits au total au lieu de 2).
+- **Commande fabricant hors-ligne** : commande de 500× Amoxicilline 250mg chez un nouveau
+  fabricant "Bayer" avec le réseau coupé → **4 actions mises en file** (`insertFabricant`,
+  `insertCommande`, `insertCommandeLignes`, `updateCommande` avec statut email `"echec"`).
+  Reconnexion → rejeu automatique → file vidée → **vérifié après reload complet** dans l'onglet
+  Commandes : la commande CMD-94410898 existe avec le bon fabricant, le bon médicament, la bonne
+  quantité, badge "Non envoyé" et message explicatif hors-ligne affichés en clair.
+
+Fichiers modifiés : [`src/pages/distributeur/Entrepot.jsx`](src/pages/distributeur/Entrepot.jsx).
