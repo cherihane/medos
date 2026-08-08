@@ -8349,3 +8349,79 @@ file vidée → **vérifié après reload complet que le patient existe en base 
 prouvé sur les 4 écrans précédents — non retestée séparément par souci de temps.
 
 Fichiers modifiés : [`src/pages/pharmacie/Patients.jsx`](src/pages/pharmacie/Patients.jsx).
+
+### Phase 1 — Pharmacie — Point 5 : Fournisseurs : ✅ terminée et prouvée en conditions réelles
+
+Câblage de [src/pages/pharmacie/Fournisseurs.jsx](src/pages/pharmacie/Fournisseurs.jsx) sur le
+moteur de la Phase 0 — dernier écran de la Phase 1, avec la nuance explicitement demandée par la
+mission : la création de commande peut se mettre en attente hors-ligne, l'envoi d'email ne le peut
+pas et cette limite doit être visible, pas cachée.
+
+**Changements** :
+1. **Liste des médicaments** (panier de la commande) : même clé de cache partagée
+   (`medicaments:${etablissement_id}`) que la Caisse/l'Inventaire/les Ordonnances au lieu d'un
+   appel réseau direct.
+2. **Ajout/édition de fournisseur** (`FournisseurModal`) et **activer/désactiver un fournisseur**
+   (`handleToggleActif`) : passent par `enqueueOrRun`, même pattern que partout ailleurs.
+3. **Création de commande** (`CommandeModal`) — le cœur du point 5 :
+   - `insertCommande` et `insertCommandeLignes` passent par `enqueueOrRun`. **Problème résolu** :
+     `insertCommandeLignes` a besoin de l'id de la commande immédiatement, mais hors-ligne cet id
+     n'existe pas encore (l'insertion réelle n'aura lieu qu'au rejeu, plus tard, déconnectée de cet
+     écran) — résolu en générant l'id de la commande **côté client** (`crypto.randomUUID()`) et en
+     le passant explicitement à l'insertion, au lieu de laisser Postgres le générer. Fonctionne
+     identiquement en ligne et hors-ligne.
+   - **L'envoi d'email (fonction Edge `send-app-email`) n'est même pas tenté si `online` est
+     faux** — pas de queue, pas de faux succès : le statut `email_statut` de la commande est
+     directement marqué `"echec"` avec un message explicite ("Commande créée hors-ligne — l'envoi
+     d'email nécessite une connexion. Renvoyez-la manuellement une fois reconnecté."), réutilisant
+     le badge rouge ✉ et le message d'erreur déjà existants dans l'écran pour les échecs d'envoi
+     classiques (fournisseur sans email, panne réseau ponctuelle) — aucune nouvelle UI nécessaire,
+     la limite est déjà visible par le mécanisme existant, comme demandé.
+
+**Preuve réelle** (build de production, backend réel, `fetch` bloqué vers Supabase) : commande de
+20× Ibuprofène 400mg chez PharmaDistrib Congo créée avec le réseau coupé → liste des médicaments
+du formulaire toujours utilisable depuis le cache → validation → **3 actions mises en file**
+(`insertCommande` avec id pré-généré, `insertCommandeLignes` référençant le même id,
+`updateCommande` avec `email_statut: "echec"`) vérifiées dans IndexedDB, aucun appel réseau tenté
+pour l'email. Reconnexion → rejeu automatique → file vidée → **vérifié après reload complet** :
+la commande CMD-92583168 apparaît dans l'onglet Commandes avec le bon fournisseur, le bon
+médicament, la bonne quantité (×20) et le bon montant (12 000 FCFA), badge "✉ Non envoyé" et le
+message explicatif hors-ligne affichés en clair sur la carte — exactement la preuve demandée.
+
+**Pas encore fait sur cet écran** (hors du périmètre explicite du point 5) : les autres actions
+(changement de statut d'une commande existante, annulation, réception de livraison) restent sur
+les appels directs `useMutations.js` — non câblées cette passe, cohérent avec le choix déjà fait
+sur l'Inventaire (NouveauModal/CommanderModal non retestés individuellement) et documenté ici pour
+transparence plutôt que laissé implicite.
+
+Fichiers modifiés : [`src/pages/pharmacie/Fournisseurs.jsx`](src/pages/pharmacie/Fournisseurs.jsx).
+
+---
+
+## PHASE 1 TERMINÉE — Pharmacie complète hors-ligne (5/5 écrans)
+
+Caisse, Stock/Inventaire, Ordonnances et dispensation, Patients, Fournisseurs : tous câblés sur le
+moteur de la Phase 0 et prouvés en conditions réelles (build de production, backend Supabase réel,
+réseau réellement bloqué via interception de `fetch`, pas seulement des événements simulés).
+
+**Ce qui fonctionne maintenant hors-ligne dans tout le module pharmacie** : consultation du stock,
+des ordonnances et des patients depuis la dernière copie connue (avec horodatage visible) ; vente
+en caisse complète avec décrément de stock ; dispensation d'ordonnance ; création/édition de
+médicament, patient, ordonnance, fournisseur, commande fournisseur ; toutes ces écritures se
+synchronisent automatiquement et sans doublon au retour du réseau, avec un indicateur visuel
+permanent (Phase 0) visible sur chaque écran.
+
+**Limites physiques documentées, pas contournées** (conformes aux instructions de la mission) :
+- Décrément de stock hors-ligne : fiable sur le dernier stock connu localement ; si deux postes
+  vendent le même stock hors-ligne en parallèle, la RPC atomique rejette la seconde tentative au
+  rejeu (jamais acceptée silencieusement), nécessitant une vérification manuelle du gérant.
+- Envoi d'email de commande fournisseur : impossible hors-ligne par nature (fonction Edge), jamais
+  tenté silencieusement, statut et message d'erreur toujours visibles sur la commande.
+- KPI globaux (`useMedicamentStats`), listes de fournisseurs pour formulaires, fond de caisse/TVA
+  établissement : restent réseau uniquement — corrects si déjà chargés avant la coupure (state
+  React conservé), vides si l'écran est rechargé hors-ligne avant tout chargement en ligne.
+
+**Bug pré-existant sans rapport découvert en testant** : boutons Valider/Refuser des ordonnances
+ne s'affichent jamais (signalé séparément, non corrigé ici).
+
+Prochaine étape : Phase 2 — Distributeur (Entrepôt, Traçabilité, Livraisons, Clients, Fournisseurs).

@@ -1,5 +1,5 @@
 import { colors } from "../../theme";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle } from "../../components/Modal";
@@ -7,11 +7,14 @@ import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import {
   useFournisseursPaginated, useCommandesRealtime, useCommandesPaginated,
-  useCommandeHistorique, useMedicaments, useFournisseurs, useEtablissements,
+  useCommandeHistorique, useFournisseurs, useEtablissements,
   useLivraisonsEntrantesRealtime,
 } from "../../hooks/useSupabaseData";
-import { insertCommande, updateCommande, deleteCommande, insertCommandeLignes, insertFournisseur, updateFournisseur } from "../../hooks/useMutations";
+import { updateCommande, deleteCommande } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
+import { useNetwork } from "../../context/NetworkContext";
+import { useSyncQueue } from "../../context/SyncContext";
+import { useCachedQuery } from "../../offline/useCachedQuery";
 import { openDocument, tableHTML, infoGridHTML, fetchEtabFromAuth } from "../../utils/MedOSDocument";
 import { supabase } from "../../supabaseClient";
 import Pagination from "../../components/Pagination";
@@ -358,6 +361,7 @@ const EMPTY_FORM = {
 
 function FournisseurModal({ initial, onClose, onSaved }) {
   const { auth } = useAuth();
+  const { enqueueOrRun } = useSyncQueue();
   const { data: distributeurs, loading: loadingDistrib } = useEtablissements("distributeur");
   const [mode, setMode] = useState("medos"); // "medos" | "externe" — non modifiable en édition
   // En édition, un fournisseur créé "externe" (ou avant l'existence de ce lien)
@@ -397,17 +401,24 @@ function FournisseurModal({ initial, onClose, onSaved }) {
     if (!isEdit && mode === "medos" && !distributeurId) { setFormError("Sélectionnez un distributeur MedOS."); return; }
     setSaving(true);
     try {
+      let queued;
       if (isEdit) {
-        await updateFournisseur(initial.id, { ...form, distributeur_etablissement_id: distributeurId || null });
+        ({ queued } = await enqueueOrRun("updateFournisseur", [initial.id, { ...form, distributeur_etablissement_id: distributeurId || null }], {
+          description: `Édition fournisseur — ${form.nom}`,
+          module: "pharmacie.fournisseurs", etablissementId: auth?.etablissement_id ?? null,
+        }));
       } else {
-        await insertFournisseur({
+        ({ queued } = await enqueueOrRun("insertFournisseur", [{
           ...form,
           actif: true,
           etablissement_id: auth?.etablissement_id ?? null,
           distributeur_etablissement_id: mode === "medos" ? distributeurId : null,
-        });
+        }], {
+          description: `Nouveau fournisseur — ${form.nom}`,
+          module: "pharmacie.fournisseurs", etablissementId: auth?.etablissement_id ?? null,
+        }));
       }
-      onSaved();
+      onSaved(queued);
       onClose();
     } catch (e) {
       setFormError("Erreur : " + e.message);
@@ -514,7 +525,16 @@ function FournisseurModal({ initial, onClose, onSaved }) {
 // panier avec les médicaments et quantités suggérées — l'utilisateur peut
 // toujours ajuster les quantités ou ajouter/retirer des lignes avant d'envoyer.
 function CommandeModal({ fournisseur, etablissement_id, auth, prefillLignes, onClose, onSaved }) {
-  const { data: medicaments, loading: loadingMeds } = useMedicaments();
+  const { online } = useNetwork();
+  const { enqueueOrRun } = useSyncQueue();
+  // Meme cle de cache que la Caisse/l'Inventaire/les Ordonnances (medicaments:${etablissement_id})
+  const medKey = `medicaments:${etablissement_id ?? "global"}`;
+  const fetchAllMedicaments = useCallback(async () => {
+    const { data, error } = await supabase.from("medicaments").select("*").order("nom", { ascending: true }).limit(500);
+    if (error) throw error;
+    return data ?? [];
+  }, []);
+  const { data: medicaments, loading: loadingMeds } = useCachedQuery(medKey, fetchAllMedicaments, [medKey]);
   const [cart, setCart] = useState(() =>
     (prefillLignes || []).map((l) => ({
       medicament_id: l.medicament_id,
@@ -566,7 +586,13 @@ function CommandeModal({ fournisseur, etablissement_id, auth, prefillLignes, onC
     try {
       const reference = "CMD-" + Date.now().toString().slice(-8);
       const isSingleLine = cart.length === 1;
-      const commande = await insertCommande({
+      // Id genere cote client (au lieu de laisser Postgres le generer) : les
+      // lignes de commande en ont besoin immediatement, y compris hors-ligne
+      // ou l'insertion reelle de la commande n'aura lieu qu'au rejeu, plus
+      // tard et de facon deconnectee de cet ecran.
+      const commandeId = crypto.randomUUID();
+      const { queued: commandeQueued } = await enqueueOrRun("insertCommande", [{
+        id: commandeId,
         reference,
         fournisseur_id:        fournisseur.id,
         distributeur_id:       fournisseur.distributeur_etablissement_id ?? null,
@@ -581,55 +607,70 @@ function CommandeModal({ fournisseur, etablissement_id, auth, prefillLignes, onC
         quantite:              isSingleLine ? cart[0].quantite : null,
         notes:                 notes || null,
         ...(etablissement_id ? { etablissement_id } : {}),
+      }], {
+        description: `Commande ${reference} — ${fournisseur.nom}, ${montantTotal.toLocaleString()} FCFA`,
+        module: "pharmacie.fournisseurs", etablissementId: etablissement_id,
       });
 
-      await insertCommandeLignes(cart.map((it) => ({
-        commande_id:      commande.id,
+      await enqueueOrRun("insertCommandeLignes", [cart.map((it) => ({
+        commande_id:      commandeId,
         etablissement_id: etablissement_id ?? null,
         medicament_id:    it.medicament_id,
         medicament_nom:   it.nom,
         quantite:         it.quantite,
         prix_unitaire:    it.prix_unitaire ?? null,
-      })));
+      }))], {
+        description: `Lignes de commande ${reference}`,
+        module: "pharmacie.fournisseurs", etablissementId: etablissement_id,
+      });
 
-      // L'email est une étape distincte de l'enregistrement de la commande :
-      // la commande reste valide même si l'envoi échoue, mais le statut réel
-      // de l'envoi est toujours tracé et remonté honnêtement à l'utilisateur.
-      const etab = await fetchEtabFromAuth(auth);
-      const lignesInfo = cart.map((it) => ({ nom: it.nom, quantite: it.quantite }));
-      const commandeInfo = {
-        fournisseur, lignes: lignesInfo,
-        dateLivraison, montantTotal, reference, etabNom: etab.nom, notes,
-      };
-
-      // Un seul PDF généré, réutilisé pour les deux emails (fournisseur +
-      // notification interne). null si la génération échoue — les emails
-      // partent alors sans pièce jointe plutôt que d'être bloqués.
-      const pieceJointe = await genererPieceJointeBonCommande(commandeInfo);
-
-      let emailStatut = "non_envoye";
-      let emailErreur = null;
-      try {
-        await envoyerEmailCommande({ ...commandeInfo, pieceJointe });
-        emailStatut = "envoye";
-      } catch (emailErr) {
+      // L'email (fonction Edge send-app-email) ne peut physiquement pas partir
+      // hors-ligne — limite documentee par la mission, pas contournee : on ne
+      // tente meme pas l'appel reseau si `online` est faux, et le statut
+      // "echec" (deja affiche par l'ecran, badge rouge + message) explique
+      // pourquoi, au lieu de rester bloque en "en cours" ou de mentir avec
+      // un faux succes. La commande, elle, est bien enregistree (ou mise en
+      // file) normalement.
+      let emailStatut, emailErreur, notifInterneStatut = "envoye", notifInterneErreur = null;
+      if (!online) {
         emailStatut = "echec";
-        emailErreur = emailErr.message;
-      }
-      await updateCommande(commande.id, { email_statut: emailStatut, email_erreur: emailErreur });
-
-      let notifInterneStatut = "envoye";
-      let notifInterneErreur = null;
-      try {
-        await envoyerNotificationInterne({
-          ...commandeInfo, etablissement_id, userEmail: auth?.user?.email ?? "un utilisateur", pieceJointe,
-        });
-      } catch (notifErr) {
+        emailErreur = "Commande créée hors-ligne — l'envoi d'email nécessite une connexion. Renvoyez-la manuellement une fois reconnecté.";
         notifInterneStatut = "echec";
-        notifInterneErreur = notifErr.message;
+        notifInterneErreur = "Hors-ligne — notification interne non envoyée.";
+      } else {
+        const etab = await fetchEtabFromAuth(auth);
+        const lignesInfo = cart.map((it) => ({ nom: it.nom, quantite: it.quantite }));
+        const commandeInfo = {
+          fournisseur, lignes: lignesInfo,
+          dateLivraison, montantTotal, reference, etabNom: etab.nom, notes,
+        };
+        // Un seul PDF généré, réutilisé pour les deux emails (fournisseur +
+        // notification interne). null si la génération échoue — les emails
+        // partent alors sans pièce jointe plutôt que d'être bloqués.
+        const pieceJointe = await genererPieceJointeBonCommande(commandeInfo);
+        try {
+          await envoyerEmailCommande({ ...commandeInfo, pieceJointe });
+          emailStatut = "envoye";
+          emailErreur = null;
+        } catch (emailErr) {
+          emailStatut = "echec";
+          emailErreur = emailErr.message;
+        }
+        try {
+          await envoyerNotificationInterne({
+            ...commandeInfo, etablissement_id, userEmail: auth?.user?.email ?? "un utilisateur", pieceJointe,
+          });
+        } catch (notifErr) {
+          notifInterneStatut = "echec";
+          notifInterneErreur = notifErr.message;
+        }
       }
+      await enqueueOrRun("updateCommande", [commandeId, { email_statut: emailStatut, email_erreur: emailErreur }], {
+        description: `Statut email — commande ${reference}`,
+        module: "pharmacie.fournisseurs", etablissementId: etablissement_id,
+      });
 
-      onSaved({ emailStatut, emailErreur, notifInterneStatut, notifInterneErreur, fournisseurNom: fournisseur.nom, reference });
+      onSaved({ emailStatut, emailErreur, notifInterneStatut, notifInterneErreur, fournisseurNom: fournisseur.nom, reference, commandeQueued });
       onClose();
     } catch (e) {
       setFormError("Erreur : " + e.message);
@@ -994,6 +1035,7 @@ function CommandesTab({ etablissement_id, auth }) {
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function Fournisseurs() {
   const { auth } = useAuth();
+  const { enqueueOrRun } = useSyncQueue();
   const etablissement_id = auth?.etablissement_id ?? null;
   const location = useLocation();
   const navigate = useNavigate();
@@ -1023,8 +1065,12 @@ export default function Fournisseurs() {
   const handleToggleActif = async (f) => {
     setToggling(f.id);
     try {
-      await updateFournisseur(f.id, { actif: !f.actif });
-      success(f.actif ? `${f.nom} désactivé` : `${f.nom} réactivé`);
+      const { queued } = await enqueueOrRun("updateFournisseur", [f.id, { actif: !f.actif }], {
+        description: `${f.actif ? "Désactivation" : "Réactivation"} — ${f.nom}`,
+        module: "pharmacie.fournisseurs", etablissementId: etablissement_id,
+      });
+      const label = f.actif ? `${f.nom} désactivé` : `${f.nom} réactivé`;
+      success(queued ? `${label} — en attente de synchronisation` : label);
       refetch();
     } catch (e) {
       toastError("Erreur : " + e.message);
@@ -1052,14 +1098,14 @@ export default function Fournisseurs() {
       {addModal && (
         <FournisseurModal
           onClose={() => setAddModal(false)}
-          onSaved={() => { success("Fournisseur ajouté avec succès"); refetch(); }}
+          onSaved={(queued) => { success(queued ? "Fournisseur ajouté — en attente de synchronisation" : "Fournisseur ajouté avec succès"); refetch(); }}
         />
       )}
       {editModal && (
         <FournisseurModal
           initial={editModal}
           onClose={() => setEditModal(null)}
-          onSaved={() => { success(`${editModal.nom} mis à jour`); refetch(); setEditModal(null); }}
+          onSaved={(queued) => { success(queued ? `${editModal.nom} mis à jour — en attente de synchronisation` : `${editModal.nom} mis à jour`); refetch(); setEditModal(null); }}
         />
       )}
       {commandModal && (
@@ -1069,14 +1115,16 @@ export default function Fournisseurs() {
           auth={auth}
           prefillLignes={pendingPrefill}
           onClose={() => setCommandModal(null)}
-          onSaved={({ emailStatut, emailErreur, notifInterneStatut, notifInterneErreur, fournisseurNom, reference }) => {
+          onSaved={({ emailStatut, emailErreur, notifInterneStatut, notifInterneErreur, fournisseurNom, reference, commandeQueued }) => {
             setPendingPrefill(null);
-            if (emailStatut === "envoye") {
+            if (commandeQueued) {
+              success(`Commande ${reference} enregistrée hors-ligne chez ${fournisseurNom} — en attente de synchronisation.`);
+            } else if (emailStatut === "envoye") {
               success(`Commande ${reference} envoyée chez ${fournisseurNom} — email de confirmation transmis.`);
             } else {
               toastError(`Commande ${reference} enregistrée chez ${fournisseurNom}, mais l'email n'a pas pu être envoyé : ${emailErreur}`);
             }
-            if (notifInterneStatut === "echec") {
+            if (notifInterneStatut === "echec" && !commandeQueued) {
               toastError(`Commande ${reference} : la notification interne n'a pas pu être envoyée : ${notifInterneErreur}`);
             }
           }}
