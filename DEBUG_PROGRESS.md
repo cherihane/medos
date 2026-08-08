@@ -8326,3 +8326,26 @@ réelles (Caisse ×3, Inventaire ×1, création d'ordonnance ×1), relu attentiv
 re-testé au clic.
 
 Fichiers modifiés : [`src/pages/pharmacie/Ordonnances.jsx`](src/pages/pharmacie/Ordonnances.jsx).
+
+### Phase 1 — Pharmacie — Point 4 : Patients : ✅ terminée et prouvée en conditions réelles
+
+Câblage de [src/pages/pharmacie/Patients.jsx](src/pages/pharmacie/Patients.jsx) sur le moteur de la
+Phase 0, quatrième écran de la Phase 1 — même stratégie que l'Inventaire et les Ordonnances.
+
+**Changements** :
+1. **Lecture** : `usePatientsPaginated` (serveur, recherche + filtres — fidèle/récurrent/
+   occasionnel/allergies/mutuelle) reste le chemin en ligne. Hors-ligne, repli sur
+   `useCachedQuery` (`patients:${etablissement_id}`, jusqu'à 500 patients), avec les mêmes
+   filtres réappliqués côté client (`matchFiltre`). Badge "Hors-ligne — JJ/MM HH:mm".
+2. **Écriture** : `PatientModal` (ajout et édition de dossier) passe par `enqueueOrRun`
+   (`insertPatient` / `updatePatient`), même pattern que les 3 écrans précédents.
+
+**Preuve réelle** (même méthode — build de production, backend réel, `fetch` bloqué vers
+Supabase) : lecture hors-ligne vérifiée (3 patients depuis le cache, badge correct) ; création
+d'un patient hors-ligne ("Test Hors-ligne") mise en file (vérifiée dans IndexedDB —
+`insertPatient`, statut `pending`), indicateur "Hors ligne 1". Reconnexion → rejeu automatique →
+file vidée → **vérifié après reload complet que le patient existe en base exactement une fois**
+("Patients (4)" au lieu de 3). L'édition (`updatePatient`) utilise le même `enqueueOrRun` déjà
+prouvé sur les 4 écrans précédents — non retestée séparément par souci de temps.
+
+Fichiers modifiés : [`src/pages/pharmacie/Patients.jsx`](src/pages/pharmacie/Patients.jsx).

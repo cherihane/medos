@@ -1,14 +1,28 @@
 import { colors } from "../../theme";
-import { useState } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { usePatientsPaginated } from "../../hooks/useSupabaseData";
 import Pagination from "../../components/Pagination";
-import { insertPatient, updatePatient } from "../../hooks/useMutations";
 import { useIsMobile } from "../../hooks/useWindowSize";
 import { useAuth } from "../../context/AuthContext";
+import { useNetwork } from "../../context/NetworkContext";
+import { useSyncQueue } from "../../context/SyncContext";
+import { useCachedQuery } from "../../offline/useCachedQuery";
+import { supabase } from "../../supabaseClient";
+
+const PATIENTS_PAGE_SIZE = 20;
+
+function matchFiltre(p, filtre) {
+  if (filtre === "avec_allergies") return Array.isArray(p.allergies) && p.allergies.length > 0;
+  if (filtre === "avec_mutuelle")  return !!p.mutuelle;
+  if (filtre === "fidele")         return (p.nb_visites ?? 0) >= 5;
+  if (filtre === "recurrent")      return (p.nb_visites ?? 0) >= 2 && (p.nb_visites ?? 0) < 5;
+  if (filtre === "occasionnel")    return (p.nb_visites ?? 0) === 1;
+  return true;
+}
 
 function calcAge(dateNaissance) {
   if (!dateNaissance) return "—";
@@ -37,6 +51,7 @@ function Skeleton() {
 function PatientModal({ patient, onClose, onSaved }) {
   const { error: showError } = useToast();
   const { auth } = useAuth();
+  const { enqueueOrRun } = useSyncQueue();
   const isEdit = !!patient;
   const [form, setForm] = useState({
     prenom:        patient?.prenom        ?? "",
@@ -70,12 +85,16 @@ function PatientModal({ patient, onClose, onSaved }) {
         mutuelle:         form.mutuelle || null,
         etablissement_id: auth?.etablissement_id ?? null,
       };
-      if (isEdit) {
-        await updatePatient(patient.id, payload);
-      } else {
-        await insertPatient(payload);
-      }
-      onSaved();
+      const { queued } = isEdit
+        ? await enqueueOrRun("updatePatient", [patient.id, payload], {
+            description: `Édition dossier — ${payload.prenom} ${payload.nom}`,
+            module: "pharmacie.patients", etablissementId: auth?.etablissement_id ?? null,
+          })
+        : await enqueueOrRun("insertPatient", [payload], {
+            description: `Nouveau patient — ${payload.prenom} ${payload.nom}`,
+            module: "pharmacie.patients", etablissementId: auth?.etablissement_id ?? null,
+          });
+      onSaved(queued);
       onClose();
     } catch (e) {
       showError("Erreur : " + e.message);
@@ -137,10 +156,44 @@ function PatientModal({ patient, onClose, onSaved }) {
 
 export default function Patients() {
   const isMobile = useIsMobile();
+  const { auth } = useAuth();
+  const { online } = useNetwork();
 
   const [search, setSearch]   = useState("");
   const [filtre, setFiltre]   = useState("");
-  const { data: patients, loading, error, total, page, setPage, totalPages, refetch } = usePatientsPaginated(search, 20, filtre);
+
+  // Meme strategie que l'Inventaire et les Ordonnances : pagination/recherche
+  // serveur en ligne, repli sur la derniere copie complete connue en cache
+  // hors-ligne (filtree/paginee cote client).
+  const paginated = usePatientsPaginated(search, PATIENTS_PAGE_SIZE, filtre);
+  const patientsKey = `patients:${auth?.etablissement_id ?? "global"}`;
+  const fetchAllPatients = useCallback(async () => {
+    const { data, error } = await supabase.from("patients").select("*").order("nom").limit(500);
+    if (error) throw error;
+    return data ?? [];
+  }, []);
+  const cachedPatients = useCachedQuery(patientsKey, fetchAllPatients, [patientsKey]);
+  const [offlinePage, setOfflinePage] = useState(0);
+  useEffect(() => { setOfflinePage(0); }, [search, filtre]);
+  const offlineFiltered = useMemo(() => {
+    const list = cachedPatients.data ?? [];
+    const s = search.trim().toLowerCase();
+    return list.filter((p) =>
+      (!s || `${p.prenom ?? ""} ${p.nom ?? ""}`.toLowerCase().includes(s)) && matchFiltre(p, filtre)
+    );
+  }, [cachedPatients.data, search, filtre]);
+  const offlineTotalPages = Math.max(1, Math.ceil(offlineFiltered.length / PATIENTS_PAGE_SIZE));
+  const offlinePageData = offlineFiltered.slice(offlinePage * PATIENTS_PAGE_SIZE, offlinePage * PATIENTS_PAGE_SIZE + PATIENTS_PAGE_SIZE);
+
+  const patients   = online ? paginated.data       : offlinePageData;
+  const loading    = online ? paginated.loading    : cachedPatients.loading;
+  const error      = online ? paginated.error      : cachedPatients.error;
+  const total      = online ? paginated.total      : offlineFiltered.length;
+  const page       = online ? paginated.page       : offlinePage;
+  const setPage    = online ? paginated.setPage    : setOfflinePage;
+  const totalPages = online ? paginated.totalPages : offlineTotalPages;
+  const refetch    = online ? paginated.refetch    : cachedPatients.refetch;
+
   const { toasts, success, error: showError } = useToast();
   const [selected, setSelected] = useState(null);
   const [modal, setModal] = useState(null); // null | "add" | "edit"
@@ -154,9 +207,10 @@ export default function Patients() {
         <PatientModal
           patient={modal === "edit" ? selected : null}
           onClose={() => setModal(null)}
-          onSaved={() => {
+          onSaved={(queued) => {
             refetch();
-            success(modal === "edit" ? "Dossier patient mis à jour" : "Patient ajouté avec succès");
+            const label = modal === "edit" ? "Dossier patient mis à jour" : "Patient ajouté avec succès";
+            success(queued ? `${label} — en attente de synchronisation` : label);
           }}
         />
       )}
@@ -166,8 +220,13 @@ export default function Patients() {
         <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
           <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: colors.navy }}>
+              <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: colors.navy, display: "flex", alignItems: "center", gap: 8 }}>
                 Patients ({loading ? "…" : total})
+                {!online && (
+                  <span style={{ fontSize: 11, fontWeight: 600, color: "#B45309", backgroundColor: "#FFFBEB", border: "1px solid #FCD34D", borderRadius: 8, padding: "2px 8px" }}>
+                    Hors-ligne — {cachedPatients.cachedAt ? new Date(cachedPatients.cachedAt).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "?"}
+                  </span>
+                )}
               </h3>
               <div style={{ display: "flex", gap: 8 }}>
                 <input
