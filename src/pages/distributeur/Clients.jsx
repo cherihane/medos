@@ -1,10 +1,13 @@
 import { colors } from "../../theme";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import Layout from "../../components/Layout";
 import Modal from "../../components/Modal";
 import AjouterClientModal from "../../components/AjouterClientModal";
-import { useDistributeurClients } from "../../hooks/useSupabaseData";
-import { updateDistributeurClient } from "../../hooks/useMutations";
+import { useAuth } from "../../context/AuthContext";
+import { useNetwork } from "../../context/NetworkContext";
+import { useSyncQueue } from "../../context/SyncContext";
+import { useCachedQuery } from "../../offline/useCachedQuery";
+import { supabase } from "../../supabaseClient";
 
 const inputStyle = {
   width: "100%", padding: "9px 12px", border: "1.5px solid var(--border)",
@@ -19,6 +22,7 @@ const labelStyle = { fontSize: 12, fontWeight: 600, color: colors.text, display:
 // type précis) — celles-ci appartiennent au distributeur et sont éditables
 // ici quel que soit le type de client, MedOS ou manuel.
 function FicheModal({ client, onClose, onSaved }) {
+  const { enqueueOrRun } = useSyncQueue();
   const [form, setForm] = useState({
     contact_nom: client.contact_nom || "",
     horaires_ouverture: client.horaires_ouverture || "",
@@ -34,14 +38,17 @@ function FicheModal({ client, onClose, onSaved }) {
     setSaving(true);
     setErr(null);
     try {
-      await updateDistributeurClient(client.relationId, {
+      const { queued } = await enqueueOrRun("updateDistributeurClient", [client.relationId, {
         contact_nom: form.contact_nom.trim() || null,
         horaires_ouverture: form.horaires_ouverture.trim() || null,
         numero_licence: form.numero_licence.trim() || null,
         notes_internes: form.notes_internes.trim() || null,
         type_etablissement_precis: form.type_etablissement_precis.trim() || null,
+      }], {
+        description: `Fiche client — ${client.nom}`,
+        module: "distributeur.clients",
       });
-      onSaved();
+      onSaved(queued);
       onClose();
     } catch (e) {
       setErr("Erreur : " + e.message);
@@ -124,7 +131,50 @@ function FicheModal({ client, onClose, onSaved }) {
 // avec alertes de stock et historique d'achat détaillé vit dans Réseau clients ;
 // cet écran reste volontairement un simple répertoire de fiches.
 export default function Clients() {
-  const { data: relations, loading, error, refetch } = useDistributeurClients();
+  const { auth } = useAuth();
+  const { online } = useNetwork();
+  // useDistributeurClients() n'est pas paginé côté serveur (tout le
+  // répertoire est chargé en une fois) — repli direct sur useCachedQuery
+  // avec la même requête, sans branche online/offline séparée.
+  const relKey = `distributeur_clients:${auth?.etablissement_id ?? "global"}`;
+  const fetchAllRelations = useCallback(async () => {
+    const { data, error } = await supabase.from("distributeur_clients").select(`
+      id, source, created_at,
+      nom_manuel, adresse_manuel, ville_manuel, contact_manuel, telephone_manuel, email_manuel,
+      contact_nom, horaires_ouverture, numero_licence, notes_internes, type_etablissement_precis,
+      client:client_etablissement_id ( id, nom, ville, type, email, telephone, actif, derniere_connexion )
+    `).order("created_at", { ascending: false }).limit(500);
+    if (error) throw error;
+    return data ?? [];
+  }, []);
+  const { data: relationsRaw, loading, error, refetch, fromCache, cachedAt } = useCachedQuery(relKey, fetchAllRelations, [relKey]);
+  // Même enrichissement que useDistributeurClients (Point 8 — fiche +
+  // repli manuel/MedOS), reproduit ici a l'identique pour ne pas toucher au
+  // hook partagé (utilisé aussi par ReseauClients.jsx, non audité cette passe).
+  const fiche = (r) => ({
+    contact_nom:               r.contact_nom || r.contact_manuel || "",
+    horaires_ouverture:        r.horaires_ouverture || "",
+    numero_licence:            r.numero_licence || "",
+    notes_internes:            r.notes_internes || "",
+    type_etablissement_precis: r.type_etablissement_precis || "",
+  });
+  const relations = relationsRaw.map((r) => ({
+    ...r,
+    client: r.client ? { ...r.client, relationId: r.id, ...fiche(r) } : {
+      id: r.id,
+      relationId: r.id,
+      nom: r.nom_manuel,
+      ville: r.ville_manuel,
+      adresse: r.adresse_manuel,
+      type: "manuel",
+      email: r.email_manuel,
+      telephone: r.telephone_manuel,
+      actif: true,
+      derniere_connexion: null,
+      estManuel: true,
+      ...fiche(r),
+    },
+  }));
   const etabs = relations.map((r) => r.client).filter(Boolean);
   const [ficheModal, setFicheModal] = useState(null);
   const [showModal, setShowModal] = useState(false);
@@ -146,7 +196,7 @@ export default function Clients() {
         <FicheModal
           client={ficheModal}
           onClose={() => setFicheModal(null)}
-          onSaved={() => { showToast("Fiche mise à jour"); refetch(); }}
+          onSaved={(queued) => { showToast(queued ? "Fiche mise à jour — en attente de synchronisation" : "Fiche mise à jour"); refetch(); }}
         />
       )}
       {showModal && (
@@ -164,8 +214,13 @@ export default function Clients() {
 
       <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
         <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: colors.navy }}>
+          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: colors.navy, display: "flex", alignItems: "center", gap: 8 }}>
             Vos clients ({loading ? "…" : etabs.length})
+            {!online && fromCache && (
+              <span style={{ fontSize: 11, fontWeight: 600, color: "#B45309", backgroundColor: "#FFFBEB", border: "1px solid #FCD34D", borderRadius: 8, padding: "2px 8px" }}>
+                Hors-ligne — {cachedAt ? new Date(cachedAt).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "?"}
+              </span>
+            )}
           </h3>
           <button onClick={() => setShowModal(true)} style={{ padding: "7px 14px", backgroundColor: "#F59E0B", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
             + Ajouter un client

@@ -1,6 +1,15 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { useAuth } from "../context/AuthContext";
+import { SyncProvider } from "../context/SyncContext";
 import AjouterClientModal from "./AjouterClientModal";
+
+function renderModal(props) {
+  return render(
+    <SyncProvider>
+      <AjouterClientModal {...props} />
+    </SyncProvider>
+  );
+}
 
 // Bug signalé (session 11) : "l'utilisatrice ne voit que le mode MedOS". Le
 // onClick était toujours correct (fonctionnel), mais le style — onglet actif
@@ -25,7 +34,7 @@ beforeEach(() => {
 });
 
 test("les deux onglets MedOS et manuel sont présents, avec un style visuellement distinct pour celui actif", () => {
-  render(<AjouterClientModal onClose={() => {}} onSaved={() => {}} />);
+  renderModal({ onClose: () => {}, onSaved: () => {} });
 
   const btnMedOS = screen.getByRole("button", { name: "Client MedOS" });
   const btnManuel = screen.getByRole("button", { name: "Client manuel" });
@@ -38,7 +47,7 @@ test("les deux onglets MedOS et manuel sont présents, avec un style visuellemen
 });
 
 test("cliquer sur \"Client manuel\" fait bien apparaître le formulaire manuel (pas seulement visuel, fonctionnel)", () => {
-  render(<AjouterClientModal onClose={() => {}} onSaved={() => {}} />);
+  renderModal({ onClose: () => {}, onSaved: () => {} });
 
   // Mode MedOS par défaut : champ email visible, pas le formulaire manuel.
   expect(screen.getByPlaceholderText("contact@pharmacie.com")).toBeInTheDocument();
@@ -56,7 +65,7 @@ test("cliquer sur \"Client manuel\" fait bien apparaître le formulaire manuel (
 });
 
 test("le bouton \"Ajouter le client\" en mode manuel exige un nom mais rien d'autre", () => {
-  render(<AjouterClientModal onClose={() => {}} onSaved={() => {}} />);
+  renderModal({ onClose: () => {}, onSaved: () => {} });
   fireEvent.click(screen.getByRole("button", { name: "Client manuel" }));
   fireEvent.click(screen.getByRole("button", { name: "Ajouter le client" }));
   expect(screen.getByText("Le nom du client est obligatoire.")).toBeInTheDocument();

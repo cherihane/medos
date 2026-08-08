@@ -8555,3 +8555,79 @@ Reconnexion → rejeu automatique → file vidée → **vérifié après reload 
 n'existe plus en base (0 planifiée au lieu de 1, 3 livraisons restantes).
 
 Fichiers modifiés : [`src/pages/distributeur/Livraisons.jsx`](src/pages/distributeur/Livraisons.jsx).
+
+### Phase 2 — Point 4 : Clients : ✅ terminée et prouvée en conditions réelles
+
+Câblage de [src/pages/distributeur/Clients.jsx](src/pages/distributeur/Clients.jsx) et du
+composant partagé [src/components/AjouterClientModal.jsx](src/components/AjouterClientModal.jsx)
+(aussi utilisé par `ReseauClients.jsx`, non auditée séparément cette passe — seul l'ajout de
+client en bénéficie automatiquement, le reste de cet écran enrichi n'a pas été câblé).
+
+**Changements** :
+1. **Lecture** : `useDistributeurClients()` (non paginé côté serveur, tout chargé en un appel)
+   remplacé par un `useCachedQuery` local reproduisant exactement la même requête et le même
+   enrichissement (Point 8 — fusion des annotations de fiche, repli client manuel/MedOS) sans
+   toucher au hook partagé. Badge "Hors-ligne — JJ/MM HH:mm".
+2. **Ajout d'un client** (`AjouterClientModal`, deux modes) :
+   - **Mode "Client manuel"** (le cas explicitement visé par le commentaire du code : "beaucoup
+     de clients réels n'ont pas d'outils informatiques") — insertion pure, aucune dépendance
+     réseau pour la décision métier → câblée sur `enqueueOrRun`, cas d'usage hors-ligne
+     parfaitement légitime (un commercial sur le terrain enregistre un nouveau client sans
+     réseau).
+   - **Mode "Client MedOS"** (recherche d'un établissement par email exact) : la recherche
+     elle-même reste en ligne uniquement (nécessite l'état actuel de la base — pas de cache d'un
+     annuaire d'établissements par email, pour rester cohérent avec le choix "jamais un annuaire
+     parcourable" déjà fait dans le code) ; une fois un établissement trouvé, le rattachement
+     final passe aussi par `enqueueOrRun` (insertion pure, sûre à mettre en file si le réseau
+     tombe entre la recherche et la confirmation).
+3. **Édition de fiche client** (`FicheModal`, notes internes/contact/licence/horaires) : passe par
+   `enqueueOrRun`.
+
+**Test existant préservé** : `AjouterClientModal.test.js` enveloppé dans `<SyncProvider>` (le
+composant dépend maintenant du contexte de synchronisation) — comportement fonctionnel et visuel
+inchangé, les 3 tests passent toujours.
+
+**Preuve réelle** (build de production, backend réel, compte distributeur réel, `fetch` bloqué) :
+lecture hors-ligne vérifiée (2 clients depuis le cache, badge correct) ; ajout d'un client manuel
+("Pharmacie du Fleuve", Pointe-Noire) avec le réseau coupé → mis en file (vérifié dans IndexedDB).
+Reconnexion → rejeu automatique → file vidée → **vérifié après reload complet** que le client
+existe en base exactement une fois ("Vos clients (3)" au lieu de 2).
+
+Fichiers modifiés : [`src/pages/distributeur/Clients.jsx`](src/pages/distributeur/Clients.jsx),
+[`src/components/AjouterClientModal.jsx`](src/components/AjouterClientModal.jsx),
+[`src/components/AjouterClientModal.test.js`](src/components/AjouterClientModal.test.js).
+
+---
+
+## PHASE 2 TERMINÉE — Distributeur complet hors-ligne (4/4 écrans)
+
+Entrepôt, Traçabilité, Livraisons, Clients : tous câblés sur le moteur de la Phase 0 et prouvés en
+conditions réelles (build de production, backend Supabase réel, réseau réellement bloqué).
+
+**Ce qui fonctionne maintenant hors-ligne** : consultation du stock entrepôt, des lots, des
+livraisons et du répertoire clients depuis la dernière copie connue (avec horodatage visible) ;
+réception de livraison fabricant (génération de lot MedOS certifié, y compris nouveau produit) ;
+commande fabricant (y compris nouveau fabricant) ; édition/archivage de médicament ; CRUD
+fabricant ; ajout d'un client manuel et édition de fiche client ; suppression d'une livraison
+encore planifiée. Toutes ces écritures se synchronisent automatiquement et sans doublon au retour
+du réseau.
+
+**Limites physiques/sécurité documentées, pas contournées** (conformes aux instructions de la
+mission) :
+- Vérification d'authenticité anti-contrefaçon (Traçabilité) : **bloquée** hors-ligne plutôt que
+  dégradée sur le cache — un résultat basé sur une copie périmée serait trompeur pour une
+  fonction de détection de fraude.
+- Création/expédition/réception de livraison (Livraisons) : reste en ligne uniquement — repose
+  sur des RPC atomiques dont le résultat exact pilote immédiatement une décision d'interface
+  (échec partiel, stock insuffisant), pas compatible avec une file d'attente asynchrone sans
+  perdre ce retour immédiat essentiel.
+- Suppression définitive d'un médicament (Entrepôt) : reste en ligne uniquement — le contrôle de
+  sécurité préalable (dépendances) nécessite une lecture à jour.
+- Envoi d'email de commande fabricant : jamais tenté hors-ligne, statut honnêtement affiché.
+
+**Périmètre clarifié** : pas de "Banque de sang" ni de "Fournisseurs" dédiés côté distributeur
+(le distributeur a des "Fabricants" en amont, déjà couverts). `ReseauClients.jsx` (vue enrichie
+avec alertes de stock et historique d'achat) n'a pas été auditée séparément — seul son usage
+partagé d'`AjouterClientModal` bénéficie du câblage.
+
+Prochaine étape : Phase 3 — Hôpital (le plus gros module, en dernier comme prévu par la mission).

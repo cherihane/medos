@@ -8,7 +8,8 @@
 import { colors } from "../theme";
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { insertDistributeurClient, rechercherClientParEmail } from "../hooks/useMutations";
+import { useSyncQueue } from "../context/SyncContext";
+import { rechercherClientParEmail } from "../hooks/useMutations";
 
 const inputStyle = {
   width: "100%", padding: "9px 13px", border: "1.5px solid var(--border)",
@@ -20,6 +21,7 @@ const EMPTY_MANUEL = { nom: "", adresse: "", ville: "", contact: "", telephone: 
 
 export default function AjouterClientModal({ onClose, onSaved }) {
   const { auth } = useAuth();
+  const { enqueueOrRun } = useSyncQueue();
   const [mode, setMode] = useState("medos"); // "medos" | "manuel"
 
   // ── mode MedOS (recherche par email) ──────────────────────────────────────
@@ -55,11 +57,14 @@ export default function AjouterClientModal({ onClose, onSaved }) {
     setSaving(true);
     setErreur(null);
     try {
-      await insertDistributeurClient({
+      const { queued } = await enqueueOrRun("insertDistributeurClient", [{
         distributeur_id: auth?.etablissement_id,
         client_etablissement_id: found.id,
+      }], {
+        description: `Nouveau client — ${found.nom}`,
+        module: "distributeur.clients", etablissementId: auth?.etablissement_id,
       });
-      onSaved(`${found.nom} ajouté à votre réseau clients.`);
+      onSaved(queued ? `${found.nom} ajouté — en attente de synchronisation.` : `${found.nom} ajouté à votre réseau clients.`);
       onClose();
     } catch (e) {
       setErreur("Erreur : " + e.message);
@@ -73,7 +78,7 @@ export default function AjouterClientModal({ onClose, onSaved }) {
     setSaving(true);
     setErreur(null);
     try {
-      await insertDistributeurClient({
+      const { queued } = await enqueueOrRun("insertDistributeurClient", [{
         distributeur_id: auth?.etablissement_id,
         nom_manuel:       manuel.nom.trim(),
         adresse_manuel:   manuel.adresse.trim() || null,
@@ -81,8 +86,11 @@ export default function AjouterClientModal({ onClose, onSaved }) {
         contact_manuel:   manuel.contact.trim() || null,
         telephone_manuel: manuel.telephone.trim() || null,
         email_manuel:     manuel.email.trim() || null,
+      }], {
+        description: `Nouveau client (manuel) — ${manuel.nom.trim()}`,
+        module: "distributeur.clients", etablissementId: auth?.etablissement_id,
       });
-      onSaved(`${manuel.nom.trim()} ajouté à votre réseau clients.`);
+      onSaved(queued ? `${manuel.nom.trim()} ajouté — en attente de synchronisation.` : `${manuel.nom.trim()} ajouté à votre réseau clients.`);
       onClose();
     } catch (e) {
       setErreur("Erreur : " + e.message);
