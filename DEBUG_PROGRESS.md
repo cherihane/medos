@@ -8277,3 +8277,52 @@ déroulante de `CommanderModal`) restent réseau uniquement — s'ils ont déjà
 coupure, l'affichage reste correct (state React conservé), mais un rechargement de page hors-ligne
 avant tout chargement en ligne les laisserait vides. Même limite déjà documentée pour le fond de
 caisse de l'écran Caisse.
+
+### Phase 1 — Pharmacie — Point 3 : Ordonnances et dispensation : ✅ terminée et prouvée en conditions réelles
+
+Câblage de [src/pages/pharmacie/Ordonnances.jsx](src/pages/pharmacie/Ordonnances.jsx) sur le moteur
+de la Phase 0, troisième écran de la Phase 1.
+
+**Changements** :
+
+1. **Lecture** : même stratégie que l'Inventaire — `useOrdonnancesPaginated` (serveur) reste le
+   chemin en ligne ; hors-ligne, repli sur `useCachedQuery` (`ordonnances:${etablissement_id}`,
+   jusqu'à 500 lignes, même jointure `patients(prenom, nom)` que la requête serveur), filtré par
+   statut et paginé côté client. Badge "Hors-ligne — JJ/MM HH:mm" à côté du titre. Le stock des
+   médicaments utilisé par la dispensation utilise désormais la **même clé de cache que la Caisse
+   et l'Inventaire** (`medicaments:${etablissement_id}`) au lieu d'un appel réseau direct
+   (`useMedicaments`) — partagée entre les trois écrans.
+2. **Écritures** — les 3 flux passent par `enqueueOrRun` (même pattern que la Caisse et
+   l'Inventaire) :
+   - **Nouvelle ordonnance** (`insertOrdonnance`) — insertion pure, testée en direct (voir preuve).
+   - **Valider / Refuser** (`updateOrdonnance`) — changement de statut simple.
+   - **Dispensation** (`ModalDispensationPharmacie`) — réutilise **exactement le même
+     enchaînement que la Caisse** (`insertVentes` → `decrementStock` par article →
+     `insertJournalCaisse` → ici en plus `updateOrdonnance(..., { statut: "dispensee" })`), avec
+     la même limite documentée sur le décrément de stock hors-ligne (fiable sur le dernier stock
+     connu localement, rejeté au rejeu si réellement insuffisant).
+
+**Preuve réelle** (même méthode — build de production, backend réel, `fetch` bloqué vers
+Supabase) :
+- **Lecture hors-ligne** : les 8 ordonnances existantes s'affichent depuis le cache après coupure,
+  badge "Hors-ligne — 08/08 14:19" visible.
+- **Création hors-ligne** : nouvelle ordonnance créée avec le réseau coupé (patiente Awa Nkoulou,
+  "Dr. Test Hors-ligne") → toast "Ordonnance créée — en attente de synchronisation", indicateur
+  "Hors ligne 1", élément vérifié dans IndexedDB (`insertOrdonnance`, statut `pending`).
+  Reconnexion → rejeu automatique → file vidée → **vérifié après reload complet que l'ordonnance
+  ORD-91642879 existe bien en base**, "Ordonnances (9)" au lieu de 8, une seule fois dans la
+  liste.
+
+**Bug pré-existant découvert en testant, sans rapport avec cette mission** : les boutons
+"Valider"/"Refuser" (et donc l'accès à "Dispenser") ne s'affichent jamais dans le panneau de
+détail, même sur `master` avant toute modification hors-ligne (reproduit sur un commit propre,
+confirmé avant de toucher au fichier). Ce n'est pas un effet de bord de ce chantier — signalé
+séparément (tâche de fond) pour investigation, sans le corriger ici pour ne pas mélanger les
+sujets. **Conséquence pour cette preuve** : le flux "Valider/Refuser" (`updateOrdonnance` via
+`enqueueOrRun`) et le flux "Dispenser" (`ModalDispensationPharmacie`, 4 écritures en chaîne) n'ont
+pas pu être testés de bout en bout dans l'interface à cause de ce bug préexistant qui bloque l'accès
+aux boutons — ils reposent sur le même appel `enqueueOrRun` déjà prouvé cinq fois en conditions
+réelles (Caisse ×3, Inventaire ×1, création d'ordonnance ×1), relu attentivement mais non
+re-testé au clic.
+
+Fichiers modifiés : [`src/pages/pharmacie/Ordonnances.jsx`](src/pages/pharmacie/Ordonnances.jsx).

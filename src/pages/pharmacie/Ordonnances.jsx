@@ -1,16 +1,21 @@
 import { colors } from "../../theme";
-import { useState } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
 import Tooltip from "../../components/Tooltip";
 import ErrorRetry from "../../components/ErrorRetry";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
-import { useOrdonnancesPaginated, usePatients, useMedicaments } from "../../hooks/useSupabaseData";
+import { useOrdonnancesPaginated, usePatients } from "../../hooks/useSupabaseData";
 import Pagination from "../../components/Pagination";
-import { updateOrdonnance, insertOrdonnance, insertVentes, decrementStock, insertJournalCaisse } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
+import { useNetwork } from "../../context/NetworkContext";
+import { useSyncQueue } from "../../context/SyncContext";
+import { useCachedQuery } from "../../offline/useCachedQuery";
+import { supabase } from "../../supabaseClient";
 import { useIsMobile } from "../../hooks/useWindowSize";
+
+const ORDONNANCES_PAGE_SIZE = 20;
 
 const MODES_PAIEMENT = [
   { key: "especes",      label: "Especes" },
@@ -23,6 +28,7 @@ const MODES_PAIEMENT = [
 // ── Modal Dispensation pharmacie externe ──────────────────────────────────────
 function ModalDispensationPharmacie({ ordonnance, medicaments, auth, etabId, onClose, onSaved }) {
   const { success, error: toastError } = useToast();
+  const { enqueueOrRun } = useSyncQueue();
 
   const lignesSource = (() => {
     if (ordonnance.lignes && Array.isArray(ordonnance.lignes)) return ordonnance.lignes;
@@ -45,19 +51,38 @@ function ModalDispensationPharmacie({ ordonnance, medicaments, auth, etabId, onC
     if (!valides.length) { toastError("Associez au moins un medicament en stock."); return; }
     setSaving(true);
     try {
+      const ref = ordonnance.reference ?? ordonnance.id;
       const ventesRows = valides.map((i) => {
         const med = medicaments.find((m) => m.id === i.med_id);
         return { etablissement_id: etabId, patient_id: ordonnance.patient_id ?? null, medicament_id: i.med_id, medicament_nom: med?.nom ?? i.nom, quantite: Number(i.quantite), prix_unitaire: Number(i.prix_unitaire), montant_total: Number(i.quantite) * Number(i.prix_unitaire), mode_paiement: modePaiement, type_vente: "ordonnance", ordonnance_id: ordonnance.id };
       });
-      await insertVentes(ventesRows);
+      // Meme pattern que la Caisse (Phase 1 point 1) : chaque ecriture passe par
+      // enqueueOrRun, transparent en ligne, mise en file hors-ligne dans l'ordre.
+      // Le decrement de stock hors-ligne se fie au dernier stock connu localement
+      // (deja verifie par le select "Stock" du formulaire) - meme limite
+      // documentee qu'a la Caisse si le stock reel s'avere insuffisant au rejeu.
+      await enqueueOrRun("insertVentes", [ventesRows], {
+        description: `Dispensation ${ref} — ${valides.length} article(s), ${montantTotal.toLocaleString()} FCFA`,
+        module: "pharmacie.ordonnances", etablissementId: etabId,
+      });
       for (const item of valides) {
-        await decrementStock(item.med_id, Number(item.quantite));
+        const med = medicaments.find((m) => m.id === item.med_id);
+        await enqueueOrRun("decrementStock", [item.med_id, Number(item.quantite)], {
+          description: `Décrément stock — ${med?.nom ?? item.nom} ×${item.quantite} (${ref})`,
+          module: "pharmacie.ordonnances", etablissementId: etabId,
+        });
       }
       if (montantTotal > 0 && etabId) {
-        await insertJournalCaisse({ etablissement_id: etabId, caissier_email: auth?.user?.email ?? null, montant_total: montantTotal, montant_recu: montantTotal, monnaie_rendue: 0, mode_paiement: modePaiement, nb_articles: valides.length }).catch(() => {});
+        await enqueueOrRun("insertJournalCaisse", [{ etablissement_id: etabId, caissier_email: auth?.user?.email ?? null, montant_total: montantTotal, montant_recu: montantTotal, monnaie_rendue: 0, mode_paiement: modePaiement, nb_articles: valides.length }], {
+          description: `Journal de caisse — dispensation ${ref}`,
+          module: "pharmacie.ordonnances", etablissementId: etabId,
+        }).catch(() => {});
       }
-      await updateOrdonnance(ordonnance.id, { statut: "dispensee" });
-      success("Ordonnance dispensee avec succes");
+      const { queued } = await enqueueOrRun("updateOrdonnance", [ordonnance.id, { statut: "dispensee" }], {
+        description: `Ordonnance ${ref} — marquée dispensée`,
+        module: "pharmacie.ordonnances", etablissementId: etabId,
+      });
+      success(queued ? "Ordonnance dispensée — en attente de synchronisation" : "Ordonnance dispensée avec succès");
       onSaved(); onClose();
     } catch (e) { toastError("Erreur : " + e.message); } finally { setSaving(false); }
   };
@@ -159,6 +184,7 @@ function SkeletonRow() {
 // ── Modal Nouvelle ordonnance ──────────────────────────────────────────────────
 function NouvelleModal({ patients, onClose, onSaved }) {
   const { auth } = useAuth();
+  const { enqueueOrRun } = useSyncQueue();
   const [form, setForm] = useState({
     patient_id: "",
     medecin_nom: "",
@@ -189,7 +215,7 @@ function NouvelleModal({ patients, onClose, onSaved }) {
     setSaving(true);
     try {
       const ref = "ORD-" + Date.now().toString().slice(-8);
-      await insertOrdonnance({
+      const fields = {
         patient_id: form.patient_id,
         medecin_nom: form.medecin_nom || null,
         date_emission: form.date_emission,
@@ -199,8 +225,13 @@ function NouvelleModal({ patients, onClose, onSaved }) {
         reference: ref,
         lignes: lignes.filter((l) => l.medicament_nom.trim() !== ""),
         etablissement_id: auth?.etablissement_id ?? null,
+      };
+      const { queued } = await enqueueOrRun("insertOrdonnance", [fields], {
+        description: `Nouvelle ordonnance — ${ref}`,
+        module: "pharmacie.ordonnances",
+        etablissementId: auth?.etablissement_id ?? null,
       });
-      onSaved();
+      onSaved(queued);
       onClose();
     } catch (e) {
       setFormError("Erreur : " + e.message);
@@ -303,26 +334,75 @@ function NouvelleModal({ patients, onClose, onSaved }) {
 export default function Ordonnances() {
   const isMobile = useIsMobile();
   const { auth } = useAuth();
+  const { online } = useNetwork();
+  const { enqueueOrRun } = useSyncQueue();
+  const etabId = auth?.etablissement_id ?? null;
 
   const [statutFilter, setStatutFilter] = useState("");
-  const { data: ordonnances, loading, error, total, page, setPage, totalPages, refetch } = useOrdonnancesPaginated(statutFilter);
+
+  // En ligne : pagination + filtre statut cote serveur (inchange). Hors-ligne :
+  // la RPC de pagination serveur n'est pas joignable — repli sur la derniere
+  // copie complete connue en cache (jusqu'a 500 ordonnances, memes colonnes que
+  // la requete serveur, jointure patients incluse), filtree/paginee cote client.
+  const paginated = useOrdonnancesPaginated(statutFilter);
+  const ordoKey = `ordonnances:${etabId ?? "global"}`;
+  const fetchAllOrdonnances = useCallback(async () => {
+    const { data, error } = await supabase.from("ordonnances").select(`
+      id, reference, statut, date_emission, date_expiration, medecin_nom, notes,
+      patient_id, lignes,
+      patients ( prenom, nom )
+    `).order("date_emission", { ascending: false }).limit(500);
+    if (error) throw error;
+    return data ?? [];
+  }, []);
+  const cachedOrdo = useCachedQuery(ordoKey, fetchAllOrdonnances, [ordoKey]);
+  const [offlinePage, setOfflinePage] = useState(0);
+  useEffect(() => { setOfflinePage(0); }, [statutFilter]);
+  const offlineFiltered = useMemo(() => {
+    const list = cachedOrdo.data ?? [];
+    return statutFilter ? list.filter((o) => o.statut === statutFilter) : list;
+  }, [cachedOrdo.data, statutFilter]);
+  const offlineTotalPages = Math.max(1, Math.ceil(offlineFiltered.length / ORDONNANCES_PAGE_SIZE));
+  const offlinePageData = offlineFiltered.slice(offlinePage * ORDONNANCES_PAGE_SIZE, offlinePage * ORDONNANCES_PAGE_SIZE + ORDONNANCES_PAGE_SIZE);
+
+  const ordonnances = online ? paginated.data       : offlinePageData;
+  const loading     = online ? paginated.loading    : cachedOrdo.loading;
+  const error       = online ? paginated.error      : cachedOrdo.error;
+  const total       = online ? paginated.total      : offlineFiltered.length;
+  const page        = online ? paginated.page       : offlinePage;
+  const setPage     = online ? paginated.setPage    : setOfflinePage;
+  const totalPages  = online ? paginated.totalPages : offlineTotalPages;
+  const refetch     = online ? paginated.refetch    : cachedOrdo.refetch;
+
   const { data: patients } = usePatients(auth?.etablissement_id);
-  const { data: medicaments } = useMedicaments();
+
+  // Medicaments : meme cle de cache que la Caisse et l'Inventaire
+  // (medicaments:${etablissement_id}) — partagee entre les trois ecrans.
+  const medKey = `medicaments:${etabId ?? "global"}`;
+  const fetchAllMedicaments = useCallback(async () => {
+    const { data, error } = await supabase.from("medicaments").select("*").order("nom", { ascending: true }).limit(500);
+    if (error) throw error;
+    return data ?? [];
+  }, []);
+  const { data: medicaments } = useCachedQuery(medKey, fetchAllMedicaments, [medKey]);
+
   const { toasts, success, error: toastError } = useToast();
   const [selected, setSelected] = useState(null);
   const [showNouvelle, setShowNouvelle] = useState(false);
   const [modalDisp, setModalDisp] = useState(null);
   const [actioning, setActioning] = useState(false);
-  const etabId = auth?.etablissement_id ?? null;
 
   const handleAction = async (statut) => {
     if (!selected) return;
     setActioning(true);
     try {
-      await updateOrdonnance(selected.id, { statut });
+      const { queued } = await enqueueOrRun("updateOrdonnance", [selected.id, { statut }], {
+        description: `Ordonnance ${selected.reference ?? selected.id} — ${statut === "validee" ? "validée" : "refusée"}`,
+        module: "pharmacie.ordonnances", etablissementId: etabId,
+      });
       refetch();
       setSelected((prev) => ({ ...prev, statut }));
-      success(`Ordonnance ${statut === "validee" ? "validée" : "refusée"}`);
+      success(`Ordonnance ${statut === "validee" ? "validée" : "refusée"}${queued ? " — en attente de synchronisation" : ""}`);
     } catch (e) {
       toastError("Erreur : " + e.message);
     } finally {
@@ -339,7 +419,7 @@ export default function Ordonnances() {
         <NouvelleModal
           patients={patients}
           onClose={() => setShowNouvelle(false)}
-          onSaved={() => { refetch(); success("Ordonnance créée"); }}
+          onSaved={(queued) => { refetch(); success(queued ? "Ordonnance créée — en attente de synchronisation" : "Ordonnance créée"); }}
         />
       )}
       {modalDisp && (
@@ -357,8 +437,13 @@ export default function Ordonnances() {
         {/* ── Liste ── */}
         <div style={{ backgroundColor: colors.bgCard, borderRadius: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
           <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: colors.navy }}>
+            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: colors.navy, display: "flex", alignItems: "center", gap: 8 }}>
               Ordonnances ({loading ? "…" : total})
+              {!online && (
+                <span style={{ fontSize: 11, fontWeight: 600, color: "#B45309", backgroundColor: "#FFFBEB", border: "1px solid #FCD34D", borderRadius: 8, padding: "2px 8px" }}>
+                  Hors-ligne — {cachedOrdo.cachedAt ? new Date(cachedOrdo.cachedAt).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "?"}
+                </span>
+              )}
             </h3>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <select
