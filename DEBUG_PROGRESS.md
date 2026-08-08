@@ -8520,3 +8520,38 @@ est "indisponible", pas "vérifié depuis le cache".
   Entrepôt que le produit existe en base avec 150 unités (4 produits au total).
 
 Fichiers modifiés : [`src/pages/distributeur/Tracabilite.jsx`](src/pages/distributeur/Tracabilite.jsx).
+
+### Phase 2 — Point 3 : Livraisons : ✅ terminée et prouvée en conditions réelles (périmètre volontairement réduit, documenté)
+
+Câblage de [src/pages/distributeur/Livraisons.jsx](src/pages/distributeur/Livraisons.jsx) — avec
+une limite physique/métier importante à documenter clairement, comme demandé par la mission.
+
+**Décision de périmètre — la création/expédition/réception de livraison reste en ligne
+uniquement** : ces trois flux (`NouvelleLivraisonModal`, le changement de statut vers "Livrée",
+la modale d'édition d'une livraison) reposent sur des RPC atomiques
+(`expedier_ligne_livraison`, `ajuster_ligne_livraison`, `receive_livraison`) qui décrémentent/
+restituent le stock entrepôt **et** dont le résultat exact (`"ok"` / `"stock_insuffisant"` / ...)
+pilote **immédiatement** une décision d'interface (écran d'échec partiel, message de stock
+insuffisant affiché tout de suite à l'utilisateur). Contrairement au décrément de stock de la
+Caisse (Phase 1), qui ne conditionne aucune branche synchrone après coup, ici le résultat de la
+RPC EST la logique métier immédiate de l'écran. Mettre ces actions en file hors-ligne donnerait un
+faux sentiment de succès immédiat suivi d'un échec silencieux bien plus tard, potentiellement
+après que l'utilisateur a physiquement fait charger le camion. Volontairement laissé en ligne
+uniquement — limite physique documentée, pas contournée, dans le même esprit que la vérification
+d'authenticité de la Traçabilité (point 2) et le contrôle ABO/Rhésus prévu pour la Phase 3.
+
+**Ce qui est câblé sur le moteur hors-ligne** :
+1. **Lecture** : liste des livraisons (`useLivraisonsPaginated`, serveur) et catalogue
+   médicaments (même clé de cache partagée) basculent sur `useCachedQuery` hors-ligne — un
+   commercial/logisticien peut consulter tout l'historique et le statut des livraisons sans
+   réseau. Bandeau explicite indiquant clairement quelles actions restent indisponibles.
+2. **Suppression d'une livraison encore "Planifiée"** (jamais expédiée, donc sans impact stock —
+   la seule action destructive de l'écran sans RPC atomique) : passe par `enqueueOrRun`.
+
+**Preuve réelle** (build de production, backend réel, compte distributeur réel, `fetch` bloqué) :
+lecture hors-ligne vérifiée (4 livraisons depuis le cache, bandeau explicatif visible) ; suppression
+hors-ligne d'une livraison "Planifiée" (LIV-20666069) mise en file (vérifiée dans IndexedDB).
+Reconnexion → rejeu automatique → file vidée → **vérifié après reload complet** que la livraison
+n'existe plus en base (0 planifiée au lieu de 1, 3 livraisons restantes).
+
+Fichiers modifiés : [`src/pages/distributeur/Livraisons.jsx`](src/pages/distributeur/Livraisons.jsx).

@@ -1,16 +1,19 @@
 import { colors } from "../../theme";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Layout from "../../components/Layout";
 import Modal, { Field, Row, ModalFooter, inputStyle, selectStyle } from "../../components/Modal";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
-import { useLivraisonsPaginated, useDistributeurClients, useMedicaments, useLivraisonLignes } from "../../hooks/useSupabaseData";
+import { useLivraisonsPaginated, useDistributeurClients, useLivraisonLignes } from "../../hooks/useSupabaseData";
 import Pagination from "../../components/Pagination";
 import {
   updateLivraison, receiveLivraison,
-  deleteLivraison, ajusterLigneLivraison, annulerLivraison, updateLivraisonLigneDisponibilite,
+  ajusterLigneLivraison, annulerLivraison, updateLivraisonLigneDisponibilite,
 } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
+import { useNetwork } from "../../context/NetworkContext";
+import { useSyncQueue } from "../../context/SyncContext";
+import { useCachedQuery } from "../../offline/useCachedQuery";
 import { supabase } from "../../supabaseClient";
 import { fetchEtabFromAuth } from "../../utils/MedOSDocument";
 import NouvelleLivraisonModal, { printBonLivraison } from "../../components/NouvelleLivraisonModal";
@@ -532,11 +535,67 @@ function DetailModal({ livraison, destinataireNom, auth, onClose }) {
 
 export default function Livraisons() {
   const { auth } = useAuth();
+  const { online } = useNetwork();
+  const { enqueueOrRun } = useSyncQueue();
   const [filter, setFilter] = useState("tous");
-  const { data: livraisons, loading, error, total, page, setPage, totalPages, refetch } = useLivraisonsPaginated(filter);
+
+  // Creer/expedier/receptionner une livraison passe par des RPC atomiques
+  // (expedier_ligne_livraison, ajuster_ligne_livraison, receive_livraison)
+  // dont le resultat ("ok" | "stock_insuffisant" | ...) pilote immediatement
+  // une decision d'interface (ecran d'echec partiel, message de stock
+  // insuffisant) — verifier ce resultat en temps reel est le coeur meme de
+  // ces flux, pas un detail technique a masquer. Les mettre en file
+  // hors-ligne donnerait un faux sentiment de succes immediat suivi d'un
+  // echec silencieux bien plus tard. Volontairement laisses en ligne
+  // uniquement (limite documentee, comme la verification d'authenticite de
+  // la Tracabilite) — seules la lecture et la suppression d'une livraison
+  // (action simple, sans RPC atomique) sont cablees sur le moteur hors-ligne.
+  const paginated = useLivraisonsPaginated(filter);
+  const livKey = `livraisons:${auth?.etablissement_id ?? "global"}`;
+  const fetchAllLivraisons = useCallback(async () => {
+    let q = supabase.from("livraisons").select(`
+      id, statut, date_depart, date_arrivee_prevue, date_arrivee_reelle,
+      transporteur, numero_suivi, etablissement_id, distributeur_clients_id, created_at,
+      commande_id, email_statut, email_erreur,
+      cree_par_email, traite_par_email, expedie_par_email,
+      etablissements!livraisons_etablissement_id_fkey ( nom, ville ),
+      livraison_lignes ( id, medicament_id, medicament_nom, quantite, disponible )
+    `).order("created_at", { ascending: false }).limit(500);
+    const { data, error } = await q;
+    if (error) throw error;
+    return data ?? [];
+  }, []);
+  const cachedLiv = useCachedQuery(livKey, fetchAllLivraisons, [livKey]);
+  const [offlinePage, setOfflinePage] = useState(0);
+  useEffect(() => { setOfflinePage(0); }, [filter]);
+  const LIVRAISONS_PAGE_SIZE = 20;
+  const offlineFiltered = (filter && filter !== "tous")
+    ? (cachedLiv.data ?? []).filter((l) => l.statut === filter)
+    : (cachedLiv.data ?? []);
+  const offlineTotalPages = Math.max(1, Math.ceil(offlineFiltered.length / LIVRAISONS_PAGE_SIZE));
+  const offlinePageData = offlineFiltered.slice(offlinePage * LIVRAISONS_PAGE_SIZE, offlinePage * LIVRAISONS_PAGE_SIZE + LIVRAISONS_PAGE_SIZE);
+
+  const livraisons  = online ? paginated.data       : offlinePageData;
+  const loading     = online ? paginated.loading    : cachedLiv.loading;
+  const error       = online ? paginated.error      : cachedLiv.error;
+  const total       = online ? paginated.total      : offlineFiltered.length;
+  const page        = online ? paginated.page       : offlinePage;
+  const setPage     = online ? paginated.setPage    : setOfflinePage;
+  const totalPages  = online ? paginated.totalPages : offlineTotalPages;
+  const refetch     = online ? paginated.refetch    : cachedLiv.refetch;
+
   const { data: relations } = useDistributeurClients();
   const relationsById = Object.fromEntries(relations.map((r) => [r.id, r]));
-  const { data: medicaments } = useMedicaments(auth?.etablissement_id);
+
+  // Meme cle de cache partagee que l'Entrepot/la Tracabilite
+  const medKey = `medicaments:${auth?.etablissement_id ?? "global"}`;
+  const fetchAllMedicaments = useCallback(async () => {
+    const { data, error } = await supabase.from("medicaments").select("*").eq("etablissement_id", auth?.etablissement_id).order("nom", { ascending: true }).limit(500);
+    if (error) throw error;
+    return data ?? [];
+  }, [auth?.etablissement_id]);
+  const { data: medicaments } = useCachedQuery(medKey, fetchAllMedicaments, [medKey]);
+
   const { toasts, success, error: toastError } = useToast();
   const [showNouvelle, setShowNouvelle] = useState(false);
   const [editModal, setEditModal] = useState(null);
@@ -580,9 +639,12 @@ export default function Livraisons() {
     if (!window.confirm(`Supprimer définitivement la livraison ${l.numero_suivi} ? Cette action est irréversible.`)) return;
     setBusyId(l.id);
     try {
-      await deleteLivraison(l.id);
+      const { queued } = await enqueueOrRun("deleteLivraison", [l.id], {
+        description: `Suppression livraison — ${l.numero_suivi}`,
+        module: "distributeur.livraisons", etablissementId: auth?.etablissement_id,
+      });
       refetch();
-      success("Livraison supprimée.");
+      success(queued ? "Livraison — suppression en attente de synchronisation." : "Livraison supprimée.");
     } catch (e) {
       toastError("Erreur : " + e.message);
     } finally {
@@ -594,6 +656,11 @@ export default function Livraisons() {
     <Layout title="Livraisons" subtitle="Suivi des livraisons en temps réel">
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
       <Toast toasts={toasts} />
+      {!online && (
+        <div style={{ display: "inline-flex", marginBottom: 14, fontSize: 11, fontWeight: 600, color: "#B45309", backgroundColor: "#FFFBEB", border: "1px solid #FCD34D", borderRadius: 8, padding: "4px 10px" }}>
+          Hors-ligne — {cachedLiv.cachedAt ? new Date(cachedLiv.cachedAt).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "?"} · création/expédition/réception de livraison indisponibles (nécessitent une vérification de stock en temps réel), consultation et suppression toujours possibles.
+        </div>
+      )}
 
       {showNouvelle && (
         <NouvelleLivraisonModal
