@@ -11,9 +11,11 @@ import QrScanner from "../../components/QrScanner";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useVerificationLot, rechercherLotPourPrefill } from "../../hooks/useVerificationLot";
-import { useLots, useMedicaments } from "../../hooks/useSupabaseData";
-import { insertMedicament, insertLot, incrementStock } from "../../hooks/useMutations";
 import { useAuth } from "../../context/AuthContext";
+import { useNetwork } from "../../context/NetworkContext";
+import { useSyncQueue } from "../../context/SyncContext";
+import { useCachedQuery } from "../../offline/useCachedQuery";
+import { supabase } from "../../supabaseClient";
 
 const STATUTS = {
   certifie: { label: "Certifié MedOS",          color: "#16A34A", bg: "#DCFCE7", border: "#86EFAC" },
@@ -46,6 +48,7 @@ const labelStyle = { fontSize: 12, fontWeight: 600, color: colors.text, display:
 // de l'Inventaire pharmacie, via rechercherLotPourPrefill). Un numéro de lot
 // MedOS est généré automatiquement, un par médicament reçu.
 export function ModalScanEnregistrer({ nomInitial, fabricantInitial, codeScanne, medicaments, etablissement_id, onClose, onSuccess }) {
+  const { enqueueOrRun } = useSyncQueue();
   const [form, setForm] = useState({
     nom: nomInitial || "", dosage: "", forme: "", fabricant: fabricantInitial || "",
     quantite: "", date_fabrication: "", date_expiration: "",
@@ -91,9 +94,14 @@ export function ModalScanEnregistrer({ nomInitial, fabricantInitial, codeScanne,
     setSaving(true);
     setErr(null);
     try {
+      // Id genere cote client — meme pattern que la reception depuis l'ecran
+      // Entrepot (Phase 2 point 1) : le lot et l'increment de stock en ont
+      // besoin immediatement, y compris hors-ligne.
       let medicamentId = existant?.id;
       if (!medicamentId) {
-        const nouveau = await insertMedicament({
+        medicamentId = crypto.randomUUID();
+        await enqueueOrRun("insertMedicament", [{
+          id: medicamentId,
           nom: form.nom.trim(),
           dosage: form.dosage.trim() || null,
           forme: form.forme.trim() || null,
@@ -103,10 +111,12 @@ export function ModalScanEnregistrer({ nomInitial, fabricantInitial, codeScanne,
           stock_minimum: 10,
           prix_unitaire: form.prix_unitaire ? Number(form.prix_unitaire) : null,
           prix_achat: form.prix_achat ? Number(form.prix_achat) : null,
+        }], {
+          description: `Nouveau médicament (scan) — ${form.nom.trim()}`,
+          module: "distributeur.tracabilite", etablissementId: etablissement_id,
         });
-        medicamentId = nouveau.id;
       }
-      await insertLot({
+      await enqueueOrRun("insertLot", [{
         numero_lot: lotGenere,
         medicament_id: medicamentId,
         fabricant: form.fabricant.trim(),
@@ -115,9 +125,15 @@ export function ModalScanEnregistrer({ nomInitial, fabricantInitial, codeScanne,
         date_expiration: form.date_expiration || null,
         qr_code: JSON.stringify({ lot: lotGenere, medicament_id: medicamentId }),
         ...(form.prix_achat ? { prix_achat: Number(form.prix_achat) } : {}),
+      }], {
+        description: `Lot ${lotGenere} — ${form.nom.trim()} ×${qty}`,
+        module: "distributeur.tracabilite", etablissementId: etablissement_id,
       });
-      await incrementStock(medicamentId, qty);
-      onSuccess(lotGenere, qty, form.nom.trim());
+      const { queued } = await enqueueOrRun("incrementStock", [medicamentId, qty], {
+        description: `Incrément stock — ${form.nom.trim()} +${qty}`,
+        module: "distributeur.tracabilite", etablissementId: etablissement_id,
+      });
+      onSuccess(lotGenere, qty, form.nom.trim(), queued);
     } catch (e) {
       setErr(e.message);
       setSaving(false);
@@ -203,9 +219,33 @@ export function ModalScanEnregistrer({ nomInitial, fabricantInitial, codeScanne,
 
 export default function Tracabilite() {
   const { auth } = useAuth();
+  const { online } = useNetwork();
   const { loading, result, error, verifier, reset } = useVerificationLot();
-  const { data: lotsDB, loading: lotsLoading } = useLots();
-  const { data: medicaments } = useMedicaments(auth?.etablissement_id);
+
+  // Lots recents : purement informatifs (cliquer pour pre-remplir la
+  // verification) — cache-first pour rester consultables hors-ligne, mais
+  // jamais utilises pour repondre a une verification d'authenticite (voir
+  // plus bas : la verification elle-meme reste bloquee hors-ligne).
+  const lotsKey = `lots:${auth?.etablissement_id ?? "global"}`;
+  const fetchAllLots = useCallback(async () => {
+    const { data, error } = await supabase.from("lots").select(`
+      id, numero_lot, fabricant, date_fabrication, date_expiration, quantite_initiale, qr_code,
+      medicaments ( nom, code )
+    `).order("date_expiration", { ascending: true }).limit(200);
+    if (error) throw error;
+    return data ?? [];
+  }, []);
+  const { data: lotsDB, loading: lotsLoading } = useCachedQuery(lotsKey, fetchAllLots, [lotsKey]);
+
+  // Meme cle de cache partagee que l'Entrepot (medicaments:${etablissement_id})
+  const medKey = `medicaments:${auth?.etablissement_id ?? "global"}`;
+  const fetchAllMedicaments = useCallback(async () => {
+    const { data, error } = await supabase.from("medicaments").select("*").eq("etablissement_id", auth?.etablissement_id).order("nom", { ascending: true }).limit(500);
+    if (error) throw error;
+    return data ?? [];
+  }, [auth?.etablissement_id]);
+  const { data: medicaments } = useCachedQuery(medKey, fetchAllMedicaments, [medKey]);
+
   const { toasts, success, error: toastError } = useToast();
 
   const [nomMedicament, setNomMedicament] = useState("");
@@ -223,6 +263,19 @@ export default function Tracabilite() {
       toastError("Saisissez un nom de médicament ou un numéro de lot");
       return;
     }
+    // La verification d'authenticite interroge la base MedOS puis la BDPM
+    // France en temps reel — un resultat "certifie" ou "suspect" repose sur
+    // l'etat le plus a jour possible (detection de contrefacon), jamais sur
+    // une copie locale potentiellement perimee. Bloquee hors-ligne plutot que
+    // de risquer un faux "suspect" (et une alerte envoyee a tort) si les deux
+    // etapes reseau echouent silencieusement faute de connexion — meme
+    // logique de securite que le controle ABO/Rhesus qui doit rester
+    // bloquant, meme si ici la reponse est "indisponible" plutot que
+    // "verifie depuis le cache".
+    if (!online) {
+      toastError("Vérification d'authenticité indisponible hors-ligne — nécessite une connexion pour interroger la base MedOS et la BDPM France.");
+      return;
+    }
     scanContextRef.current = { nom: nomMedicament.trim(), lot: numerolot.trim() };
     await verifier({
       nomMedicament: nomMedicament.trim(),
@@ -230,7 +283,7 @@ export default function Tracabilite() {
       scannePar: "Traçabilité — Distributeur",
       etablissement_id: auth?.etablissement_id ?? null,
     });
-  }, [nomMedicament, numerolot, verifier, toastError]);
+  }, [nomMedicament, numerolot, verifier, toastError, online, auth?.etablissement_id]);
 
   useEffect(() => {
     if (!result) return;
@@ -281,10 +334,12 @@ export default function Tracabilite() {
           medicaments={medicaments}
           etablissement_id={auth?.etablissement_id}
           onClose={() => setShowReception(false)}
-          onSuccess={(lot, qty, nom) => {
+          onSuccess={(lot, qty, nom, queued) => {
             setShowReception(false);
             setDernierCodeScanne("");
-            success(`Lot ${lot} créé — ${qty} unités de ${nom} ajoutées à l'entrepôt`);
+            success(queued
+              ? `Lot ${lot} créé — ${qty} unités de ${nom} en attente de synchronisation`
+              : `Lot ${lot} créé — ${qty} unités de ${nom} ajoutées à l'entrepôt`);
           }}
         />
       )}
@@ -336,18 +391,19 @@ export default function Tracabilite() {
               />
               <button
                 onClick={handleVerifier}
-                disabled={loading || (!nomMedicament.trim() && !numerolot.trim())}
+                disabled={loading || !online || (!nomMedicament.trim() && !numerolot.trim())}
+                title={!online ? "Vérification d'authenticité indisponible hors-ligne — nécessite une connexion." : undefined}
                 style={{
                   padding: "11px", borderRadius: 10, fontSize: 13, fontWeight: 700,
-                  cursor: loading || (!nomMedicament.trim() && !numerolot.trim()) ? (loading ? "wait" : "not-allowed") : "pointer",
+                  cursor: loading || !online || (!nomMedicament.trim() && !numerolot.trim()) ? (loading ? "wait" : "not-allowed") : "pointer",
                   border: "none",
-                  backgroundColor: loading || (!nomMedicament.trim() && !numerolot.trim()) ? "#E5E7EB" : "#F59E0B",
-                  color: loading || (!nomMedicament.trim() && !numerolot.trim()) ? "#9CA3AF" : "white",
+                  backgroundColor: loading || !online || (!nomMedicament.trim() && !numerolot.trim()) ? "#E5E7EB" : "#F59E0B",
+                  color: loading || !online || (!nomMedicament.trim() && !numerolot.trim()) ? "#9CA3AF" : "white",
                   display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
                 }}>
                 {loading
                   ? <><div style={{ width: 14, height: 14, border: "2px solid #9CA3AF", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />Vérification…</>
-                  : <><Search size={14} />Vérifier l'authenticité</>}
+                  : <><Search size={14} />{online ? "Vérifier l'authenticité" : "Vérification indisponible hors-ligne"}</>}
               </button>
               <button
                 onClick={() => setShowReception(true)}

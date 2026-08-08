@@ -8485,3 +8485,38 @@ réunis côté distributeur (stock, catalogue médicaments, fabricants, commande
   quantité, badge "Non envoyé" et message explicatif hors-ligne affichés en clair.
 
 Fichiers modifiés : [`src/pages/distributeur/Entrepot.jsx`](src/pages/distributeur/Entrepot.jsx).
+
+### Phase 2 — Point 2 : Traçabilité : ✅ terminée et prouvée en conditions réelles
+
+Câblage de [src/pages/distributeur/Tracabilite.jsx](src/pages/distributeur/Tracabilite.jsx) —
+avec une nuance de sécurité importante, volontairement différente du reste de la mission.
+
+**Décision de sécurité — la vérification d'authenticité reste bloquée hors-ligne, pas dégradée** :
+contrairement à tous les autres écrans (qui lisent depuis le cache hors-ligne), le bouton
+"Vérifier l'authenticité" est **désactivé hors-ligne** ("Vérification indisponible hors-ligne"),
+pas remplacé par une réponse basée sur le cache. Raison : cette vérification interroge la base
+MedOS puis la BDPM France en temps réel pour détecter une contrefaçon — un résultat "certifié" ou
+"suspect" basé sur une copie locale potentiellement périmée serait trompeur, et pire, une
+détection en cascade (Supabase → BDPM → "non trouvé" faute de réseau, pas faute d'être suspect)
+aurait pu déclencher à tort une alerte de lot suspect. Même logique que le contrôle ABO/Rhésus
+qui doit rester bloquant même hors-ligne (mission, Phase 3) — ici la réponse honnête hors-ligne
+est "indisponible", pas "vérifié depuis le cache".
+
+**Changements** :
+1. **Lecture** : liste des "Lots enregistrés MedOS" (purement informative, pour pré-remplir un
+   scan) passe par `useCachedQuery` — consultable hors-ligne avec badge, mais jamais utilisée pour
+   répondre à une vérification d'authenticité (voir ci-dessus). Catalogue médicaments sur la même
+   clé de cache partagée que l'Entrepôt.
+2. **Écriture** : `ModalScanEnregistrer` (même fonction que la réception Entrepôt, appelée depuis
+   un scan) — `insertMedicament`/`insertLot`/`incrementStock` passent par `enqueueOrRun`, id
+   médicament généré côté client, identique au pattern de l'Entrepôt (Phase 2 point 1).
+
+**Preuve réelle** (build de production, backend réel, compte distributeur réel, `fetch` bloqué) :
+- Bouton de vérification correctement désactivé et relabellisé hors-ligne, liste des lots
+  toujours consultable depuis le cache (6 lots, dont ceux créés lors du test de l'Entrepôt).
+- Réception hors-ligne via "Enregistrer dans l'entrepôt" : "Metronidazole 250mg" (150 unités,
+  Cipla) avec le réseau coupé → 3 actions mises en file (vérifiées dans IndexedDB, id cohérent).
+  Reconnexion → rejeu automatique → file vidée → **vérifié après reload complet** sur l'écran
+  Entrepôt que le produit existe en base avec 150 unités (4 produits au total).
+
+Fichiers modifiés : [`src/pages/distributeur/Tracabilite.jsx`](src/pages/distributeur/Tracabilite.jsx).
